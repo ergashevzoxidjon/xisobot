@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h3>Mijozlar</h3>
+    <div class="subtitle">Jami {{ pagination.total }} ta mijoz</div>
+  </div>
+  {% if has_perm('clients.create') %}
+  <a href="{{ url_for('clients.new_client') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Yangi mijoz</a>
+  {% endif %}
+</div>
+
+<div class="card p-3 mb-3">
+  <form method="get">
+    <div class="input-group">
+      <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+      <input type="text" name="q" value="{{ q }}" class="form-control border-start-0" placeholder="Ism bo'yicha qidirish...">
+      {% if q %}<a href="{{ url_for('clients.list_clients') }}" class="btn btn-outline-secondary">Tozalash</a>{% endif %}
+    </div>
+  </form>
+</div>
+
+<div class="card p-3">
+{% if clients %}
+<div class="table-responsive">
+<table class="table table-hover">
+<thead><tr><th>Mijoz</th><th>Telefon</th><th>Manzil</th><th class="text-end">Buyurtma</th><th class="text-end">Qarzdorlik</th><th></th></tr></thead>
+<tbody>
+{% for c in clients %}
+<tr role="button" onclick="window.location='{{ url_for('clients.client_detail', client_id=c.id) }}'">
+  <td>
+    <div class="d-flex align-items-center gap-2">
+      <div class="avatar-circle">{{ c.name[0]|upper }}</div>
+      <span class="fw-semibold">{{ c.name }}</span>
+    </div>
+  </td>
+  <td>{{ c.phone or '-' }}</td>
+  <td class="text-muted">{{ c.address or '-' }}</td>
+  <td class="text-end num">{{ c.orders_count }}</td>
+  <td class="text-end">
+    {% if c.total_debt > 0 %}
+      <span class="badge bg-danger num">{{ c.total_debt|uzs }}</span>
+    {% else %}
+      <span class="badge bg-success">Qarzi yo'q</span>
+    {% endif %}
+  </td>
+  <td class="text-end no-print">
+    {% if has_perm('clients.create') %}
+    <a href="{{ url_for('clients.edit_client', client_id=c.id) }}" class="btn btn-sm btn-outline-secondary"
+       onclick="event.stopPropagation()"><i class="bi bi-pencil"></i></a>
+    {% endif %}
+  </td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{{ pager(pagination, 'clients.list_clients', {'q': q}) }}
+{% else %}
+<div class="empty-state"><i class="bi bi-people"></i><p>Mijoz topilmadi</p></div>
+{% endif %}
+</div>
+{% endblock %}

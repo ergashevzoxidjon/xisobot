@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Poligrafiya Hisobot Tizimi{% endblock %}</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --primary:#2563eb;
+  --primary-dark:#1d4ed8;
+  --primary-soft:#eef3ff;
+  --sidebar-bg:#0f172a;
+  --sidebar-text:#94a3b8;
+  --bg:#f3f5f9;
+  --card-shadow:0 1px 2px rgba(15,23,42,.06), 0 4px 14px rgba(15,23,42,.05);
+  --radius:14px;
+}
+*{ font-family:'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
+body{ background:var(--bg); color:#1e293b; }
+a{ text-decoration:none; }
+
+.app-shell{ display:flex; min-height:100vh; }
+
+.sidebar{
+  width:252px; flex-shrink:0; background:var(--sidebar-bg); color:var(--sidebar-text);
+  display:flex; flex-direction:column; position:fixed; top:0; bottom:0; left:0; z-index:1030;
+  transition:transform .2s ease;
+}
+.sidebar-brand{
+  padding:1.35rem 1.35rem .9rem; font-weight:800; font-size:1.05rem; color:#fff;
+  display:flex; align-items:center; gap:.55rem;
+}
+.sidebar-brand i{ color:var(--primary); font-size:1.4rem; }
+.sidebar-nav{ flex:1; padding:.5rem .8rem; overflow-y:auto; }
+.sidebar-section{ font-size:.68rem; text-transform:uppercase; letter-spacing:.08em; color:#475569; margin:1rem .5rem .4rem; }
+.sidebar-nav a{
+  display:flex; align-items:center; gap:.7rem; padding:.62rem .8rem; border-radius:9px;
+  color:var(--sidebar-text); font-size:.9rem; font-weight:500; margin-bottom:.15rem; transition:background .12s;
+}
+.sidebar-nav a i{ font-size:1.05rem; width:1.2rem; text-align:center; }
+.sidebar-nav a:hover{ background:rgba(255,255,255,.06); color:#fff; }
+.sidebar-nav a.active{ background:var(--primary); color:#fff; }
+.sidebar-nav .nav-badge{
+  margin-left:auto; background:#ef4444; color:#fff; font-size:.68rem; font-weight:700;
+  padding:.1rem .4rem; border-radius:20px; min-width:1.2rem; text-align:center;
+}
+.sidebar-user{ padding:1rem 1.35rem; border-top:1px solid rgba(255,255,255,.08); }
+.sidebar-user .avatar{
+  width:34px; height:34px; border-radius:50%; background:var(--primary); color:#fff; font-weight:700;
+  display:flex; align-items:center; justify-content:center; font-size:.85rem; flex-shrink:0;
+}
+.sidebar-user .name{ color:#fff; font-weight:600; font-size:.86rem; line-height:1.2; }
+.sidebar-user .role{ color:var(--sidebar-text); font-size:.75rem; }
+.sidebar-user a{ color:var(--sidebar-text); }
+.sidebar-user a:hover{ color:#fff; }
+
+.main-area{ flex:1; margin-left:252px; min-width:0; }
+.main-area-guest{ margin-left:0; }
+.topbar{
+  display:none; align-items:center; gap:.75rem; background:#fff;
+  padding:.8rem 1rem; border-bottom:1px solid #e5e9f0; position:sticky; top:0; z-index:1020;
+}
+.topbar-toggle{ border:none; background:none; font-size:1.4rem; color:#1e293b; padding:0; }
+
+.content{ padding:1.85rem clamp(1rem, 3vw, 2.25rem); max-width:1440px; }
+
+.card{ border:none; border-radius:var(--radius); box-shadow:var(--card-shadow); }
+.page-header{ margin-bottom:1.5rem; display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:.75rem; }
+.page-header h3{ font-weight:800; margin-bottom:.15rem; font-size:1.4rem; }
+.page-header .subtitle{ color:#64748b; font-size:.88rem; }
+
+.stat-card{ display:flex; align-items:center; gap:1rem; }
+.stat-icon{
+  width:48px; height:48px; border-radius:12px; display:flex; align-items:center; justify-content:center;
+  font-size:1.3rem; flex-shrink:0;
+}
+.stat-icon.blue{ background:#eef3ff; color:var(--primary); }
+.stat-icon.green{ background:#ecfdf3; color:#12b76a; }
+.stat-icon.amber{ background:#fffaeb; color:#f79009; }
+.stat-icon.red{ background:#fef3f2; color:#f04438; }
+.stat-icon.slate{ background:#f1f5f9; color:#475569; }
+.stat-label{ color:#64748b; font-size:.8rem; font-weight:500; }
+.stat-value{ font-size:1.35rem; font-weight:700; line-height:1.2; }
+
+.table{ margin-bottom:0; }
+.table thead th{
+  text-transform:uppercase; font-size:.7rem; letter-spacing:.05em; color:#94a3b8; font-weight:700;
+  border-bottom:1px solid #e5e9f0; padding-bottom:.75rem; white-space:nowrap;
+}
+.table tbody td{ vertical-align:middle; padding-top:.8rem; padding-bottom:.8rem; font-size:.9rem; }
+.table tbody tr{ border-bottom:1px solid #f1f3f8; }
+.table tbody tr:last-child{ border-bottom:none; }
+.table-hover tbody tr[role="button"]:hover{ background:var(--primary-soft); cursor:pointer; }
+.num{ font-variant-numeric:tabular-nums; white-space:nowrap; }
+
+.badge{ font-weight:600; font-size:.71rem; padding:.42em .68em; border-radius:6px; }
+.avatar-circle{
+  width:36px; height:36px; border-radius:50%; background:var(--primary-soft); color:var(--primary);
+  display:flex; align-items:center; justify-content:center; font-weight:700; font-size:.85rem; flex-shrink:0;
+}
+
+.btn{ font-weight:600; font-size:.88rem; border-radius:9px; }
+.btn-primary{ background:var(--primary); border-color:var(--primary); }
+.btn-primary:hover, .btn-primary:focus{ background:var(--primary-dark); border-color:var(--primary-dark); }
+.btn-outline-primary{ color:var(--primary); border-color:var(--primary); }
+.btn-outline-primary:hover{ background:var(--primary); border-color:var(--primary); }
+.btn-sm{ border-radius:7px; }
+
+.form-label{ font-weight:600; font-size:.85rem; color:#334155; }
+.form-control, .form-select{ border-radius:9px; border-color:#dde3ee; padding:.55rem .8rem; font-size:.9rem; }
+.form-control:focus, .form-select:focus{ border-color:var(--primary); box-shadow:0 0 0 3px var(--primary-soft); }
+.form-text{ font-size:.8rem; }
+
+.empty-state{ text-align:center; padding:3.5rem 1rem; color:#94a3b8; }
+.empty-state i{ font-size:2.4rem; display:block; margin-bottom:.6rem; color:#cbd5e1; }
+.empty-state p{ margin:0; font-size:.9rem; }
+
+.alert{ border-radius:11px; border:none; font-size:.9rem; }
+
+.alert-tile{ border-left:4px solid; padding:.85rem 1rem; border-radius:10px; background:#fff; box-shadow:var(--card-shadow); }
+.alert-tile.danger{ border-left-color:#f04438; }
+.alert-tile.warning{ border-left-color:#f79009; }
+.alert-tile.info{ border-left-color:var(--primary); }
+
+@media print{
+  .sidebar, .topbar, .no-print{ display:none !important; }
+  .main-area{ margin-left:0 !important; }
+  body{ background:#fff; }
+  .card{ box-shadow:none !important; border:1px solid #ddd !important; }
+}
+
+@media (max-width: 991px){
+  .sidebar{ transform:translateX(-100%); }
+  .sidebar.show{ transform:translateX(0); }
+  .main-area{ margin-left:0; }
+  .topbar{ display:flex; }
+  .sidebar-backdrop{ display:none; position:fixed; inset:0; background:rgba(15,23,42,.45); z-index:1025; }
+  .sidebar-backdrop.show{ display:block; }
+}
+</style>
+{% block head_extra %}{% endblock %}
+</head>
+<body>
+
+{% macro csrf() %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endmacro %}
+
+{% macro pager(pagination, endpoint, params={}) %}
+  {% if pagination and pagination.pages > 1 %}
+  <nav class="mt-3 no-print">
+    <ul class="pagination pagination-sm justify-content-center mb-0">
+      <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+        <a class="page-link" href="{{ url_for(endpoint, page=pagination.prev_num, **params) }}">&laquo;</a>
+      </li>
+      {% for p in pagination.iter_pages(left_edge=1, left_current=2, right_current=2, right_edge=1) %}
+        {% if p %}
+          <li class="page-item {% if p == pagination.page %}active{% endif %}">
+            <a class="page-link" href="{{ url_for(endpoint, page=p, **params) }}">{{ p }}</a>
+          </li>
+        {% else %}
+          <li class="page-item disabled"><span class="page-link">…</span></li>
+        {% endif %}
+      {% endfor %}
+      <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+        <a class="page-link" href="{{ url_for(endpoint, page=pagination.next_num, **params) }}">&raquo;</a>
+      </li>
+    </ul>
+    <div class="text-center text-muted small mt-2">
+      Jami {{ pagination.total }} ta yozuv · {{ pagination.page }}/{{ pagination.pages }}-sahifa
+    </div>
+  </nav>
+  {% endif %}
+{% endmacro %}
+
+<div class="app-shell">
+  {% if current_user.is_authenticated %}
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand"><i class="bi bi-printer-fill"></i> Poligrafiya</div>
+    <nav class="sidebar-nav">
+      {% if has_perm('reports.view') %}
+      <a href="{{ url_for('main.dashboard') }}" class="{% if request.endpoint == 'main.dashboard' %}active{% endif %}">
+        <i class="bi bi-speedometer2"></i> Bosh sahifa
+      </a>
+      {% endif %}
+
+      {% if has_perm('orders.view') or has_perm('clients.view') %}
+      <div class="sidebar-section">Faoliyat</div>
+      {% endif %}
+      {% if has_perm('orders.view') %}
+      <a href="{{ url_for('orders.list_orders') }}" class="{% if request.endpoint and request.endpoint.startswith('orders.') %}active{% endif %}">
+        <i class="bi bi-receipt"></i> Buyurtmalar
+      </a>
+      {% endif %}
+      {% if has_perm('clients.view') %}
+      <a href="{{ url_for('clients.list_clients') }}" class="{% if request.endpoint and request.endpoint.startswith('clients.') %}active{% endif %}">
+        <i class="bi bi-people"></i> Mijozlar
+      </a>
+      {% endif %}
+
+      {% if has_perm('expenses.view') or has_perm('reports.view') %}
+      <div class="sidebar-section">Moliya</div>
+      {% endif %}
+      {% if has_perm('expenses.view') %}
+      <a href="{{ url_for('finance.expenses_list') }}" class="{% if request.endpoint in ['finance.expenses_list', 'finance.new_expense', 'finance.edit_expense'] %}active{% endif %}">
+        <i class="bi bi-cash-stack"></i> Xarajatlar
+      </a>
+      {% endif %}
+      {% if has_perm('reports.view') %}
+      <a href="{{ url_for('finance.report') }}" class="{% if request.endpoint == 'finance.report' %}active{% endif %}">
+        <i class="bi bi-graph-up-arrow"></i> Moliyaviy hisobot
+      </a>
+      <a href="{{ url_for('finance.analytics') }}" class="{% if request.endpoint == 'finance.analytics' %}active{% endif %}">
+        <i class="bi bi-pie-chart"></i> Tahlil
+      </a>
+      {% endif %}
+
+      {% if has_perm('users.manage') or has_perm('settings.manage') %}
+      <div class="sidebar-section">Boshqaruv</div>
+      {% endif %}
+      {% if has_perm('settings.manage') %}
+      <a href="{{ url_for('settings.company') }}" class="{% if request.endpoint == 'settings.company' %}active{% endif %}">
+        <i class="bi bi-building"></i> Firma ma'lumotlari
+      </a>
+      <a href="{{ url_for('settings.order_types') }}" class="{% if request.endpoint and request.endpoint.startswith('settings.order_type') %}active{% endif %}">
+        <i class="bi bi-tags"></i> Buyurtma turlari
+      </a>
+      <a href="{{ url_for('settings.telegram') }}" class="{% if request.endpoint and request.endpoint.startswith('settings.telegram') %}active{% endif %}">
+        <i class="bi bi-send"></i> Telegram
+      </a>
+      {% endif %}
+      {% if has_perm('orders.delete') %}
+      <a href="{{ url_for('orders.deleted_orders') }}" class="{% if request.endpoint == 'orders.deleted_orders' %}active{% endif %}">
+        <i class="bi bi-trash"></i> O'chirilganlar
+      </a>
+      {% endif %}
+      {% if has_perm('users.manage') %}
+      <a href="{{ url_for('auth.users_list') }}" class="{% if request.endpoint and request.endpoint.startswith('auth.user') %}active{% endif %}">
+        <i class="bi bi-person-gear"></i> Foydalanuvchilar
+      </a>
+      <a href="{{ url_for('auth.audit_log') }}" class="{% if request.endpoint == 'auth.audit_log' %}active{% endif %}">
+        <i class="bi bi-journal-text"></i> Harakatlar jurnali
+      </a>
+      {% endif %}
+    </nav>
+    <div class="sidebar-user d-flex align-items-center gap-2">
+      <div class="avatar">{{ current_user.display_name[0]|upper }}</div>
+      <div class="flex-grow-1 min-w-0">
+        <div class="name text-truncate">{{ current_user.display_name }}</div>
+        <div class="role">{{ role_label(current_user.role) }}</div>
+      </div>
+      <a href="{{ url_for('auth.change_password') }}" title="Parolni o'zgartirish"><i class="bi bi-key"></i></a>
+      <a href="{{ url_for('auth.logout') }}" title="Chiqish" class="text-danger"><i class="bi bi-box-arrow-right"></i></a>
+    </div>
+  </aside>
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+  {% endif %}
+
+  <div class="main-area {% if not current_user.is_authenticated %}main-area-guest{% endif %}">
+    {% if current_user.is_authenticated %}
+    <div class="topbar">
+      <button class="topbar-toggle" id="sidebarToggle"><i class="bi bi-list"></i></button>
+      <span class="fw-bold"><i class="bi bi-printer-fill text-primary"></i> Poligrafiya</span>
+    </div>
+    {% endif %}
+    <div class="content">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="alert alert-{{ category }} alert-dismissible fade show no-print" role="alert">
+              {{ message }}
+              <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+      {% block content %}{% endblock %}
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+const sidebar = document.getElementById('sidebar');
+const backdrop = document.getElementById('sidebarBackdrop');
+const toggle = document.getElementById('sidebarToggle');
+if (toggle) {
+  toggle.addEventListener('click', () => { sidebar.classList.add('show'); backdrop.classList.add('show'); });
+  backdrop.addEventListener('click', () => { sidebar.classList.remove('show'); backdrop.classList.remove('show'); });
+}
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

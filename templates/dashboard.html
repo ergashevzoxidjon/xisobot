@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h3>Bosh sahifa</h3>
+    <div class="subtitle">{{ today().strftime('%d.%m.%Y') }} · tizim holatining umumiy ko'rinishi</div>
+  </div>
+</div>
+
+{% if alerts_count %}
+<div class="card p-3 mb-4" style="border-left:4px solid #f79009">
+  <h6 class="fw-bold mb-3"><i class="bi bi-exclamation-triangle-fill text-warning me-1"></i>
+    Diqqat talab qiladi <span class="badge bg-warning text-dark ms-1">{{ alerts_count }}</span></h6>
+  <div class="row g-3">
+
+    {% if overdue_orders %}
+    <div class="col-lg-4">
+      <div class="alert-tile danger h-100">
+        <div class="fw-bold small text-danger mb-2">
+          <i class="bi bi-clock-history"></i> Muddati o'tgan ({{ overdue_orders|length }})
+        </div>
+        {% for o in overdue_orders %}
+        <div class="d-flex justify-content-between small mb-1">
+          <a href="{{ url_for('orders.order_detail', order_id=o.id) }}" class="text-truncate me-2">{{ o.order_number }} · {{ o.client.name }}</a>
+          <span class="text-danger num">{{ -o.days_left }} kun</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if soon_orders %}
+    <div class="col-lg-4">
+      <div class="alert-tile warning h-100">
+        <div class="fw-bold small text-warning-emphasis mb-2">
+          <i class="bi bi-alarm"></i> Muddati yaqin ({{ soon_orders|length }})
+        </div>
+        {% for o in soon_orders %}
+        <div class="d-flex justify-content-between small mb-1">
+          <a href="{{ url_for('orders.order_detail', order_id=o.id) }}" class="text-truncate me-2">{{ o.order_number }} · {{ o.client.name }}</a>
+          <span class="num">{{ o.days_left }} kun</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if old_debts %}
+    <div class="col-lg-4">
+      <div class="alert-tile info h-100">
+        <div class="fw-bold small text-primary mb-2">
+          <i class="bi bi-cash-coin"></i> Eski qarzlar ({{ overdue_debt_days }}+ kun)
+        </div>
+        {% for o in old_debts %}
+        <div class="d-flex justify-content-between small mb-1">
+          <a href="{{ url_for('orders.order_detail', order_id=o.id) }}" class="text-truncate me-2">{{ o.client.name }}</a>
+          <span class="text-danger num">{{ o.remaining|uzs }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+{% endif %}
+
+<div class="row g-3 mb-3">
+  <div class="col-sm-6 col-lg-4">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon blue"><i class="bi bi-receipt"></i></div>
+      <div>
+        <div class="stat-label">Jami buyurtmalar</div>
+        <div class="stat-value">{{ total_orders }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-4">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon amber"><i class="bi bi-arrow-repeat"></i></div>
+      <div>
+        <div class="stat-label">Faol buyurtmalar</div>
+        <div class="stat-value">{{ active_orders }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-4">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon slate"><i class="bi bi-people"></i></div>
+      <div>
+        <div class="stat-label">Mijozlar</div>
+        <div class="stat-value">{{ total_clients }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-lg-4">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon green"><i class="bi bi-graph-up-arrow"></i></div>
+      <div>
+        <div class="stat-label">Shu oy tushum</div>
+        <div class="stat-value text-success num">{{ month_income|uzs }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-4">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon red"><i class="bi bi-cash-stack"></i></div>
+      <div>
+        <div class="stat-label">Shu oy xarajat</div>
+        <div class="stat-value text-danger num">{{ month_expenses|uzs }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-4">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon {% if month_profit >= 0 %}green{% else %}red{% endif %}"><i class="bi bi-wallet2"></i></div>
+      <div>
+        <div class="stat-label">
+          Sof foyda (shu oy)
+          {% if profit_change is not none %}
+            <span class="badge {% if profit_change >= 0 %}bg-success{% else %}bg-danger{% endif %} ms-1">
+              {% if profit_change >= 0 %}+{% endif %}{{ profit_change }}%
+            </span>
+          {% endif %}
+        </div>
+        <div class="stat-value num {% if month_profit >= 0 %}text-success{% else %}text-danger{% endif %}">{{ month_profit|uzs }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card p-3">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h6 class="fw-bold mb-0"><i class="bi bi-clock-history me-1 text-muted"></i> So'nggi buyurtmalar</h6>
+    {% if has_perm('orders.view') %}
+    <a href="{{ url_for('orders.list_orders') }}" class="small">Barchasini ko'rish <i class="bi bi-arrow-right"></i></a>
+    {% endif %}
+  </div>
+  {% if recent_orders %}
+  <div class="table-responsive">
+  <table class="table table-hover align-middle">
+    <thead><tr><th>№</th><th>Mijoz</th><th>Turi</th><th class="text-end">Summa</th><th>Holat</th><th>To'lov</th></tr></thead>
+    <tbody>
+    {% for o in recent_orders %}
+      <tr role="button" onclick="window.location='{{ url_for('orders.order_detail', order_id=o.id) }}'">
+        <td class="fw-semibold">{{ o.order_number }}</td>
+        <td>{{ o.client.name }}</td>
+        <td>{{ o.order_type }}</td>
+        <td class="text-end num">{{ o.total_price|uzs }}</td>
+        <td><span class="badge bg-{{ o.status|status_color }}">{{ o.status }}</span></td>
+        <td><span class="badge bg-{{ o.payment_status|payment_color }}">{{ o.payment_status }}</span></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <div class="empty-state"><i class="bi bi-inbox"></i><p>Hozircha buyurtma yo'q</p></div>
+  {% endif %}
+</div>
+{% endblock %}

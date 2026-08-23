@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% set src = form or settings %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h3>Telegram bildirishnomalari</h3>
+    <div class="subtitle">Yangi buyurtma, to'lov va kunlik xulosani Telegram orqali olish</div>
+  </div>
+  {% if settings.is_ready %}
+  <span class="badge bg-success fs-6 align-self-center"><i class="bi bi-check-circle"></i> Ulangan</span>
+  {% else %}
+  <span class="badge bg-secondary fs-6 align-self-center">Sozlanmagan</span>
+  {% endif %}
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-7">
+    <div class="card p-4">
+    <form method="post">
+      {{ csrf() }}
+
+      <div class="form-check form-switch mb-4">
+        <input class="form-check-input" type="checkbox" name="is_enabled" id="enabled"
+               {% if settings.is_enabled %}checked{% endif %}>
+        <label class="form-check-label fw-semibold" for="enabled">Telegram bildirishnomalarini yoqish</label>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Bot token</label>
+        <input class="form-control" name="bot_token" maxlength="200"
+               value="{{ src.bot_token or '' }}"
+               placeholder="1234567890:AAExxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx">
+        <div class="form-text">@BotFather dan olinadi</div>
+      </div>
+
+      <div class="mb-4">
+        <label class="form-label">Chat ID (rahbar yoki guruh)</label>
+        <input class="form-control" name="manager_chat_id" maxlength="50"
+               value="{{ src.manager_chat_id or '' }}" placeholder="123456789">
+        <div class="form-text">@userinfobot dan olinadi. Guruh uchun manfiy son bo'ladi.</div>
+      </div>
+
+      <h6 class="fw-bold mb-3 pt-2">Qaysi xabarlar yuborilsin</h6>
+
+      <div class="form-check mb-2">
+        <input class="form-check-input" type="checkbox" name="notify_new_order" id="n1"
+               {% if settings.notify_new_order %}checked{% endif %}>
+        <label class="form-check-label" for="n1">
+          Yangi buyurtma yaratilganda
+        </label>
+      </div>
+      <div class="form-check mb-2">
+        <input class="form-check-input" type="checkbox" name="notify_payment" id="n2"
+               {% if settings.notify_payment %}checked{% endif %}>
+        <label class="form-check-label" for="n2">
+          To'lov qabul qilinganda
+        </label>
+      </div>
+      <div class="form-check mb-4">
+        <input class="form-check-input" type="checkbox" name="notify_daily" id="n3"
+               {% if settings.notify_daily %}checked{% endif %}>
+        <label class="form-check-label" for="n3">
+          Kunlik xulosa (buyurtmalar, tushum, kechikkanlar, qarzdorlar)
+        </label>
+      </div>
+
+      <div class="d-flex gap-2">
+        <button class="btn btn-primary"><i class="bi bi-check-lg"></i> Saqlash</button>
+      </div>
+    </form>
+
+    <hr class="my-4">
+
+    <form method="post" action="{{ url_for('settings.telegram_test') }}">
+      {{ csrf() }}
+      <button class="btn btn-outline-primary"><i class="bi bi-send"></i> Sinov xabarini yuborish</button>
+      <div class="form-text mt-2">Token va chat ID to'g'riligini tekshiradi</div>
+    </form>
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="card p-4">
+      <h6 class="fw-bold mb-3"><i class="bi bi-info-circle me-1 text-muted"></i> Qanday sozlanadi</h6>
+      <ol class="small ps-3 mb-0" style="line-height:1.9">
+        <li>Telegram'da <b>@BotFather</b> ni toping va <code>/newbot</code> yozing</li>
+        <li>Bot uchun nom bering — sizga <b>token</b> beriladi, uni shu yerga nusxalang</li>
+        <li>Yangi botingizni toping va unga <code>/start</code> yozing</li>
+        <li><b>@userinfobot</b> ga yozing — u sizning <b>Chat ID</b> ingizni aytadi</li>
+        <li>Chat ID ni shu yerga kiriting va saqlang</li>
+        <li>"Sinov xabarini yuborish" tugmasini bosing</li>
+      </ol>
+      <hr>
+      <div class="small text-muted">
+        <b>Guruhga yuborish uchun:</b> botni guruhga qo'shing, guruhda
+        <code>/start@bot_nomingiz</code> yozing va guruh Chat ID sini
+        (manfiy son) kiriting.
+      </div>
+      <hr>
+      <div class="small text-muted">
+        <b>Kunlik xulosa</b> avtomatik yuborilishi uchun serverda kunlik vazifa
+        sozlanishi kerak — <code>README.md</code> da yo'riqnoma bor.
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

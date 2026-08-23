@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% set src = form or prefill %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h3>{% if order %}Buyurtmani tahrirlash{% elif prefill %}Buyurtmani nusxalash{% else %}Yangi buyurtma{% endif %}</h3>
+    <div class="subtitle">
+      {% if order %}{{ order.order_number }}
+      {% elif prefill %}{{ prefill.order_number }} asosida yangi buyurtma
+      {% else %}Buyurtma ma'lumotlarini kiriting{% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="card p-4" style="max-width:660px">
+<form method="post">
+  {{ csrf() }}
+  {% if order %}<input type="hidden" name="version" value="{{ order.version }}">{% endif %}
+
+  <div class="mb-3">
+    <label class="form-label">Mijoz</label>
+    <select class="form-select" name="client_id" required>
+      {% for c in clients %}
+      <option value="{{ c.id }}"
+        {% if order and order.client_id == c.id %}selected
+        {% elif src and (src.client_id|string) == (c.id|string) %}selected{% endif %}>{{ c.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label">Buyurtma turi</label>
+    {% if order_types %}
+    <select class="form-select mb-2" id="typeSelect">
+      <option value="">— ro'yxatdan tanlang (narx avtomatik qo'yiladi) —</option>
+      {% for t in order_types %}
+      <option value="{{ t.name }}" data-price="{{ t.default_price }}">{{ t.name }} ({{ t.default_price|uzs }} / {{ t.unit }})</option>
+      {% endfor %}
+    </select>
+    {% endif %}
+    <input class="form-control" name="order_type" id="orderType" required
+           placeholder="Vizitka, banner, kitob..."
+           value="{{ order.order_type if order else (src.order_type if src else '') }}">
+    {% if not order_types %}
+    <div class="form-text">Maslahat: "Buyurtma turlari" bo'limida tur va standart narx qo'shsangiz, bu yerda avtomatik tanlanadi.</div>
+    {% endif %}
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label">Tavsif</label>
+    <textarea class="form-control" name="description" rows="2">{{ order.description if order else (src.description if src else '') }}</textarea>
+  </div>
+
+  <div class="row">
+    <div class="col-sm-4 mb-3">
+      <label class="form-label">Miqdor</label>
+      <input type="number" class="form-control" name="quantity" id="qty" min="1" required
+             value="{{ order.quantity if order else (src.quantity if src else 1) }}">
+    </div>
+    <div class="col-sm-4 mb-3">
+      <label class="form-label">Birlik narxi</label>
+      <input type="number" step="0.01" min="0" class="form-control" name="unit_price" id="price" required
+             value="{{ order.unit_price if order else (src.unit_price if src else 0) }}">
+    </div>
+    <div class="col-sm-4 mb-3">
+      <label class="form-label">Jami summa</label>
+      <input type="text" class="form-control bg-light" id="total" readonly>
+    </div>
+  </div>
+
+  <div class="mb-4">
+    <label class="form-label">Muddat</label>
+    <input type="date" class="form-control" name="deadline"
+           value="{{ (order.deadline.isoformat() if order and order.deadline else (src.deadline if src and src.deadline else '')) }}">
+  </div>
+
+  {% if order and order.paid_amount_calc > 0 %}
+  <div class="alert alert-info py-2">
+    <i class="bi bi-info-circle"></i> Bu buyurtmaga {{ order.paid_amount_calc|uzs }} so'm to'langan —
+    yangi summa shundan kam bo'lishi mumkin emas.
+  </div>
+  {% endif %}
+
+  <div class="d-flex gap-2">
+    <button class="btn btn-primary"><i class="bi bi-check-lg"></i> {{ 'Saqlash' if order else 'Yaratish' }}</button>
+    <a href="{{ url_for('orders.order_detail', order_id=order.id) if order else url_for('orders.list_orders') }}"
+       class="btn btn-outline-secondary">Bekor qilish</a>
+  </div>
+</form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const qty = document.getElementById('qty');
+const price = document.getElementById('price');
+const total = document.getElementById('total');
+const typeSelect = document.getElementById('typeSelect');
+const orderType = document.getElementById('orderType');
+
+function recalc() {
+  const q = parseFloat(qty.value) || 0;
+  const p = parseFloat(price.value) || 0;
+  total.value = (q * p).toLocaleString('ru-RU', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+qty.addEventListener('input', recalc);
+price.addEventListener('input', recalc);
+recalc();
+
+if (typeSelect) {
+  typeSelect.addEventListener('change', () => {
+    const opt = typeSelect.selectedOptions[0];
+    if (!opt || !opt.value) return;
+    orderType.value = opt.value;
+    const p = parseFloat(opt.dataset.price);
+    if (!isNaN(p) && p > 0) { price.value = p; recalc(); }
+  });
+}
+</script>
+{% endblock %}

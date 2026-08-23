@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h3>Tahlil</h3>
+    <div class="subtitle">{{ year }}-yil bo'yicha ko'rsatkichlar</div>
+  </div>
+  <form method="get" class="d-flex gap-2">
+    <input type="number" name="year" value="{{ year }}" class="form-control" style="width:110px" min="2000" max="2100">
+    <button class="btn btn-outline-primary"><i class="bi bi-search"></i> Ko'rish</button>
+  </form>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-lg-3">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon blue"><i class="bi bi-receipt"></i></div>
+      <div><div class="stat-label">Buyurtmalar</div><div class="stat-value">{{ total_orders }}</div></div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon slate"><i class="bi bi-calculator"></i></div>
+      <div><div class="stat-label">O'rtacha buyurtma</div><div class="stat-value num">{{ avg_order|uzs }}</div></div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon green"><i class="bi bi-cart-check"></i></div>
+      <div><div class="stat-label">Buyurtma qiymati (jami)</div><div class="stat-value num">{{ revenue_sum|uzs }}</div></div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon {% if cancel_rate > 15 %}red{% else %}amber{% endif %}"><i class="bi bi-x-circle"></i></div>
+      <div>
+        <div class="stat-label">Bekor qilish darajasi</div>
+        <div class="stat-value">{{ cancel_rate }}% <span class="fs-6 text-muted">({{ cancelled }} ta)</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-6">
+    <div class="card p-3">
+      <h6 class="fw-bold mb-3"><i class="bi bi-trophy me-1 text-warning"></i> Eng ko'p tushum keltirgan mijozlar</h6>
+      {% if top_clients %}
+      <table class="table table-sm">
+      <tbody>
+      {% for c in top_clients %}
+      <tr>
+        <td><span class="text-muted me-2">{{ loop.index }}.</span>{{ c.name }}</td>
+        <td class="text-end num fw-semibold text-success">{{ c.total|uzs }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+      </table>
+      {% else %}
+      <div class="empty-state py-4"><i class="bi bi-people"></i><p>Ma'lumot yo'q</p></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card p-3">
+      <h6 class="fw-bold mb-3"><i class="bi bi-tags me-1 text-primary"></i> Mahsulot turlari bo'yicha</h6>
+      {% if top_types %}
+      <table class="table table-sm">
+      <thead><tr><th>Turi</th><th class="text-end">Soni</th><th class="text-end">Summa</th></tr></thead>
+      <tbody>
+      {% for t in top_types %}
+      <tr>
+        <td>{{ t.name }}</td>
+        <td class="text-end num">{{ t.count }}</td>
+        <td class="text-end num fw-semibold">{{ t.total|uzs }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+      </table>
+      {% else %}
+      <div class="empty-state py-4"><i class="bi bi-tags"></i><p>Ma'lumot yo'q</p></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="col-12">
+    <div class="card p-3">
+      <h6 class="fw-bold mb-3"><i class="bi bi-exclamation-circle me-1 text-danger"></i> Eng katta qarzdorlar</h6>
+      {% if debtors %}
+      <div class="table-responsive">
+      <table class="table table-hover">
+      <thead><tr><th>Mijoz</th><th>Telefon</th><th class="text-end">Qarz</th></tr></thead>
+      <tbody>
+      {% for d in debtors %}
+      <tr role="button" onclick="window.location='{{ url_for('clients.client_detail', client_id=d.client.id) }}'">
+        <td class="fw-semibold">{{ d.client.name }}</td>
+        <td>{{ d.client.phone or '-' }}</td>
+        <td class="text-end num fw-semibold text-danger">{{ d.debt|uzs }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+      </table>
+      </div>
+      {% else %}
+      <div class="empty-state py-4"><i class="bi bi-check-circle"></i><p>Qarzdor mijoz yo'q</p></div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% set src = form or company %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h3>Firma ma'lumotlari</h3>
+    <div class="subtitle">Bu ma'lumotlar hisob-fakturada ko'rsatiladi</div>
+  </div>
+</div>
+
+<div class="card p-4" style="max-width:680px">
+<form method="post">
+  {{ csrf() }}
+
+  <h6 class="fw-bold mb-3"><i class="bi bi-building me-1 text-muted"></i> Asosiy</h6>
+  <div class="mb-3">
+    <label class="form-label">Firma nomi</label>
+    <input class="form-control" name="name" required maxlength="200" value="{{ src.name or '' }}">
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Manzil</label>
+    <input class="form-control" name="address" maxlength="255" value="{{ src.address or '' }}"
+           placeholder="Toshkent sh., Chilonzor tumani, 15-uy">
+  </div>
+  <div class="row">
+    <div class="col-sm-6 mb-3">
+      <label class="form-label">Telefon</label>
+      <input class="form-control" name="phone" maxlength="100" value="{{ src.phone or '' }}"
+             placeholder="+998 90 123 45 67">
+    </div>
+    <div class="col-sm-6 mb-3">
+      <label class="form-label">Email</label>
+      <input class="form-control" name="email" maxlength="120" value="{{ src.email or '' }}">
+    </div>
+  </div>
+  <div class="mb-4">
+    <label class="form-label">STIR (soliq to'lovchi identifikatsiya raqami)</label>
+    <input class="form-control" name="tax_id" maxlength="50" value="{{ src.tax_id or '' }}">
+  </div>
+
+  <h6 class="fw-bold mb-3 pt-2"><i class="bi bi-bank me-1 text-muted"></i> Bank rekvizitlari</h6>
+  <div class="mb-3">
+    <label class="form-label">Bank nomi</label>
+    <input class="form-control" name="bank_name" maxlength="200" value="{{ src.bank_name or '' }}">
+  </div>
+  <div class="row">
+    <div class="col-sm-8 mb-3">
+      <label class="form-label">Hisob raqam</label>
+      <input class="form-control" name="bank_account" maxlength="50" value="{{ src.bank_account or '' }}">
+    </div>
+    <div class="col-sm-4 mb-3">
+      <label class="form-label">MFO</label>
+      <input class="form-control" name="bank_mfo" maxlength="20" value="{{ src.bank_mfo or '' }}">
+    </div>
+  </div>
+
+  <div class="mb-4">
+    <label class="form-label">Hisob-faktura pastidagi izoh</label>
+    <textarea class="form-control" name="invoice_note" rows="2" maxlength="500"
+              placeholder="To'lov 5 kun ichida amalga oshirilishi so'raladi">{{ src.invoice_note or '' }}</textarea>
+  </div>
+
+  <div class="d-flex gap-2">
+    <button class="btn btn-primary"><i class="bi bi-check-lg"></i> Saqlash</button>
+  </div>
+</form>
+</div>
+{% endblock %}

@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}Hisob-faktura {{ order.order_number }}{% endblock %}
+{% block content %}
+<div class="no-print mb-3 d-flex gap-2">
+  <button onclick="window.print()" class="btn btn-primary"><i class="bi bi-printer"></i> Chop etish / PDF saqlash</button>
+  <a href="{{ url_for('orders.order_detail', order_id=order.id) }}" class="btn btn-outline-secondary">Orqaga</a>
+</div>
+
+<div class="card p-4" style="max-width:820px">
+  <div class="d-flex justify-content-between align-items-start mb-4 pb-3" style="border-bottom:2px solid #2563eb">
+    <div>
+      <h4 class="fw-bold mb-1"><i class="bi bi-printer-fill text-primary"></i> {{ company.name }}</h4>
+      <div class="text-muted small">
+        {% if company.address %}{{ company.address }}<br>{% endif %}
+        {% if company.phone %}Tel: {{ company.phone }}{% endif %}
+        {% if company.email %} · {{ company.email }}{% endif %}
+        {% if company.tax_id %}<br>STIR: {{ company.tax_id }}{% endif %}
+      </div>
+    </div>
+    <div class="text-end">
+      <div class="text-muted small text-uppercase fw-bold" style="font-size:.7rem">Hisob-faktura</div>
+      <div class="fw-bold fs-5">{{ order.order_number }}</div>
+      <div class="text-muted small">Sana: {{ today|date_uz }}</div>
+    </div>
+  </div>
+
+  <div class="row mb-4">
+    <div class="col-6">
+      <div class="text-muted small text-uppercase fw-bold mb-1" style="font-size:.7rem">Mijoz</div>
+      <div class="fw-semibold">{{ order.client.name }}</div>
+      {% if order.client.phone %}<div class="small">{{ order.client.phone }}</div>{% endif %}
+      {% if order.client.address %}<div class="small text-muted">{{ order.client.address }}</div>{% endif %}
+    </div>
+    <div class="col-6 text-end">
+      <div class="text-muted small text-uppercase fw-bold mb-1" style="font-size:.7rem">Buyurtma sanasi</div>
+      <div>{{ order.created_at|date_uz }}</div>
+      {% if order.deadline %}
+      <div class="text-muted small mt-1">Muddat: {{ order.deadline|date_uz }}</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <table class="table">
+    <thead><tr>
+      <th>Xizmat / mahsulot</th>
+      <th class="text-end">Miqdor</th>
+      <th class="text-end">Narxi</th>
+      <th class="text-end">Summa</th>
+    </tr></thead>
+    <tbody>
+      <tr>
+        <td>
+          <div class="fw-semibold">{{ order.order_type }}</div>
+          {% if order.description %}<div class="small text-muted">{{ order.description }}</div>{% endif %}
+        </td>
+        <td class="text-end num">{{ order.quantity }}</td>
+        <td class="text-end num">{{ order.unit_price|uzs }}</td>
+        <td class="text-end num">{{ order.total_price|uzs }}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="d-flex justify-content-end">
+    <table style="min-width:280px">
+      <tr>
+        <td class="text-muted py-1">Jami summa:</td>
+        <td class="text-end fw-bold num py-1">{{ order.total_price|uzs }} so'm</td>
+      </tr>
+      <tr>
+        <td class="text-muted py-1">To'langan:</td>
+        <td class="text-end text-success num py-1">{{ order.paid_amount_calc|uzs }} so'm</td>
+      </tr>
+      <tr style="border-top:2px solid #1e293b">
+        <td class="fw-bold py-2">Qolgan qarz:</td>
+        <td class="text-end fw-bold fs-5 num py-2 {% if order.remaining > 0 %}text-danger{% else %}text-success{% endif %}">
+          {{ order.remaining|uzs }} so'm
+        </td>
+      </tr>
+    </table>
+  </div>
+
+  {% if order.payments %}
+  <div class="mt-4 pt-3" style="border-top:1px solid #e5e9f0">
+    <div class="text-muted small text-uppercase fw-bold mb-2" style="font-size:.7rem">To'lovlar</div>
+    <table class="table table-sm">
+      <tbody>
+      {% for p in order.payments|sort(attribute='paid_on') %}
+      <tr>
+        <td class="num">{{ p.paid_on|date_uz }}</td>
+        <td class="text-muted small">{{ p.note or '' }}</td>
+        <td class="text-end num">{{ p.amount|uzs }} so'm</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {% if company.bank_name or company.bank_account %}
+  <div class="mt-4 pt-3" style="border-top:1px solid #e5e9f0">
+    <div class="text-muted small text-uppercase fw-bold mb-1" style="font-size:.7rem">Bank rekvizitlari</div>
+    <div class="small">
+      {% if company.bank_name %}{{ company.bank_name }}{% endif %}
+      {% if company.bank_account %}<br>Hisob raqam: <span class="num">{{ company.bank_account }}</span>{% endif %}
+      {% if company.bank_mfo %} · MFO: <span class="num">{{ company.bank_mfo }}</span>{% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if company.invoice_note %}
+  <div class="mt-3 small text-muted">{{ company.invoice_note }}</div>
+  {% endif %}
+
+  <div class="row mt-5 pt-4">
+    <div class="col-6">
+      <div style="border-top:1px solid #94a3b8; padding-top:.4rem" class="small text-muted">Ijrochi imzosi</div>
+    </div>
+    <div class="col-6">
+      <div style="border-top:1px solid #94a3b8; padding-top:.4rem" class="small text-muted">Mijoz imzosi</div>
+    </div>
+  </div>
+</div>
+{% endblock %}

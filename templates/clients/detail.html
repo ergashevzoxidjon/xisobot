@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h3>{{ client.name }}</h3>
+    <div class="subtitle">
+      {% if client.phone %}<i class="bi bi-telephone"></i> {{ client.phone }}{% endif %}
+      {% if client.address %} · <i class="bi bi-geo-alt"></i> {{ client.address }}{% endif %}
+    </div>
+  </div>
+  <div class="d-flex gap-2">
+    {% if has_perm('clients.create') %}
+    <a href="{{ url_for('clients.edit_client', client_id=client.id) }}" class="btn btn-outline-secondary">
+      <i class="bi bi-pencil"></i> Tahrirlash</a>
+    {% endif %}
+    {% if has_perm('orders.create') %}
+    <a href="{{ url_for('orders.new_order') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Yangi buyurtma</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-sm-6 col-lg-3">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon blue"><i class="bi bi-receipt"></i></div>
+      <div><div class="stat-label">Buyurtmalar</div><div class="stat-value">{{ client.orders_count }}</div></div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon slate"><i class="bi bi-cart-check"></i></div>
+      <div><div class="stat-label">Jami buyurtma summasi</div><div class="stat-value num">{{ total_ordered|uzs }}</div></div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon green"><i class="bi bi-cash-coin"></i></div>
+      <div><div class="stat-label">To'langan</div><div class="stat-value text-success num">{{ total_paid|uzs }}</div></div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon {% if total_debt > 0 %}red{% else %}green{% endif %}"><i class="bi bi-wallet2"></i></div>
+      <div>
+        <div class="stat-label">Qarzdorlik</div>
+        <div class="stat-value num {% if total_debt > 0 %}text-danger{% else %}text-success{% endif %}">{{ total_debt|uzs }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if client.notes %}
+<div class="card p-3 mb-3">
+  <div class="stat-label mb-1"><i class="bi bi-sticky"></i> Izoh</div>
+  <div class="small">{{ client.notes }}</div>
+</div>
+{% endif %}
+
+<div class="card p-3">
+  <h6 class="fw-bold mb-3"><i class="bi bi-clock-history me-1 text-muted"></i> Buyurtmalar tarixi</h6>
+  {% if orders %}
+  <div class="table-responsive">
+  <table class="table table-hover">
+  <thead><tr><th>№</th><th>Sana</th><th>Turi</th><th class="text-end">Summa</th><th class="text-end">To'langan</th><th>Holat</th><th>To'lov</th></tr></thead>
+  <tbody>
+  {% for o in orders %}
+  <tr role="button" onclick="window.location='{{ url_for('orders.order_detail', order_id=o.id) }}'"
+      class="{% if o.status == 'bekor qilindi' %}text-muted{% endif %}">
+    <td class="fw-semibold">{{ o.order_number }}</td>
+    <td class="num">{{ o.created_at|date_uz }}</td>
+    <td>{{ o.order_type }}</td>
+    <td class="text-end num">{{ o.total_price|uzs }}</td>
+    <td class="text-end num">{{ o.paid_amount_calc|uzs }}</td>
+    <td><span class="badge bg-{{ o.status|status_color }}">{{ o.status }}</span></td>
+    <td><span class="badge bg-{{ o.payment_status|payment_color }}">{{ o.payment_status }}</span></td>
+  </tr>
+  {% endfor %}
+  </tbody>
+  </table>
+  </div>
+  {% else %}
+  <div class="empty-state"><i class="bi bi-receipt"></i><p>Bu mijozda hali buyurtma yo'q</p></div>
+  {% endif %}
+</div>
+{% endblock %}

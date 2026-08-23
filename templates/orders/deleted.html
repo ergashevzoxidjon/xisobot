@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h3>O'chirilgan buyurtmalar</h3>
+    <div class="subtitle">Bu yozuvlar ro'yxatlarda va hisobotlarda ko'rinmaydi, lekin saqlanib turibdi</div>
+  </div>
+  <a href="{{ url_for('orders.list_orders') }}" class="btn btn-outline-secondary">
+    <i class="bi bi-arrow-left"></i> Buyurtmalarga qaytish</a>
+</div>
+
+<div class="card p-3">
+{% if orders %}
+<div class="table-responsive">
+<table class="table table-hover">
+<thead><tr><th>№</th><th>Mijoz</th><th>Turi</th><th class="text-end">Summa</th><th>O'chirilgan</th><th></th></tr></thead>
+<tbody>
+{% for o in orders %}
+<tr class="text-muted">
+  <td class="fw-semibold">{{ o.order_number }}</td>
+  <td>{{ o.client.name }}</td>
+  <td>{{ o.order_type }}</td>
+  <td class="text-end num">{{ o.total_price|uzs }}</td>
+  <td class="num small">{{ o.deleted_at|datetime_uz }}</td>
+  <td class="text-end">
+    <form method="post" action="{{ url_for('orders.restore_order', order_id=o.id) }}" class="d-inline">
+      {{ csrf() }}
+      <button class="btn btn-sm btn-outline-success"><i class="bi bi-arrow-counterclockwise"></i> Tiklash</button>
+    </form>
+  </td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% else %}
+<div class="empty-state"><i class="bi bi-trash"></i><p>O'chirilgan buyurtma yo'q</p></div>
+{% endif %}
+</div>
+{% endblock %}

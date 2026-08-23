@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h3>Xarajatlar</h3>
+    <div class="subtitle">Jami {{ pagination.total }} ta yozuv · umumiy summa {{ total_all|uzs }} so'm</div>
+  </div>
+  <div class="d-flex gap-2">
+    {% if has_perm('reports.export') %}
+    <a href="{{ url_for('finance.export_expenses') }}" class="btn btn-outline-secondary"><i class="bi bi-file-earmark-excel"></i> Excel</a>
+    {% endif %}
+    {% if has_perm('expenses.create') %}
+    <a href="{{ url_for('finance.new_expense') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Yangi xarajat</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card p-3 mb-3">
+  <form method="get" class="d-flex align-items-center gap-2 flex-wrap">
+    <span class="small text-muted fw-semibold">Turkum:</span>
+    <a href="{{ url_for('finance.expenses_list') }}"
+       class="btn btn-sm {% if not category %}btn-primary{% else %}btn-outline-secondary{% endif %}">Barchasi</a>
+    {% for c in categories %}
+    <a href="{{ url_for('finance.expenses_list', category=c) }}"
+       class="btn btn-sm {% if c == category %}btn-primary{% else %}btn-outline-secondary{% endif %}">
+      <i class="bi {{ c|category_icon }}"></i> {{ c }}</a>
+    {% endfor %}
+  </form>
+</div>
+
+<div class="card p-3">
+{% if expenses %}
+<div class="table-responsive">
+<table class="table table-hover">
+<thead><tr><th>Sana</th><th>Turkum</th><th class="text-end">Summa</th><th>Izoh</th><th>Kiritgan</th><th></th></tr></thead>
+<tbody>
+{% for e in expenses %}
+<tr>
+  <td class="num">{{ e.date|date_uz }}</td>
+  <td><span class="badge bg-secondary"><i class="bi {{ e.category|category_icon }} me-1"></i>{{ e.category }}</span></td>
+  <td class="text-end fw-semibold text-danger num">{{ e.amount|uzs }}</td>
+  <td class="text-muted">{{ e.description or '-' }}</td>
+  <td class="small text-muted">{{ e.creator.display_name if e.creator else '-' }}</td>
+  <td class="text-end no-print">
+    {% if has_perm('expenses.create') %}
+    <a href="{{ url_for('finance.edit_expense', expense_id=e.id) }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></a>
+    {% endif %}
+  </td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{{ pager(pagination, 'finance.expenses_list', {'category': category}) }}
+{% else %}
+<div class="empty-state"><i class="bi bi-cash-stack"></i><p>Xarajat qayd etilmagan</p></div>
+{% endif %}
+</div>
+{% endblock %}

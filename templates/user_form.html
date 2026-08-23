@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% set src = form or user %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h3>{{ 'Foydalanuvchini tahrirlash' if user else 'Yangi foydalanuvchi' }}</h3>
+    <div class="subtitle">{% if user %}{{ user.username }}{% else %}Xodim uchun tizimga kirish huquqi yarating{% endif %}</div>
+  </div>
+</div>
+<div class="card p-4" style="max-width:520px">
+<form method="post">
+  {{ csrf() }}
+  {% if not user %}
+  <div class="mb-3">
+    <label class="form-label">Login</label>
+    <input class="form-control" name="username" required autofocus maxlength="80" value="{{ src.username if src else '' }}">
+  </div>
+  {% endif %}
+  <div class="mb-3">
+    <label class="form-label">To'liq ism</label>
+    <input class="form-control" name="full_name" maxlength="120" value="{{ src.full_name if src else '' }}">
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Parol {% if user %}<span class="text-muted fw-normal">(o'zgartirmasangiz bo'sh qoldiring)</span>{% endif %}</label>
+    <input type="password" class="form-control" name="password" {% if not user %}required{% endif %} minlength="6">
+    <div class="form-text">Kamida 6 ta belgi.</div>
+  </div>
+  <div class="mb-4">
+    <label class="form-label">Rol</label>
+    <select class="form-select" name="role" required>
+      {% for r in roles %}
+      <option value="{{ r }}" {% if src and src.role == r %}selected{% endif %}>{{ role_label(r) }} — {{ role_description(r) }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="d-flex gap-2">
+    <button class="btn btn-primary"><i class="bi bi-check-lg"></i> Saqlash</button>
+    <a href="{{ url_for('auth.users_list') }}" class="btn btn-outline-secondary">Bekor qilish</a>
+  </div>
+</form>
+</div>
+{% endblock %}

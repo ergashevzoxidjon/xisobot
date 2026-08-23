@@ -1,0 +1,455 @@
+import os
+import uuid
+from decimal import Decimal
+
+from flask import (
+    Blueprint, render_template, request, redirect, url_for, flash,
+    current_app, send_from_directory,
+)
+from flask_login import login_required, current_user
+from sqlalchemy import or_
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import joinedload
+from werkzeug.utils import secure_filename
+
+from extensions import db
+from models import (
+    Order, Client, Payment, OrderType, OrderFile, CompanySettings,
+    log_action, can_transition,
+    ORDER_STATUSES, ALLOWED_TRANSITIONS, STATUS_CANCELLED, ZERO,
+)
+from notifications import notify_new_order, notify_payment
+from permissions import permission_required
+from queries import eager_orders
+from utils import (
+    ValidationError, parse_money, parse_int, parse_date, parse_text, parse_choice,
+    to_money, today_local, now_local,
+)
+
+orders_bp = Blueprint("orders", __name__, url_prefix="/buyurtmalar")
+
+
+def next_order_number():
+    """Yil + ketma-ket raqam. Mavjud eng katta raqamdan davom etadi,
+    shuning uchun buyurtma o'chirilsa ham takrorlanmaydi."""
+    year = today_local().year
+    prefix = f"B-{year}-"
+    last = (
+        Order.query.filter(Order.order_number.like(f"{prefix}%"))
+        .order_by(Order.order_number.desc())
+        .first()
+    )
+    if last:
+        try:
+            seq = int(last.order_number.rsplit("-", 1)[1]) + 1
+        except (ValueError, IndexError):
+            seq = Order.query.count() + 1
+    else:
+        seq = 1
+    return f"{prefix}{seq:04d}"
+
+
+def _order_form_data(form):
+    """Formadan buyurtma maydonlarini tekshirib o'qiydi."""
+    client_id = parse_int(form.get("client_id"), "Mijoz", min_value=1)
+    if not db.session.get(Client, client_id):
+        raise ValidationError("Mijoz: tanlangan mijoz topilmadi.")
+
+    quantity = parse_int(form.get("quantity"), "Miqdor", min_value=1, max_value=10_000_000)
+    unit_price = parse_money(form.get("unit_price"), "Birlik narxi", min_value=ZERO)
+    deadline = parse_date(form.get("deadline"), "Muddat", required=False)
+
+    return {
+        "client_id": client_id,
+        "order_type": parse_text(form.get("order_type"), "Buyurtma turi", required=True, max_length=100),
+        "description": parse_text(form.get("description"), "Tavsif", required=False, max_length=2000),
+        "quantity": quantity,
+        "unit_price": unit_price,
+        "total_price": to_money(Decimal(quantity) * unit_price),
+        "deadline": deadline,
+    }
+
+
+@orders_bp.route("/")
+@login_required
+@permission_required("orders.view")
+def list_orders():
+    status = request.args.get("status", "")
+    q = (request.args.get("q") or "").strip()
+    page = request.args.get("page", 1, type=int)
+
+    query = Order.query.join(Client).filter(Order.is_deleted.is_(False))
+    if status and status in ORDER_STATUSES:
+        query = query.filter(Order.status == status)
+    if q:
+        like = f"%{q}%"
+        query = query.filter(or_(
+            Order.order_number.ilike(like),
+            Order.order_type.ilike(like),
+            Client.name.ilike(like),
+        ))
+
+    # eager yuklash: 51 ta so'rov o'rniga 3 ta
+    query = eager_orders(query.order_by(Order.created_at.desc()))
+    pagination = query.paginate(
+        page=page, per_page=current_app.config["PER_PAGE"], error_out=False
+    )
+    return render_template(
+        "orders/list.html",
+        orders=pagination.items,
+        pagination=pagination,
+        statuses=ORDER_STATUSES,
+        status=status,
+        q=q,
+    )
+
+
+@orders_bp.route("/yangi", methods=["GET", "POST"])
+@login_required
+@permission_required("orders.create")
+def new_order():
+    clients = Client.query.order_by(Client.name).all()
+    order_types = OrderType.query.filter_by(is_active=True).order_by(OrderType.name).all()
+
+    if not clients:
+        flash("Avval kamida bitta mijoz qo'shing.", "warning")
+        return redirect(url_for("clients.new_client"))
+
+    # "Nusxalash" — mavjud buyurtma asosida formani to'ldirish
+    prefill = None
+    copy_from = request.args.get("copy", type=int)
+    if request.method == "GET" and copy_from:
+        src = db.session.get(Order, copy_from)
+        if src:
+            prefill = src
+
+    if request.method == "POST":
+        try:
+            data = _order_form_data(request.form)
+        except ValidationError as e:
+            flash(str(e), "danger")
+            return render_template(
+                "orders/form.html", clients=clients, order_types=order_types,
+                order=None, prefill=None, form=request.form,
+            )
+
+        # Ikki xodim bir vaqtda buyurtma yaratsa raqam to'qnashishi mumkin —
+        # bunda qayta urinamiz (500 xato o'rniga).
+        o = None
+        for attempt in range(5):
+            o = Order(order_number=next_order_number(), created_by=current_user.id, **data)
+            db.session.add(o)
+            try:
+                db.session.flush()
+                break
+            except IntegrityError:
+                db.session.rollback()
+                o = None
+                if attempt == 4:
+                    flash("Buyurtma raqamini yaratib bo'lmadi. Qayta urinib ko'ring.", "danger")
+                    return render_template(
+                        "orders/form.html", clients=clients, order_types=order_types,
+                        order=None, prefill=None, form=request.form,
+                    )
+
+        log_action(current_user, "create", "order", o.id, f"{o.order_number} yaratildi")
+        db.session.commit()
+        notify_new_order(o)
+        flash(f"Buyurtma {o.order_number} yaratildi.", "success")
+        return redirect(url_for("orders.order_detail", order_id=o.id))
+
+    return render_template(
+        "orders/form.html", clients=clients, order_types=order_types,
+        order=None, prefill=prefill, form=None,
+    )
+
+
+@orders_bp.route("/<int:order_id>/tahrirlash", methods=["GET", "POST"])
+@login_required
+@permission_required("orders.edit")
+def edit_order(order_id):
+    o = Order.query.get_or_404(order_id)
+    clients = Client.query.order_by(Client.name).all()
+    order_types = OrderType.query.filter_by(is_active=True).order_by(OrderType.name).all()
+
+    if request.method == "POST":
+        try:
+            data = _order_form_data(request.form)
+        except ValidationError as e:
+            flash(str(e), "danger")
+            return render_template(
+                "orders/form.html", clients=clients, order_types=order_types,
+                order=o, prefill=None, form=request.form,
+            )
+
+        # boshqa xodim shu orada o'zgartirmaganini tekshiramiz
+        form_version = parse_int(
+            request.form.get("version"), "Versiya",
+            required=False, min_value=0, default=0,
+        )
+        if form_version and form_version != o.version:
+            flash(
+                "Bu buyurtmani shu orada boshqa xodim o'zgartirdi. "
+                "Sahifa yangilandi — o'zgarishlaringizni qayta kiriting.", "warning",
+            )
+            return render_template(
+                "orders/form.html", clients=clients, order_types=order_types,
+                order=o, prefill=None, form=None,
+            )
+
+        # yangi summa to'langan puldan kam bo'lib qolmasligini tekshiramiz
+        if data["total_price"] < o.paid_amount_calc:
+            flash(
+                "Yangi summa allaqachon to'langan puldan kam bo'lishi mumkin emas "
+                f"(to'langan: {o.paid_amount_calc}).", "danger",
+            )
+            return render_template(
+                "orders/form.html", clients=clients, order_types=order_types,
+                order=o, prefill=None, form=request.form,
+            )
+
+        for key, value in data.items():
+            setattr(o, key, value)
+        o.version = (o.version or 1) + 1
+        log_action(current_user, "update", "order", o.id, f"{o.order_number} tahrirlandi")
+        db.session.commit()
+        flash("Buyurtma yangilandi.", "success")
+        return redirect(url_for("orders.order_detail", order_id=o.id))
+
+    return render_template(
+        "orders/form.html", clients=clients, order_types=order_types,
+        order=o, prefill=None, form=None,
+    )
+
+
+@orders_bp.route("/<int:order_id>")
+@login_required
+@permission_required("orders.view")
+def order_detail(order_id):
+    o = Order.query.options(joinedload(Order.client)).get_or_404(order_id)
+    payments = sorted(o.payments, key=lambda p: (p.paid_on, p.id), reverse=True)
+    # faqat shu holatdan o'tish mumkin bo'lganlarini ko'rsatamiz
+    allowed = [o.status] + [s for s in ALLOWED_TRANSITIONS.get(o.status, []) if s != o.status]
+    return render_template(
+        "orders/detail.html", order=o, payments=payments, statuses=allowed,
+    )
+
+
+@orders_bp.route("/<int:order_id>/hisob-faktura")
+@login_required
+@permission_required("orders.view")
+def invoice(order_id):
+    o = Order.query.options(joinedload(Order.client)).get_or_404(order_id)
+    return render_template(
+        "orders/invoice.html", order=o, today=today_local(),
+        company=CompanySettings.get(),
+    )
+
+
+@orders_bp.route("/<int:order_id>/holat", methods=["POST"])
+@login_required
+@permission_required("orders.manage")
+def update_status(order_id):
+    o = Order.query.get_or_404(order_id)
+    try:
+        new_status = parse_choice(request.form.get("status"), "Holat", ORDER_STATUSES)
+    except ValidationError as e:
+        flash(str(e), "danger")
+        return redirect(url_for("orders.order_detail", order_id=order_id))
+
+    if not can_transition(o.status, new_status):
+        allowed = ", ".join(ALLOWED_TRANSITIONS.get(o.status, [])) or "yo'q"
+        flash(
+            f"'{o.status}' holatidan '{new_status}' holatiga o'tib bo'lmaydi. "
+            f"Ruxsat etilgan: {allowed}.", "danger",
+        )
+        return redirect(url_for("orders.order_detail", order_id=order_id))
+
+    if new_status == STATUS_CANCELLED and o.paid_amount_calc > ZERO:
+        flash(
+            "To'lov qilingan buyurtmani bekor qilib bo'lmaydi. "
+            "Avval to'lovlarni qaytarib, yozuvlarni o'chiring.", "danger",
+        )
+        return redirect(url_for("orders.order_detail", order_id=order_id))
+
+    old = o.status
+    o.status = new_status
+    log_action(current_user, "status", "order", o.id, f"{old} -> {new_status}")
+    db.session.commit()
+    flash("Holat yangilandi.", "success")
+    return redirect(url_for("orders.order_detail", order_id=order_id))
+
+
+@orders_bp.route("/<int:order_id>/tolov", methods=["POST"])
+@login_required
+@permission_required("orders.manage")
+def add_payment(order_id):
+    o = Order.query.get_or_404(order_id)
+
+    if o.status == STATUS_CANCELLED:
+        flash("Bekor qilingan buyurtmaga to'lov qo'shib bo'lmaydi.", "danger")
+        return redirect(url_for("orders.order_detail", order_id=order_id))
+
+    try:
+        amount = parse_money(request.form.get("amount"), "Summa", min_value=Decimal("0.01"))
+        paid_on = parse_date(request.form.get("paid_on"), "To'lov sanasi", required=False) or today_local()
+        note = parse_text(request.form.get("note"), "Izoh", required=False, max_length=255)
+    except ValidationError as e:
+        flash(str(e), "danger")
+        return redirect(url_for("orders.order_detail", order_id=order_id))
+
+    if paid_on > today_local():
+        flash("To'lov sanasi kelajakda bo'lishi mumkin emas.", "danger")
+        return redirect(url_for("orders.order_detail", order_id=order_id))
+
+    if amount > o.remaining:
+        flash(
+            f"Summa qolgan qarzdan ({o.remaining}) ko'p bo'lishi mumkin emas.", "danger",
+        )
+        return redirect(url_for("orders.order_detail", order_id=order_id))
+
+    p = Payment(
+        order_id=o.id, amount=amount, paid_on=paid_on, note=note,
+        created_by=current_user.id,
+    )
+    db.session.add(p)
+    log_action(current_user, "payment", "order", o.id, f"{amount} so'm to'lov")
+    db.session.commit()
+    notify_payment(o, amount)
+    flash("To'lov qayd etildi.", "success")
+    return redirect(url_for("orders.order_detail", order_id=order_id))
+
+
+@orders_bp.route("/tolov/<int:payment_id>/ochirish", methods=["POST"])
+@login_required
+@permission_required("orders.manage")
+def delete_payment(payment_id):
+    p = Payment.query.get_or_404(payment_id)
+    order_id = p.order_id
+    log_action(current_user, "payment_delete", "order", order_id, f"{p.amount} so'm to'lov o'chirildi")
+    db.session.delete(p)
+    db.session.commit()
+    flash("To'lov yozuvi o'chirildi.", "success")
+    return redirect(url_for("orders.order_detail", order_id=order_id))
+
+
+# ---------- buyurtmani o'chirish (yumshoq) ----------
+
+@orders_bp.route("/<int:order_id>/ochirish", methods=["POST"])
+@login_required
+@permission_required("orders.delete")
+def delete_order(order_id):
+    o = Order.query.get_or_404(order_id)
+
+    if o.paid_amount_calc > ZERO:
+        flash(
+            "To'lov qilingan buyurtmani o'chirib bo'lmaydi. "
+            "Avval to'lov yozuvlarini o'chiring.", "danger",
+        )
+        return redirect(url_for("orders.order_detail", order_id=order_id))
+
+    o.is_deleted = True
+    o.deleted_at = now_local()
+    o.deleted_by = current_user.id
+    log_action(current_user, "delete", "order", o.id, f"{o.order_number} o'chirildi")
+    db.session.commit()
+    flash(f"Buyurtma {o.order_number} o'chirildi. Kerak bo'lsa tiklash mumkin.", "success")
+    return redirect(url_for("orders.list_orders"))
+
+
+@orders_bp.route("/<int:order_id>/tiklash", methods=["POST"])
+@login_required
+@permission_required("orders.delete")
+def restore_order(order_id):
+    o = Order.query.get_or_404(order_id)
+    o.is_deleted = False
+    o.deleted_at = None
+    o.deleted_by = None
+    log_action(current_user, "restore", "order", o.id, f"{o.order_number} tiklandi")
+    db.session.commit()
+    flash(f"Buyurtma {o.order_number} tiklandi.", "success")
+    return redirect(url_for("orders.order_detail", order_id=order_id))
+
+
+@orders_bp.route("/ochirilganlar")
+@login_required
+@permission_required("orders.delete")
+def deleted_orders():
+    orders = eager_orders(
+        Order.query.filter(Order.is_deleted.is_(True)).order_by(Order.deleted_at.desc())
+    ).all()
+    return render_template("orders/deleted.html", orders=orders)
+
+
+# ---------- fayl biriktirish ----------
+
+@orders_bp.route("/<int:order_id>/fayl", methods=["POST"])
+@login_required
+@permission_required("orders.edit")
+def upload_file(order_id):
+    o = Order.query.get_or_404(order_id)
+    uploaded = request.files.get("file")
+
+    if not uploaded or not uploaded.filename:
+        flash("Fayl tanlanmagan.", "danger")
+        return redirect(url_for("orders.order_detail", order_id=order_id))
+
+    original = uploaded.filename
+    ext = os.path.splitext(original)[1].lower()
+    if ext not in current_app.config["ALLOWED_EXTENSIONS"]:
+        allowed = ", ".join(sorted(current_app.config["ALLOWED_EXTENSIONS"]))
+        flash(f"Bu turdagi fayl qabul qilinmaydi. Ruxsat etilgan: {allowed}", "danger")
+        return redirect(url_for("orders.order_detail", order_id=order_id))
+
+    upload_dir = current_app.config["UPLOAD_FOLDER"]
+    os.makedirs(upload_dir, exist_ok=True)
+
+    stored_name = f"{uuid.uuid4().hex}{ext}"
+    path = os.path.join(upload_dir, stored_name)
+    uploaded.save(path)
+    size = os.path.getsize(path)
+
+    f = OrderFile(
+        order_id=o.id,
+        filename=stored_name,
+        original_name=secure_filename(original)[:255] or f"fayl{ext}",
+        size_bytes=size,
+        created_by=current_user.id,
+    )
+    db.session.add(f)
+    log_action(current_user, "file_upload", "order", o.id, original[:100])
+    db.session.commit()
+    flash("Fayl biriktirildi.", "success")
+    return redirect(url_for("orders.order_detail", order_id=order_id))
+
+
+@orders_bp.route("/fayl/<int:file_id>/yuklab-olish")
+@login_required
+@permission_required("orders.view")
+def download_file(file_id):
+    f = OrderFile.query.get_or_404(file_id)
+    return send_from_directory(
+        current_app.config["UPLOAD_FOLDER"],
+        f.filename,
+        as_attachment=True,
+        download_name=f.original_name,
+    )
+
+
+@orders_bp.route("/fayl/<int:file_id>/ochirish", methods=["POST"])
+@login_required
+@permission_required("orders.edit")
+def delete_file(file_id):
+    f = OrderFile.query.get_or_404(file_id)
+    order_id = f.order_id
+    path = os.path.join(current_app.config["UPLOAD_FOLDER"], f.filename)
+    if os.path.exists(path):
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+    log_action(current_user, "file_delete", "order", order_id, f.original_name[:100])
+    db.session.delete(f)
+    db.session.commit()
+    flash("Fayl o'chirildi.", "success")
+    return redirect(url_for("orders.order_detail", order_id=order_id))

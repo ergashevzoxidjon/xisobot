@@ -1,0 +1,17 @@
+Flask==3.0.3
+Flask-SQLAlchemy==3.1.1
+Flask-Login==0.6.3
+Flask-WTF==1.2.1
+Werkzeug==3.0.3
+openpyxl==3.1.2
+gunicorn==22.0.0
+
+PyMySQL==1.1.1
+
+# PyMySQL — cPanel/umumiy hostingdagi MySQL uchun (hostmaster.uz va h.k.).
+# Sof Python'da yozilgan, kompilyatsiya talab qilmaydi. SQLite bilan ishlaganda
+# zarar qilmaydi — shunchaki ishlatilmaydi.
+#
+# psycopg2-binary faqat PostgreSQL bilan (masalan Render.com'da) deploy qilganda kerak.
+# Lokal SQLite bilan sinash uchun shart emas va Python 3.14'da build muammosi berishi mumkin.
+# Kerak bo'lsa alohida o'rnating: pip install psycopg2-binary

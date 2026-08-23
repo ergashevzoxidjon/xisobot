@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h3>Moliyaviy hisobot</h3>
+    <div class="subtitle">{{ year }}-yil · tushum to'lov sanasi bo'yicha hisoblanadi</div>
+  </div>
+  <div class="d-flex gap-2">
+    <form method="get" class="d-flex gap-2">
+      <input type="number" name="year" value="{{ year }}" class="form-control" style="width:110px" min="2000" max="2100">
+      <button class="btn btn-outline-primary"><i class="bi bi-search"></i></button>
+    </form>
+    {% if has_perm('reports.export') %}
+    <a href="{{ url_for('finance.export_report', year=year) }}" class="btn btn-outline-secondary">
+      <i class="bi bi-file-earmark-excel"></i> Excel</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-4">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon green"><i class="bi bi-graph-up-arrow"></i></div>
+      <div><div class="stat-label">Yillik tushum</div><div class="stat-value text-success num">{{ total_income|uzs }}</div></div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon red"><i class="bi bi-cash-stack"></i></div>
+      <div><div class="stat-label">Yillik xarajat</div><div class="stat-value text-danger num">{{ total_expense|uzs }}</div></div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon {% if total_profit >= 0 %}blue{% else %}red{% endif %}"><i class="bi bi-wallet2"></i></div>
+      <div>
+        <div class="stat-label">Yillik sof foyda</div>
+        <div class="stat-value num {% if total_profit >= 0 %}text-success{% else %}text-danger{% endif %}">{{ total_profit|uzs }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card p-3 mb-3">
+  <canvas id="chart" height="90"></canvas>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-8">
+    <div class="card p-3">
+      <h6 class="fw-bold mb-3">Oylar kesimida</h6>
+      <div class="table-responsive">
+      <table class="table table-hover">
+      <thead><tr><th>Oy</th><th class="text-end">Tushum</th><th class="text-end">Xarajat</th><th class="text-end">Foyda</th></tr></thead>
+      <tbody>
+      {% for m in months %}
+      <tr>
+        <td class="fw-semibold">{{ m.name }}</td>
+        <td class="text-end num">{{ m.income|uzs }}</td>
+        <td class="text-end num text-danger">{{ m.expense|uzs }}</td>
+        <td class="text-end num fw-semibold {% if m.profit >= 0 %}text-success{% else %}text-danger{% endif %}">{{ m.profit|uzs }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr style="border-top:2px solid #e5e9f0">
+          <td class="fw-bold">JAMI</td>
+          <td class="text-end fw-bold num">{{ total_income|uzs }}</td>
+          <td class="text-end fw-bold num text-danger">{{ total_expense|uzs }}</td>
+          <td class="text-end fw-bold num {% if total_profit >= 0 %}text-success{% else %}text-danger{% endif %}">{{ total_profit|uzs }}</td>
+        </tr>
+      </tfoot>
+      </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card p-3">
+      <h6 class="fw-bold mb-3">Xarajat turkumlari</h6>
+      {% if category_rows %}
+      <table class="table table-sm">
+      <tbody>
+      {% for c in category_rows %}
+      <tr>
+        <td><i class="bi {{ c.name|category_icon }} text-muted me-1"></i>{{ c.name }}</td>
+        <td class="text-end num">{{ c.amount|uzs }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+      </table>
+      {% else %}
+      <div class="empty-state py-4"><i class="bi bi-pie-chart"></i><p>Ma'lumot yo'q</p></div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script>
+new Chart(document.getElementById('chart'), {
+  type: 'bar',
+  data: {
+    labels: {{ months|map(attribute='name')|list|tojson }},
+    datasets: [
+      { label: 'Tushum', data: {{ months|map(attribute='income')|map('float')|list|tojson }}, backgroundColor: '#12b76a', borderRadius: 4 },
+      { label: 'Xarajat', data: {{ months|map(attribute='expense')|map('float')|list|tojson }}, backgroundColor: '#f04438', borderRadius: 4 },
+      { label: 'Foyda', data: {{ months|map(attribute='profit')|map('float')|list|tojson }}, backgroundColor: '#2563eb', borderRadius: 4 }
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { position: 'bottom' } },
+    scales: { y: { grid: { color: '#f1f3f8' } }, x: { grid: { display: false } } }
+  }
+});
+</script>
+{% endblock %}

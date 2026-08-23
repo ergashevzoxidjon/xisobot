@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% set src = form or expense %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h3>{{ 'Xarajatni tahrirlash' if expense else 'Yangi xarajat' }}</h3>
+    <div class="subtitle">Xarajat ma'lumotlarini kiriting</div>
+  </div>
+</div>
+<div class="card p-4" style="max-width:520px">
+<form method="post">
+  {{ csrf() }}
+  <div class="mb-3">
+    <label class="form-label">Turkum</label>
+    <select class="form-select" name="category" required>
+      {% for c in categories %}
+      <option value="{{ c }}" {% if src and src.category == c %}selected{% endif %}>{{ c }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Summa (so'm)</label>
+    <input type="number" step="0.01" min="0.01" class="form-control" name="amount" required
+           value="{{ src.amount if src else '' }}">
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Sana</label>
+    <input type="date" class="form-control" name="date" max="{{ today().isoformat() }}"
+           value="{{ (expense.date.isoformat() if expense and expense.date else (src.date if src and src.date else today().isoformat())) }}">
+  </div>
+  <div class="mb-4">
+    <label class="form-label">Izoh</label>
+    <input class="form-control" name="description" maxlength="255" value="{{ src.description if src else '' }}">
+  </div>
+  <div class="d-flex gap-2">
+    <button class="btn btn-primary"><i class="bi bi-check-lg"></i> Saqlash</button>
+    <a href="{{ url_for('finance.expenses_list') }}" class="btn btn-outline-secondary">Bekor qilish</a>
+  </div>
+</form>
+</div>
+{% endblock %}

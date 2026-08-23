@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h3>Buyurtma turlari</h3>
+    <div class="subtitle">Bu yerda qo'shilgan turlar buyurtma yaratishda ro'yxatdan tanlanadi va narxi avtomatik qo'yiladi</div>
+  </div>
+  <a href="{{ url_for('settings.order_type_new') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Yangi tur</a>
+</div>
+
+<div class="card p-3">
+{% if types %}
+<div class="table-responsive">
+<table class="table table-hover">
+<thead><tr><th>Nomi</th><th>O'lchov birligi</th><th class="text-end">Standart narx</th><th>Holat</th><th></th></tr></thead>
+<tbody>
+{% for t in types %}
+<tr class="{% if not t.is_active %}text-muted{% endif %}">
+  <td class="fw-semibold">{{ t.name }}</td>
+  <td>{{ t.unit }}</td>
+  <td class="text-end num">{{ t.default_price|uzs }}</td>
+  <td>
+    {% if t.is_active %}<span class="badge bg-success">Faol</span>
+    {% else %}<span class="badge bg-secondary">O'chirilgan</span>{% endif %}
+  </td>
+  <td class="text-end">
+    <a href="{{ url_for('settings.order_type_edit', type_id=t.id) }}" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-pencil"></i></a>
+    <form method="post" action="{{ url_for('settings.order_type_toggle', type_id=t.id) }}" class="d-inline">
+      {{ csrf() }}
+      <button class="btn btn-sm {% if t.is_active %}btn-outline-danger{% else %}btn-outline-success{% endif %}"
+              title="{{ 'O\'chirish' if t.is_active else 'Faollashtirish' }}">
+        <i class="bi {% if t.is_active %}bi-eye-slash{% else %}bi-eye{% endif %}"></i>
+      </button>
+    </form>
+  </td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% else %}
+<div class="empty-state">
+  <i class="bi bi-tags"></i>
+  <p>Hali tur qo'shilmagan.<br>Masalan: Vizitka, Banner, Buklet, Kitob, Taqvim.</p>
+</div>
+{% endif %}
+</div>
+{% endblock %}

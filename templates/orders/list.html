@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h3>Buyurtmalar</h3>
+    <div class="subtitle">Jami {{ pagination.total }} ta{% if status %} · holat: {{ status }}{% endif %}</div>
+  </div>
+  <div class="d-flex gap-2">
+    {% if has_perm('reports.export') %}
+    <a href="{{ url_for('finance.export_orders') }}" class="btn btn-outline-secondary"><i class="bi bi-file-earmark-excel"></i> Excel</a>
+    {% endif %}
+    {% if has_perm('orders.create') %}
+    <a href="{{ url_for('orders.new_order') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Yangi buyurtma</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card p-3 mb-3">
+  <form method="get" class="row g-2 align-items-center">
+    <div class="col-md-5">
+      <div class="input-group">
+        <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+        <input type="text" name="q" value="{{ q }}" class="form-control border-start-0"
+               placeholder="Raqam, mijoz yoki tur bo'yicha qidirish...">
+      </div>
+    </div>
+    <div class="col-md-3">
+      <select name="status" class="form-select" onchange="this.form.submit()">
+        <option value="">Barcha holatlar</option>
+        {% for s in statuses %}
+        <option value="{{ s }}" {% if s == status %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-auto">
+      <button class="btn btn-outline-primary"><i class="bi bi-funnel"></i> Filtrlash</button>
+      {% if q or status %}
+      <a href="{{ url_for('orders.list_orders') }}" class="btn btn-link text-muted">Tozalash</a>
+      {% endif %}
+    </div>
+  </form>
+</div>
+
+<div class="card p-3">
+{% if orders %}
+<div class="table-responsive">
+<table class="table table-hover">
+<thead><tr>
+  <th>№</th><th>Mijoz</th><th>Turi</th>
+  <th class="text-end">Summa</th><th class="text-end">To'langan</th><th class="text-end">Qolgan</th>
+  <th>Holat</th><th>To'lov</th><th>Muddat</th>
+</tr></thead>
+<tbody>
+{% for o in orders %}
+<tr role="button" onclick="window.location='{{ url_for('orders.order_detail', order_id=o.id) }}'">
+  <td class="fw-semibold">{{ o.order_number }}</td>
+  <td>{{ o.client.name }}</td>
+  <td>{{ o.order_type }}</td>
+  <td class="text-end num">{{ o.total_price|uzs }}</td>
+  <td class="text-end num">{{ o.paid_amount_calc|uzs }}</td>
+  <td class="text-end num {% if o.remaining > 0 and o.status != 'bekor qilindi' %}text-danger{% endif %}">{{ o.remaining|uzs }}</td>
+  <td><span class="badge bg-{{ o.status|status_color }}"><i class="bi {{ o.status|status_icon }} me-1"></i>{{ o.status }}</span></td>
+  <td><span class="badge bg-{{ o.payment_status|payment_color }}">{{ o.payment_status }}</span></td>
+  <td class="num">
+    {% if o.is_overdue %}
+      <span class="text-danger fw-semibold" title="Muddati o'tgan"><i class="bi bi-exclamation-circle"></i> {{ o.deadline|date_uz }}</span>
+    {% else %}
+      {{ o.deadline|date_uz }}
+    {% endif %}
+  </td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{{ pager(pagination, 'orders.list_orders', {'q': q, 'status': status}) }}
+{% else %}
+<div class="empty-state"><i class="bi bi-receipt"></i><p>Buyurtma topilmadi</p></div>
+{% endif %}
+</div>
+{% endblock %}
