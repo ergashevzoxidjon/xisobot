@@ -163,6 +163,10 @@ class Order(db.Model):
     files = db.relationship(
         "OrderFile", backref="order", lazy="select", cascade="all, delete-orphan"
     )
+    items = db.relationship(
+        "OrderItem", backref="order", lazy="select", cascade="all, delete-orphan",
+        order_by="OrderItem.position",
+    )
 
     # ---- hisoblanadigan qiymatlar (to'lovlar jadvalidan) ----
 
@@ -212,6 +216,82 @@ class Order(db.Model):
     def recalc_total(self):
         self.total_price = to_money(Decimal(self.quantity or 0) * to_money(self.unit_price))
 
+    # ---- ko'p qatorli buyurtma ----
+
+    @property
+    def items_summary(self):
+        """Ro'yxatlarda ko'rsatiladigan qisqa tavsif: "Vizitka" yoki "Vizitka +2 ta"."""
+        items = self.items
+        if not items:
+            return self.order_type or "-"
+        if len(items) == 1:
+            return items[0].order_type
+        return f"{items[0].order_type} +{len(items) - 1} ta"
+
+    def recalc_from_items(self):
+        """Jami summa va miqdorni qatorlardan qayta hisoblaydi.
+
+        Buyurtmadagi `order_type`, `quantity`, `unit_price`, `total_price`
+        ustunlari qatorlardan kelib chiqib to'ldiriladi — shu tufayli
+        eski hisobotlar, Excel eksporti va Telegram xabarlari o'zgarishsiz
+        ishlashda davom etadi.
+        """
+        total = ZERO
+        quantity = 0
+        for item in self.items:
+            item.total_price = to_money(
+                Decimal(item.quantity or 0) * to_money(item.unit_price)
+            )
+            total += item.total_price
+            quantity += item.quantity or 0
+
+        self.total_price = total
+        self.quantity = quantity
+        if self.items:
+            self.order_type = self.items[0].order_type
+            # birlik narxi faqat bitta qatorli buyurtmada ma'noga ega
+            self.unit_price = self.items[0].unit_price if len(self.items) == 1 else ZERO
+
+
+    # ---- buyurtma bo'yicha xarajat va foyda ----
+
+    _expense_cache = None
+
+    def attach_expenses(self, amount):
+        self._expense_cache = to_money(amount)
+
+    @property
+    def expenses_total(self):
+        """Shu buyurtmaga yozilgan xarajatlar jami."""
+        if self._expense_cache is not None:
+            return self._expense_cache
+        total = ZERO
+        for e in self.expenses:
+            total += to_money(e.amount)
+        return total
+
+    @property
+    def profit(self):
+        """Buyurtma summasi minus shu buyurtmaga yozilgan xarajatlar."""
+        return to_money(self.total_price) - self.expenses_total
+
+
+class OrderItem(db.Model):
+    """Buyurtma tarkibidagi bitta mahsulot qatori.
+
+    Bir mijoz bir vaqtda bir nechta mahsulot buyurtma qilishi mumkin —
+    ularning hammasi bitta buyurtma raqami va bitta hisob-faktura ostida turadi.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    order_id = db.Column(db.Integer, db.ForeignKey("order.id"), nullable=False, index=True)
+    order_type = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.String(500))
+    quantity = db.Column(db.Integer, default=1, nullable=False)
+    unit_price = db.Column(MONEY, default=0, nullable=False)
+    total_price = db.Column(MONEY, default=0, nullable=False)
+    # formadagi tartibni saqlaydi
+    position = db.Column(db.Integer, default=0, nullable=False)
+
 
 class Payment(db.Model):
     """Har bir to'lov alohida yoziladi — tushum aynan to'lov sanasi bo'yicha
@@ -235,8 +315,12 @@ class Expense(db.Model):
     date = db.Column(db.Date, default=today_local, nullable=False, index=True)
     created_at = db.Column(db.DateTime, default=now_local)
     created_by = db.Column(db.Integer, db.ForeignKey("user.id"))
+    # Xarajat aniq bir buyurtmaga tegishli bo'lishi mumkin (qog'oz, bo'yoq,
+    # pechat) yoki umumiy bo'lishi mumkin (ijara, ish haqi) — o'shanda bo'sh.
+    order_id = db.Column(db.Integer, db.ForeignKey("order.id"), index=True)
 
     creator = db.relationship("User", foreign_keys=[created_by])
+    order = db.relationship("Order", backref="expenses", foreign_keys=[order_id])
 
 
 class CompanySettings(db.Model):

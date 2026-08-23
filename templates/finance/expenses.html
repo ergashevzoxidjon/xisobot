@@ -32,13 +32,21 @@
 {% if expenses %}
 <div class="table-responsive">
 <table class="table table-hover">
-<thead><tr><th>Sana</th><th>Turkum</th><th class="text-end">Summa</th><th>Izoh</th><th>Kiritgan</th><th></th></tr></thead>
+<thead><tr><th>Sana</th><th>Turkum</th><th class="text-end">Summa</th><th>Buyurtma</th><th>Izoh</th><th>Kiritgan</th><th></th></tr></thead>
 <tbody>
 {% for e in expenses %}
 <tr>
   <td class="num">{{ e.date|date_uz }}</td>
   <td><span class="badge bg-secondary"><i class="bi {{ e.category|category_icon }} me-1"></i>{{ e.category }}</span></td>
   <td class="text-end fw-semibold text-danger num">{{ e.amount|uzs }}</td>
+  <td>
+    {% if e.order %}
+    <a href="{{ url_for('orders.order_detail', order_id=e.order.id) }}">{{ e.order.order_number }}</a>
+    <div class="text-muted" style="font-size:.75rem">{{ e.order.client.name if e.order.client else '' }}</div>
+    {% else %}
+    <span class="text-muted small">umumiy</span>
+    {% endif %}
+  </td>
   <td class="text-muted">{{ e.description or '-' }}</td>
   <td class="small text-muted">{{ e.creator.display_name if e.creator else '-' }}</td>
   <td class="text-end no-print">

@@ -1,5 +1,28 @@
 {% extends "base.html" %}
 {% set src = form or prefill %}
+
+{# --- forma qaytib kelganda (xato bo'lganda) kiritilgan qatorlarni tiklaymiz --- #}
+{% set posted_types = form.getlist('item_type') if form and form.getlist is defined else [] %}
+{% set posted_descs = form.getlist('item_description') if form and form.getlist is defined else [] %}
+{% set posted_qtys = form.getlist('item_quantity') if form and form.getlist is defined else [] %}
+{% set posted_prices = form.getlist('item_unit_price') if form and form.getlist is defined else [] %}
+
+{% set rows = [] %}
+{% if posted_types %}
+  {% for t in posted_types %}
+    {% set _ = rows.append({
+      'order_type': t,
+      'description': posted_descs[loop.index0] if posted_descs|length > loop.index0 else '',
+      'quantity': posted_qtys[loop.index0] if posted_qtys|length > loop.index0 else 1,
+      'unit_price': posted_prices[loop.index0] if posted_prices|length > loop.index0 else 0,
+    }) %}
+  {% endfor %}
+{% elif order and order.items %}
+  {% for it in order.items %}{% set _ = rows.append(it) %}{% endfor %}
+{% elif prefill and prefill.items %}
+  {% for it in prefill.items %}{% set _ = rows.append(it) %}{% endfor %}
+{% endif %}
+
 {% block content %}
 <div class="page-header">
   <div>
@@ -7,71 +30,114 @@
     <div class="subtitle">
       {% if order %}{{ order.order_number }}
       {% elif prefill %}{{ prefill.order_number }} asosida yangi buyurtma
-      {% else %}Buyurtma ma'lumotlarini kiriting{% endif %}
+      {% else %}Mijozni yozing, mahsulotlarni qo'shing{% endif %}
     </div>
   </div>
 </div>
 
-<div class="card p-4" style="max-width:660px">
-<form method="post">
+<div class="card p-4" style="max-width:1000px">
+<form method="post" id="orderForm">
   {{ csrf() }}
   {% if order %}<input type="hidden" name="version" value="{{ order.version }}">{% endif %}
 
-  <div class="mb-3">
+  {# ---------------- MIJOZ ---------------- #}
+  <div class="mb-3 position-relative" style="max-width:520px">
     <label class="form-label">Mijoz</label>
-    <select class="form-select" name="client_id" required>
-      {% for c in clients %}
-      <option value="{{ c.id }}"
-        {% if order and order.client_id == c.id %}selected
-        {% elif src and (src.client_id|string) == (c.id|string) %}selected{% endif %}>{{ c.name }}</option>
-      {% endfor %}
-    </select>
+    <input type="hidden" name="client_id" id="clientId"
+           value="{{ order.client_id if order else (src.client_id|default('', true) if src else '') }}">
+    <input class="form-control" name="client_name" id="clientName" required autocomplete="off"
+           placeholder="Mijoz nomini yozing..."
+           value="{{ order.client.name if order and order.client else (src.client_name|default('', true) if src else '') }}">
+    <div id="clientResults" class="list-group position-absolute w-100 shadow"
+         style="z-index:1000; display:none; max-height:260px; overflow-y:auto"></div>
+    <div class="form-text" id="clientHint">Yozishni boshlang — bazadagi mijozlar ko'rsatiladi.</div>
   </div>
 
-  <div class="mb-3">
-    <label class="form-label">Buyurtma turi</label>
-    {% if order_types %}
-    <select class="form-select mb-2" id="typeSelect">
-      <option value="">— ro'yxatdan tanlang (narx avtomatik qo'yiladi) —</option>
+  <div class="mb-4" id="newClientBox" style="display:none; max-width:520px">
+    <label class="form-label">Telefon <span class="text-muted fw-normal">(yangi mijoz uchun, ixtiyoriy)</span></label>
+    <input class="form-control" name="client_phone" placeholder="+998 90 123 45 67"
+           value="{{ src.client_phone|default('', true) if src else '' }}">
+  </div>
+
+  {# ---------------- TEZKOR TANLASH ---------------- #}
+  {% if order_types %}
+  <div class="quick-types mb-3">
+    <div class="form-label mb-2">Tezkor tanlash</div>
+    <div class="d-flex flex-wrap gap-2">
       {% for t in order_types %}
-      <option value="{{ t.name }}" data-price="{{ t.default_price }}">{{ t.name }} ({{ t.default_price|uzs }} / {{ t.unit }})</option>
+      <button type="button" class="btn btn-outline-primary btn-sm quick-type"
+              data-name="{{ t.name }}" data-price="{{ t.default_price }}">
+        {{ t.name }}
+        <span class="text-muted ms-1">{{ t.default_price|uzs }}</span>
+      </button>
       {% endfor %}
-    </select>
-    {% endif %}
-    <input class="form-control" name="order_type" id="orderType" required
-           placeholder="Vizitka, banner, kitob..."
-           value="{{ order.order_type if order else (src.order_type if src else '') }}">
-    {% if not order_types %}
-    <div class="form-text">Maslahat: "Buyurtma turlari" bo'limida tur va standart narx qo'shsangiz, bu yerda avtomatik tanlanadi.</div>
-    {% endif %}
+    </div>
+    <div class="form-text">Tugmani bosing — tanlangan qatorga turi va narxi qo'yiladi.</div>
+  </div>
+  {% else %}
+  <div class="alert alert-light border py-2 mb-3">
+    <i class="bi bi-lightbulb"></i>
+    "Buyurtma turlari" bo'limida tur va standart narx qo'shsangiz, shu yerda tezkor tugmalar paydo bo'ladi.
+  </div>
+  {% endif %}
+
+  {# ---------------- MAHSULOTLAR ---------------- #}
+  <div class="form-label mb-2">Mahsulotlar</div>
+  <div class="tablewrap mb-2" style="overflow-x:auto">
+    <table class="table align-middle mb-0" id="itemsTable">
+      <thead>
+        <tr>
+          <th style="min-width:190px">Turi</th>
+          <th style="min-width:190px">Izoh</th>
+          <th style="width:110px">Miqdor</th>
+          <th style="width:150px">Birlik narxi</th>
+          <th style="width:150px" class="text-end">Summa</th>
+          <th style="width:44px"></th>
+        </tr>
+      </thead>
+      <tbody id="itemsBody">
+        {% for row in rows %}
+        <tr class="item-row">
+          <td><input class="form-control item-type" name="item_type" required
+                     placeholder="Vizitka, banner..." value="{{ row.order_type }}"></td>
+          <td><input class="form-control item-desc" name="item_description"
+                     placeholder="o'lcham, rang..." value="{{ row.description or '' }}"></td>
+          <td><input type="number" class="form-control item-qty" name="item_quantity"
+                     min="1" required value="{{ row.quantity }}"></td>
+          <td><input type="number" step="0.01" min="0" class="form-control item-price"
+                     name="item_unit_price" required value="{{ row.unit_price }}"></td>
+          <td class="text-end num item-total">0.00</td>
+          <td><button type="button" class="btn btn-sm btn-outline-danger row-remove"
+                      title="Qatorni o'chirish"><i class="bi bi-x-lg"></i></button></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td colspan="4" class="text-end fw-bold">Jami summa</td>
+          <td class="text-end fw-bold num" id="grandTotal">0.00</td>
+          <td></td>
+        </tr>
+      </tfoot>
+    </table>
   </div>
 
-  <div class="mb-3">
-    <label class="form-label">Tavsif</label>
-    <textarea class="form-control" name="description" rows="2">{{ order.description if order else (src.description if src else '') }}</textarea>
-  </div>
+  <button type="button" class="btn btn-outline-primary btn-sm mb-4" id="addRow">
+    <i class="bi bi-plus-lg"></i> Qator qo'shish
+  </button>
 
+  {# ---------------- UMUMIY ---------------- #}
   <div class="row">
-    <div class="col-sm-4 mb-3">
-      <label class="form-label">Miqdor</label>
-      <input type="number" class="form-control" name="quantity" id="qty" min="1" required
-             value="{{ order.quantity if order else (src.quantity if src else 1) }}">
+    <div class="col-md-8 mb-3">
+      <label class="form-label">Umumiy izoh</label>
+      <textarea class="form-control" name="description" rows="2"
+        placeholder="Butun buyurtmaga tegishli qo'shimcha ma'lumot">{{ order.description if order else (src.description|default('', true) if src else '') }}</textarea>
     </div>
-    <div class="col-sm-4 mb-3">
-      <label class="form-label">Birlik narxi</label>
-      <input type="number" step="0.01" min="0" class="form-control" name="unit_price" id="price" required
-             value="{{ order.unit_price if order else (src.unit_price if src else 0) }}">
+    <div class="col-md-4 mb-3">
+      <label class="form-label">Muddat</label>
+      <input type="date" class="form-control" name="deadline"
+             value="{{ (order.deadline.isoformat() if order and order.deadline else (src.deadline|default('', true) if src else '')) }}">
     </div>
-    <div class="col-sm-4 mb-3">
-      <label class="form-label">Jami summa</label>
-      <input type="text" class="form-control bg-light" id="total" readonly>
-    </div>
-  </div>
-
-  <div class="mb-4">
-    <label class="form-label">Muddat</label>
-    <input type="date" class="form-control" name="deadline"
-           value="{{ (order.deadline.isoformat() if order and order.deadline else (src.deadline if src and src.deadline else '')) }}">
   </div>
 
   {% if order and order.paid_amount_calc > 0 %}
@@ -92,29 +158,187 @@
 
 {% block scripts %}
 <script>
-const qty = document.getElementById('qty');
-const price = document.getElementById('price');
-const total = document.getElementById('total');
-const typeSelect = document.getElementById('typeSelect');
-const orderType = document.getElementById('orderType');
+const SEARCH_URL = "{{ url_for('clients.search_clients') }}";
+
+/* ---------------- mahsulot qatorlari ---------------- */
+
+const itemsBody = document.getElementById('itemsBody');
+const grandTotal = document.getElementById('grandTotal');
+let activeRow = null;
+
+function money(value) {
+  return (value || 0).toLocaleString('ru-RU', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
+function makeRow() {
+  const tr = document.createElement('tr');
+  tr.className = 'item-row';
+  tr.innerHTML = `
+    <td><input class="form-control item-type" name="item_type" required placeholder="Vizitka, banner..."></td>
+    <td><input class="form-control item-desc" name="item_description" placeholder="o'lcham, rang..."></td>
+    <td><input type="number" class="form-control item-qty" name="item_quantity" min="1" required value="1"></td>
+    <td><input type="number" step="0.01" min="0" class="form-control item-price" name="item_unit_price" required value="0"></td>
+    <td class="text-end num item-total">0.00</td>
+    <td><button type="button" class="btn btn-sm btn-outline-danger row-remove" title="Qatorni o'chirish"><i class="bi bi-x-lg"></i></button></td>`;
+  return tr;
+}
+
+function addRow(focus) {
+  const tr = makeRow();
+  itemsBody.appendChild(tr);
+  setActive(tr);
+  if (focus) tr.querySelector('.item-type').focus();
+  recalc();
+  return tr;
+}
+
+function setActive(tr) {
+  if (activeRow) activeRow.classList.remove('table-active');
+  activeRow = tr;
+  if (tr) tr.classList.add('table-active');
+}
 
 function recalc() {
-  const q = parseFloat(qty.value) || 0;
-  const p = parseFloat(price.value) || 0;
-  total.value = (q * p).toLocaleString('ru-RU', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  let sum = 0;
+  itemsBody.querySelectorAll('.item-row').forEach(tr => {
+    const q = parseFloat(tr.querySelector('.item-qty').value) || 0;
+    const p = parseFloat(tr.querySelector('.item-price').value) || 0;
+    const line = q * p;
+    tr.querySelector('.item-total').textContent = money(line);
+    sum += line;
+  });
+  grandTotal.textContent = money(sum);
 }
-qty.addEventListener('input', recalc);
-price.addEventListener('input', recalc);
+
+itemsBody.addEventListener('input', event => {
+  if (event.target.matches('.item-qty, .item-price')) recalc();
+});
+
+itemsBody.addEventListener('focusin', event => {
+  const tr = event.target.closest('.item-row');
+  if (tr) setActive(tr);
+});
+
+itemsBody.addEventListener('click', event => {
+  const btn = event.target.closest('.row-remove');
+  if (!btn) return;
+  const rows = itemsBody.querySelectorAll('.item-row');
+  if (rows.length <= 1) {
+    // oxirgi qatorni o'chirmaymiz — shunchaki tozalaymiz
+    rows[0].querySelectorAll('input').forEach(i => { i.value = i.classList.contains('item-qty') ? 1 : ''; });
+    recalc();
+    return;
+  }
+  const tr = btn.closest('.item-row');
+  if (tr === activeRow) setActive(null);
+  tr.remove();
+  recalc();
+});
+
+document.getElementById('addRow').addEventListener('click', () => addRow(true));
+
+/* tezkor tugmalar — tanlangan qatorga turi va narxni qo'yadi */
+document.querySelectorAll('.quick-type').forEach(btn => {
+  btn.addEventListener('click', () => {
+    let tr = activeRow;
+    if (!tr || !tr.isConnected) {
+      const rows = itemsBody.querySelectorAll('.item-row');
+      tr = rows.length ? rows[rows.length - 1] : addRow(false);
+    }
+    // tanlangan qator to'ldirilgan bo'lsa — yangisiga yozamiz
+    if (tr.querySelector('.item-type').value.trim()) tr = addRow(false);
+
+    tr.querySelector('.item-type').value = btn.dataset.name;
+    const price = parseFloat(btn.dataset.price);
+    if (!isNaN(price) && price > 0) tr.querySelector('.item-price').value = price;
+    setActive(tr);
+    tr.querySelector('.item-qty').focus();
+    tr.querySelector('.item-qty').select();
+    recalc();
+  });
+});
+
+if (!itemsBody.querySelector('.item-row')) addRow(false);
+setActive(itemsBody.querySelector('.item-row'));
 recalc();
 
-if (typeSelect) {
-  typeSelect.addEventListener('change', () => {
-    const opt = typeSelect.selectedOptions[0];
-    if (!opt || !opt.value) return;
-    orderType.value = opt.value;
-    const p = parseFloat(opt.dataset.price);
-    if (!isNaN(p) && p > 0) { price.value = p; recalc(); }
-  });
+/* ---------------- mijoz qidiruvi ---------------- */
+
+const clientName = document.getElementById('clientName');
+const clientId = document.getElementById('clientId');
+const results = document.getElementById('clientResults');
+const hint = document.getElementById('clientHint');
+const newClientBox = document.getElementById('newClientBox');
+let searchTimer = null;
+let lastMatches = [];
+
+function showNewClientState(isNew) {
+  newClientBox.style.display = isNew ? '' : 'none';
+  if (isNew) {
+    hint.innerHTML = '<span class="text-warning-emphasis"><i class="bi bi-plus-circle"></i> Bunday mijoz topilmadi — saqlaganda yangisi qo\'shiladi.</span>';
+  } else if (clientId.value) {
+    hint.innerHTML = '<span class="text-success"><i class="bi bi-check-circle"></i> Bazadagi mijoz tanlandi.</span>';
+  } else {
+    hint.textContent = "Yozishni boshlang — bazadagi mijozlar ko'rsatiladi.";
+  }
 }
+
+function hideResults() { results.style.display = 'none'; }
+
+function renderResults(items) {
+  lastMatches = items;
+  results.innerHTML = '';
+  if (!items.length) { hideResults(); return; }
+  items.forEach(c => {
+    const a = document.createElement('button');
+    a.type = 'button';
+    a.className = 'list-group-item list-group-item-action py-2';
+    a.innerHTML = `<span class="fw-semibold">${c.name}</span>` +
+                  (c.phone ? `<span class="text-muted small ms-2">${c.phone}</span>` : '');
+    a.addEventListener('click', () => {
+      clientName.value = c.name;
+      clientId.value = c.id;
+      hideResults();
+      showNewClientState(false);
+    });
+    results.appendChild(a);
+  });
+  results.style.display = '';
+}
+
+clientName.addEventListener('input', () => {
+  clientId.value = '';          // matn o'zgardi — tanlov bekor bo'ladi
+  const q = clientName.value.trim();
+  clearTimeout(searchTimer);
+
+  if (q.length < 2) { hideResults(); showNewClientState(false); return; }
+
+  searchTimer = setTimeout(() => {
+    fetch(SEARCH_URL + '?q=' + encodeURIComponent(q))
+      .then(r => r.ok ? r.json() : [])
+      .then(items => {
+        renderResults(items);
+        const exact = items.find(c => c.name.toLowerCase() === q.toLowerCase());
+        if (exact) { clientId.value = exact.id; showNewClientState(false); }
+        else { showNewClientState(true); }
+      })
+      .catch(() => hideResults());
+  }, 250);
+});
+
+document.addEventListener('click', event => {
+  if (!results.contains(event.target) && event.target !== clientName) hideResults();
+});
+
+clientName.addEventListener('keydown', event => {
+  if (event.key === 'Escape') hideResults();
+  if (event.key === 'Enter' && results.style.display !== 'none' && lastMatches.length) {
+    event.preventDefault();
+    const first = results.querySelector('button');
+    if (first) first.click();
+  }
+});
+
+if (clientId.value) showNewClientState(false);
 </script>
 {% endblock %}

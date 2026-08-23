@@ -14,12 +14,12 @@ from werkzeug.utils import secure_filename
 
 from extensions import db
 from models import (
-    Order, Client, Payment, OrderType, OrderFile, CompanySettings,
+    Order, OrderItem, Client, Payment, OrderType, OrderFile, CompanySettings,
     log_action, can_transition,
     ORDER_STATUSES, ALLOWED_TRANSITIONS, STATUS_CANCELLED, ZERO,
 )
 from notifications import notify_new_order, notify_payment
-from permissions import permission_required
+from permissions import permission_required, has_perm
 from queries import eager_orders
 from utils import (
     ValidationError, parse_money, parse_int, parse_date, parse_text, parse_choice,
@@ -49,24 +49,104 @@ def next_order_number():
     return f"{prefix}{seq:04d}"
 
 
-def _order_form_data(form):
-    """Formadan buyurtma maydonlarini tekshirib o'qiydi."""
-    client_id = parse_int(form.get("client_id"), "Mijoz", min_value=1)
-    if not db.session.get(Client, client_id):
-        raise ValidationError("Mijoz: tanlangan mijoz topilmadi.")
+MAX_ITEMS = 50
 
-    quantity = parse_int(form.get("quantity"), "Miqdor", min_value=1, max_value=10_000_000)
-    unit_price = parse_money(form.get("unit_price"), "Birlik narxi", min_value=ZERO)
-    deadline = parse_date(form.get("deadline"), "Muddat", required=False)
 
+def _at(values, index, default=""):
+    return values[index] if index < len(values) else default
+
+
+def _items_from_form(form):
+    """Formadagi mahsulot qatorlarini o'qiydi va tekshiradi.
+
+    Buyurtma turi bo'sh qolgan qatorlar e'tiborsiz qoldiriladi — foydalanuvchi
+    ortiqcha qator qo'shib, uni to'ldirmasdan yuborishi mumkin.
+    """
+    types = form.getlist("item_type")
+    descriptions = form.getlist("item_description")
+    quantities = form.getlist("item_quantity")
+    prices = form.getlist("item_unit_price")
+
+    if len(types) > MAX_ITEMS:
+        raise ValidationError(f"Bitta buyurtmada {MAX_ITEMS} tadan ko'p qator bo'lmasin.")
+
+    items = []
+    for index, raw_type in enumerate(types):
+        name = (raw_type or "").strip()
+        if not name:
+            continue
+
+        row = index + 1
+        quantity = parse_int(
+            _at(quantities, index), f"{row}-qator, miqdor",
+            min_value=1, max_value=10_000_000,
+        )
+        unit_price = parse_money(
+            _at(prices, index), f"{row}-qator, birlik narxi", min_value=ZERO,
+        )
+        items.append({
+            "order_type": parse_text(
+                name, f"{row}-qator, buyurtma turi", required=True, max_length=100
+            ),
+            "description": parse_text(
+                _at(descriptions, index), f"{row}-qator, izoh",
+                required=False, max_length=500,
+            ),
+            "quantity": quantity,
+            "unit_price": unit_price,
+            "total_price": to_money(Decimal(quantity) * unit_price),
+            "position": len(items),
+        })
+
+    if not items:
+        raise ValidationError("Kamida bitta mahsulot qatorini to'ldiring.")
+    return items
+
+
+def _client_from_form(form):
+    """Formadagi mijozni topadi, kerak bo'lsa yangisini yaratadi.
+
+    Ro'yxatdan tanlansa `client_id` keladi. Foydalanuvchi yangi nom yozgan
+    bo'lsa — avval shu nomli mijoz bazada bor-yo'qligi tekshiriladi
+    (katta-kichik harf farqsiz), topilmasa yangi mijoz ochiladi.
+
+    (mijoz, yangi_yaratildimi) juftligini qaytaradi.
+    """
+    raw_id = (form.get("client_id") or "").strip()
+    if raw_id:
+        client = db.session.get(Client, parse_int(raw_id, "Mijoz", min_value=1))
+        if client and not client.is_deleted:
+            return client, False
+
+    name = parse_text(form.get("client_name"), "Mijoz", required=True, max_length=150)
+
+    existing = (
+        Client.query.filter(Client.name.ilike(name), Client.is_deleted.is_(False))
+        .first()
+    )
+    if existing:
+        return existing, False
+
+    if not has_perm("clients.create"):
+        raise ValidationError(
+            f"Mijoz: '{name}' bazada topilmadi, yangi mijoz qo'shish huquqingiz esa yo'q."
+        )
+
+    client = Client(
+        name=name,
+        phone=parse_text(form.get("client_phone"), "Telefon", required=False, max_length=50),
+    )
+    db.session.add(client)
+    db.session.flush()
+    return client, True
+
+
+def _order_common_fields(form):
     return {
-        "client_id": client_id,
-        "order_type": parse_text(form.get("order_type"), "Buyurtma turi", required=True, max_length=100),
-        "description": parse_text(form.get("description"), "Tavsif", required=False, max_length=2000),
-        "quantity": quantity,
-        "unit_price": unit_price,
-        "total_price": to_money(Decimal(quantity) * unit_price),
-        "deadline": deadline,
+        "description": parse_text(
+            form.get("description"), "Umumiy izoh", required=False, max_length=2000
+        ),
+        "deadline": parse_date(form.get("deadline"), "Muddat", required=False),
     }
 
 
@@ -108,12 +188,7 @@ def list_orders():
 @login_required
 @permission_required("orders.create")
 def new_order():
-    clients = Client.query.order_by(Client.name).all()
     order_types = OrderType.query.filter_by(is_active=True).order_by(OrderType.name).all()
-
-    if not clients:
-        flash("Avval kamida bitta mijoz qo'shing.", "warning")
-        return redirect(url_for("clients.new_client"))
 
     # "Nusxalash" — mavjud buyurtma asosida formani to'ldirish
     prefill = None
@@ -123,21 +198,42 @@ def new_order():
         if src:
             prefill = src
 
+    def back_to_form():
+        return render_template(
+            "orders/form.html", order_types=order_types,
+            order=None, prefill=None, form=request.form,
+        )
+
     if request.method == "POST":
         try:
-            data = _order_form_data(request.form)
+            # Avval qatorlarni tekshiramiz — xato bo'lsa bekorga
+            # yangi mijoz yaratilib qolmasligi uchun.
+            items = _items_from_form(request.form)
+            common = _order_common_fields(request.form)
+            client, client_created = _client_from_form(request.form)
         except ValidationError as e:
+            db.session.rollback()
             flash(str(e), "danger")
-            return render_template(
-                "orders/form.html", clients=clients, order_types=order_types,
-                order=None, prefill=None, form=request.form,
-            )
+            return back_to_form()
+
+        if client_created:
+            log_action(current_user, "create", "client", client.id,
+                       f"{client.name} (buyurtma orqali)")
+            db.session.commit()
 
         # Ikki xodim bir vaqtda buyurtma yaratsa raqam to'qnashishi mumkin —
         # bunda qayta urinamiz (500 xato o'rniga).
         o = None
         for attempt in range(5):
-            o = Order(order_number=next_order_number(), created_by=current_user.id, **data)
+            o = Order(
+                order_number=next_order_number(),
+                client_id=client.id,
+                created_by=current_user.id,
+                **common,
+            )
+            for data in items:
+                o.items.append(OrderItem(**data))
+            o.recalc_from_items()
             db.session.add(o)
             try:
                 db.session.flush()
@@ -147,19 +243,19 @@ def new_order():
                 o = None
                 if attempt == 4:
                     flash("Buyurtma raqamini yaratib bo'lmadi. Qayta urinib ko'ring.", "danger")
-                    return render_template(
-                        "orders/form.html", clients=clients, order_types=order_types,
-                        order=None, prefill=None, form=request.form,
-                    )
+                    return back_to_form()
 
-        log_action(current_user, "create", "order", o.id, f"{o.order_number} yaratildi")
+        log_action(current_user, "create", "order", o.id,
+                   f"{o.order_number} yaratildi ({len(items)} qator)")
         db.session.commit()
         notify_new_order(o)
+        if client_created:
+            flash(f"Yangi mijoz qo'shildi: {client.name}", "info")
         flash(f"Buyurtma {o.order_number} yaratildi.", "success")
         return redirect(url_for("orders.order_detail", order_id=o.id))
 
     return render_template(
-        "orders/form.html", clients=clients, order_types=order_types,
+        "orders/form.html", order_types=order_types,
         order=None, prefill=prefill, form=None,
     )
 
@@ -169,18 +265,23 @@ def new_order():
 @permission_required("orders.edit")
 def edit_order(order_id):
     o = Order.query.get_or_404(order_id)
-    clients = Client.query.order_by(Client.name).all()
     order_types = OrderType.query.filter_by(is_active=True).order_by(OrderType.name).all()
+
+    def back_to_form(keep_form=True):
+        return render_template(
+            "orders/form.html", order_types=order_types,
+            order=o, prefill=None, form=request.form if keep_form else None,
+        )
 
     if request.method == "POST":
         try:
-            data = _order_form_data(request.form)
+            items = _items_from_form(request.form)
+            common = _order_common_fields(request.form)
+            client, client_created = _client_from_form(request.form)
         except ValidationError as e:
+            db.session.rollback()
             flash(str(e), "danger")
-            return render_template(
-                "orders/form.html", clients=clients, order_types=order_types,
-                order=o, prefill=None, form=request.form,
-            )
+            return back_to_form()
 
         # boshqa xodim shu orada o'zgartirmaganini tekshiramiz
         form_version = parse_int(
@@ -188,36 +289,46 @@ def edit_order(order_id):
             required=False, min_value=0, default=0,
         )
         if form_version and form_version != o.version:
+            db.session.rollback()
             flash(
                 "Bu buyurtmani shu orada boshqa xodim o'zgartirdi. "
                 "Sahifa yangilandi — o'zgarishlaringizni qayta kiriting.", "warning",
             )
-            return render_template(
-                "orders/form.html", clients=clients, order_types=order_types,
-                order=o, prefill=None, form=None,
-            )
+            return back_to_form(keep_form=False)
 
         # yangi summa to'langan puldan kam bo'lib qolmasligini tekshiramiz
-        if data["total_price"] < o.paid_amount_calc:
+        new_total = sum((data["total_price"] for data in items), ZERO)
+        if new_total < o.paid_amount_calc:
+            db.session.rollback()
             flash(
                 "Yangi summa allaqachon to'langan puldan kam bo'lishi mumkin emas "
                 f"(to'langan: {o.paid_amount_calc}).", "danger",
             )
-            return render_template(
-                "orders/form.html", clients=clients, order_types=order_types,
-                order=o, prefill=None, form=request.form,
-            )
+            return back_to_form()
 
-        for key, value in data.items():
+        if client_created:
+            log_action(current_user, "create", "client", client.id,
+                       f"{client.name} (buyurtma orqali)")
+
+        o.client_id = client.id
+        for key, value in common.items():
             setattr(o, key, value)
+
+        # eski qatorlarni yangilari bilan almashtiramiz
+        o.items.clear()
+        for data in items:
+            o.items.append(OrderItem(**data))
+        o.recalc_from_items()
+
         o.version = (o.version or 1) + 1
-        log_action(current_user, "update", "order", o.id, f"{o.order_number} tahrirlandi")
+        log_action(current_user, "update", "order", o.id,
+                   f"{o.order_number} tahrirlandi ({len(items)} qator)")
         db.session.commit()
         flash("Buyurtma yangilandi.", "success")
         return redirect(url_for("orders.order_detail", order_id=o.id))
 
     return render_template(
-        "orders/form.html", clients=clients, order_types=order_types,
+        "orders/form.html", order_types=order_types,
         order=o, prefill=None, form=None,
     )
 

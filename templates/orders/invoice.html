@@ -48,6 +48,17 @@
       <th class="text-end">Summa</th>
     </tr></thead>
     <tbody>
+      {% for it in order.items %}
+      <tr>
+        <td>
+          <div class="fw-semibold">{{ it.order_type }}</div>
+          {% if it.description %}<div class="small text-muted">{{ it.description }}</div>{% endif %}
+        </td>
+        <td class="text-end num">{{ it.quantity }}</td>
+        <td class="text-end num">{{ it.unit_price|uzs }}</td>
+        <td class="text-end num">{{ it.total_price|uzs }}</td>
+      </tr>
+      {% else %}
       <tr>
         <td>
           <div class="fw-semibold">{{ order.order_type }}</div>
@@ -57,8 +68,13 @@
         <td class="text-end num">{{ order.unit_price|uzs }}</td>
         <td class="text-end num">{{ order.total_price|uzs }}</td>
       </tr>
+      {% endfor %}
     </tbody>
   </table>
+
+  {% if order.items and order.description %}
+  <div class="small text-muted mb-3">Izoh: {{ order.description }}</div>
+  {% endif %}
 
   <div class="d-flex justify-content-end">
     <table style="min-width:280px">

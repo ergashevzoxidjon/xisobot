@@ -35,6 +35,7 @@ def eager_orders(query):
     return query.options(
         joinedload(Order.client),
         selectinload(Order.payments),
+        selectinload(Order.items),
     )
 
 

@@ -53,13 +53,23 @@ def columns_of(table):
         return set()
 
 
+def quote_ident(name):
+    """Jadval nomini bazaga mos belgilar bilan o'raydi.
+
+    SQLite va PostgreSQL qo'sh tirnoq ishlatadi, MySQL esa teskari tirnoq (`).
+    Qo'sh tirnoqni MySQL matn deb tushunadi va ALTER TABLE xato beradi —
+    shuning uchun nomni drayverning o'zi o'rashi kerak.
+    """
+    return db.engine.dialect.identifier_preparer.quote(name)
+
+
 def add_column(table, column_ddl, column_name):
     if table not in existing_tables():
         return
     if column_name in columns_of(table):
         print(f"  · {table}.{column_name} allaqachon mavjud")
         return
-    db.session.execute(text(f"ALTER TABLE \"{table}\" ADD COLUMN {column_ddl}"))
+    db.session.execute(text(f"ALTER TABLE {quote_ident(table)} ADD COLUMN {column_ddl}"))
     db.session.commit()
     print(f"✓ {table}.{column_name} ustuni qo'shildi")
 
@@ -103,9 +113,41 @@ def drop_obsolete_tables():
     tables = existing_tables()
     for name in ("material_transaction", "material"):
         if name in tables:
-            db.session.execute(text(f'DROP TABLE IF EXISTS "{name}"'))
+            db.session.execute(text(f"DROP TABLE IF EXISTS {quote_ident(name)}"))
             db.session.commit()
             print(f"✓ Eski '{name}' jadvali o'chirildi")
+
+
+def migrate_order_items():
+    """Eski bir mahsulotli buyurtmalarni `order_item` qatorlariga ko'chiradi.
+
+    Ilgari har bir buyurtmada bitta mahsulot bo'lardi (order.order_type,
+    quantity, unit_price). Endi mahsulotlar alohida jadvalda turadi.
+    Qatori yo'q har bir buyurtma uchun bitta qator yaratamiz.
+    """
+    from models import Order, OrderItem
+
+    orders = (
+        Order.query.outerjoin(OrderItem, OrderItem.order_id == Order.id)
+        .filter(OrderItem.id.is_(None))
+        .all()
+    )
+    if not orders:
+        print("  · barcha buyurtmalarda mahsulot qatori bor — ko'chirish shart emas")
+        return
+
+    for o in orders:
+        db.session.add(OrderItem(
+            order_id=o.id,
+            order_type=(o.order_type or "Mahsulot")[:100],
+            description=(o.description or "")[:500] or None,
+            quantity=o.quantity or 1,
+            unit_price=o.unit_price or 0,
+            total_price=o.total_price or 0,
+            position=0,
+        ))
+    db.session.commit()
+    print(f"✓ {len(orders)} ta buyurtma mahsulot qatoriga ko'chirildi")
 
 
 def ensure_upload_folder(app):
@@ -137,6 +179,10 @@ def main():
         add_column("order", "deleted_by INTEGER", "deleted_by")
         add_column("client", "is_deleted BOOLEAN DEFAULT 0 NOT NULL", "is_deleted")
         add_column("client", "deleted_at DATETIME", "deleted_at")
+
+        # --- v4: ko'p qatorli buyurtma va buyurtmaga bog'langan xarajat ---
+        add_column("expense", "order_id INTEGER", "order_id")
+        migrate_order_items()
 
         migrate_paid_amount()
         drop_obsolete_tables()

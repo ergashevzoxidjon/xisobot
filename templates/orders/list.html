@@ -55,7 +55,12 @@
 <tr role="button" onclick="window.location='{{ url_for('orders.order_detail', order_id=o.id) }}'">
   <td class="fw-semibold">{{ o.order_number }}</td>
   <td>{{ o.client.name }}</td>
-  <td>{{ o.order_type }}</td>
+  <td>
+    {{ o.items_summary }}
+    {% if o.items|length > 1 %}
+    <div class="text-muted" style="font-size:.75rem">{{ o.items|length }} ta mahsulot</div>
+    {% endif %}
+  </td>
   <td class="text-end num">{{ o.total_price|uzs }}</td>
   <td class="text-end num">{{ o.paid_amount_calc|uzs }}</td>
   <td class="text-end num {% if o.remaining > 0 and o.status != 'bekor qilindi' %}text-danger{% endif %}">{{ o.remaining|uzs }}</td>

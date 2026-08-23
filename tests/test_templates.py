@@ -86,12 +86,14 @@ if not any("CSRF YO'Q" in f for f in fails):
 ROLE_PERMISSIONS = {
     "admin": {"orders.view", "orders.create", "orders.edit", "orders.manage", "orders.delete",
               "clients.view", "clients.create", "clients.delete",
-              "expenses.view", "expenses.create",
+              "expenses.view", "expenses.create", "expenses.analytics",
               "reports.view", "reports.export", "users.manage", "settings.manage"},
     "menejer": {"orders.view", "orders.create", "orders.edit", "orders.manage",
-                "clients.view", "clients.create"},
-    "xarajatchi": {"expenses.view", "expenses.create"},
-    "buxgalter": {"orders.view", "clients.view", "expenses.view", "reports.view", "reports.export"},
+                "clients.view", "clients.create",
+                "expenses.view", "expenses.create"},
+    "xarajatchi": {"expenses.view", "expenses.create", "expenses.analytics", "orders.view"},
+    "buxgalter": {"orders.view", "clients.view", "expenses.view", "expenses.analytics",
+                  "reports.view", "reports.export"},
 }
 ROLE_LABELS = {"admin": "Administrator", "menejer": "Menejer",
                "xarajatchi": "Ish boshqaruvchi", "buxgalter": "Buxgalter"}
@@ -137,6 +139,16 @@ company = SimpleNamespace(id=1, name="Test Poligrafiya MChJ", address="Toshkent 
                           phone="+998901234567", email="info@test.uz", tax_id="123456789",
                           bank_name="Ipoteka Bank", bank_account="20208000900001234567",
                           bank_mfo="00443", invoice_note="To'lov 5 kun ichida")
+item_a = SimpleNamespace(id=1, order_type="Vizitka", description="Yaltiroq laminat",
+                         quantity=100, unit_price=Decimal("500.00"),
+                         total_price=Decimal("50000.00"), position=0)
+item_b = SimpleNamespace(id=2, order_type="Buklet", description="",
+                         quantity=50, unit_price=Decimal("2000.00"),
+                         total_price=Decimal("100000.00"), position=1)
+order_expense = SimpleNamespace(id=2, date=TODAY, category="xomashyo",
+                                amount=Decimal("12000.00"), description="Qog'oz",
+                                creator=user, order_id=1)
+
 order = SimpleNamespace(
     id=1, order_number="B-2026-0001", client=client, client_id=1, order_type="Vizitka",
     description="Test tavsif", quantity=100, unit_price=Decimal("500.00"),
@@ -145,6 +157,9 @@ order = SimpleNamespace(
     deadline=TODAY + timedelta(days=5), created_at=datetime.now(),
     creator=user, payments=[payment], is_overdue=False, days_left=5,
     version=1, is_deleted=False, deleted_at=None, files=[order_file],
+    items=[item_a, item_b], items_summary="Vizitka +1 ta",
+    expenses=[order_expense], expenses_total=Decimal("12000.00"),
+    profit=Decimal("38000.00"),
 )
 overdue_order = SimpleNamespace(
     id=2, order_number="B-2026-0002", client=client, client_id=1, order_type="Banner",
@@ -154,9 +169,15 @@ overdue_order = SimpleNamespace(
     deadline=TODAY - timedelta(days=3), created_at=datetime.now(),
     creator=user, payments=[], is_overdue=True, days_left=-3,
     version=1, is_deleted=False, deleted_at=None, files=[],
+    items=[], items_summary="Banner",
+    expenses=[], expenses_total=Decimal("0.00"), profit=Decimal("500000.00"),
 )
 expense = SimpleNamespace(id=1, date=TODAY, category="ijara",
-                          amount=Decimal("500000.00"), description="Ofis ijarasi", creator=user)
+                          amount=Decimal("500000.00"), description="Ofis ijarasi",
+                          creator=user, order=None, order_id=None)
+linked_expense = SimpleNamespace(id=2, date=TODAY, category="xomashyo",
+                                 amount=Decimal("12000.00"), description="Qog'oz",
+                                 creator=user, order=order, order_id=1)
 order_type = SimpleNamespace(id=1, name="Vizitka", unit="dona",
                              default_price=Decimal("150.00"), is_active=True)
 audit = SimpleNamespace(id=1, created_at=datetime.now(), user=user, action="create",
@@ -182,18 +203,29 @@ CONTEXTS = {
         orders=[order, overdue_order], pagination=FakePagination([order], 120),
         statuses=["yangi", "jarayonda", "tayyor", "yetkazildi", "bekor qilindi"], status="", q="",
     ),
-    "orders/form.html": dict(clients=[client], order_types=[order_type], order=None,
+    "orders/form.html": dict(order_types=[order_type], order=None,
                              prefill=None, form=None),
     "orders/detail.html": dict(order=order, payments=[payment],
                                statuses=["yangi", "jarayonda", "tayyor"]),
     "orders/invoice.html": dict(order=order, today=TODAY, company=company),
     "orders/deleted.html": dict(orders=[order]),
     "finance/expenses.html": dict(
-        expenses=[expense], pagination=FakePagination([expense], 33),
+        expenses=[expense, linked_expense], pagination=FakePagination([expense], 33),
         categories=["ijara", "ish haqi", "boshqa"], category="",
         total_all=Decimal("25000000.00"),
     ),
-    "finance/expense_form.html": dict(categories=["ijara", "boshqa"], expense=None, form=None),
+    "finance/expense_form.html": dict(categories=["ijara", "boshqa"], orders=[order],
+                                      expense=None, form=None),
+    "finance/expense_analytics.html": dict(
+        year=2026, total=Decimal("1200000.00"), linked=Decimal("800000.00"),
+        general=Decimal("400000.00"),
+        category_rows=[{"name": "xomashyo", "amount": Decimal("800000.00"), "count": 12}],
+        order_rows=[{"order": order, "spent": Decimal("12000.00"),
+                     "revenue": Decimal("150000.00"), "profit": Decimal("138000.00")}],
+        product_rows=[{"name": "Vizitka", "spent": Decimal("4000.00"),
+                       "revenue": Decimal("50000.00"), "profit": Decimal("46000.00"),
+                       "count": 3}],
+    ),
     "finance/report.html": dict(
         months=[{"name": "Yanvar", "month": 1, "income": Decimal("100.00"),
                  "expense": Decimal("10.00"), "profit": Decimal("90.00")}],
@@ -267,13 +299,13 @@ for role, perms in ROLE_PERMISSIONS.items():
 # ---------------------------------------------------------------- 4. rol ajratish
 print("\n=== ROLLAR BO'YICHA MENYU AJRATILISHI ===")
 EXPECTED_MENU = {
-    "admin": ["Bosh sahifa", "Buyurtmalar", "Mijozlar", "Xarajatlar",
+    "admin": ["Bosh sahifa", "Buyurtmalar", "Mijozlar", "Xarajatlar", "Xarajat tahlili",
               "Moliyaviy hisobot", "Tahlil", "Firma ma'lumotlari",
               "Buyurtma turlari", "Telegram", "O'chirilganlar",
               "Foydalanuvchilar", "Harakatlar jurnali"],
-    "menejer": ["Buyurtmalar", "Mijozlar"],
-    "xarajatchi": ["Xarajatlar"],
-    "buxgalter": ["Bosh sahifa", "Buyurtmalar", "Mijozlar", "Xarajatlar",
+    "menejer": ["Buyurtmalar", "Mijozlar", "Xarajatlar"],
+    "xarajatchi": ["Buyurtmalar", "Xarajatlar", "Xarajat tahlili"],
+    "buxgalter": ["Bosh sahifa", "Buyurtmalar", "Mijozlar", "Xarajatlar", "Xarajat tahlili",
                   "Moliyaviy hisobot", "Tahlil"],
 }
 for role, perms in ROLE_PERMISSIONS.items():

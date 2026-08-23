@@ -59,12 +59,42 @@
       <dl class="row mb-0 small">
         <dt class="col-5 text-muted fw-normal">Mijoz</dt>
         <dd class="col-7">{{ order.client.name }}{% if order.client.phone %} ({{ order.client.phone }}){% endif %}</dd>
-        <dt class="col-5 text-muted fw-normal">Turi</dt><dd class="col-7">{{ order.order_type }}</dd>
-        <dt class="col-5 text-muted fw-normal">Tavsif</dt><dd class="col-7">{{ order.description or '-' }}</dd>
-        <dt class="col-5 text-muted fw-normal">Miqdor × narx</dt>
-        <dd class="col-7 num">{{ order.quantity }} × {{ order.unit_price|uzs }}</dd>
+        <dt class="col-5 text-muted fw-normal">Umumiy izoh</dt><dd class="col-7">{{ order.description or '-' }}</dd>
         <dt class="col-5 text-muted fw-normal">Muddat</dt><dd class="col-7">{{ order.deadline|date_uz }}</dd>
       </dl>
+
+      <div class="mt-3" style="overflow-x:auto">
+        <table class="table table-sm mb-0">
+          <thead>
+            <tr>
+              <th>Mahsulot</th>
+              <th class="text-end">Miqdor</th>
+              <th class="text-end">Narx</th>
+              <th class="text-end">Summa</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for it in order.items %}
+            <tr>
+              <td>
+                {{ it.order_type }}
+                {% if it.description %}<div class="text-muted" style="font-size:.75rem">{{ it.description }}</div>{% endif %}
+              </td>
+              <td class="text-end num">{{ it.quantity }}</td>
+              <td class="text-end num">{{ it.unit_price|uzs }}</td>
+              <td class="text-end num fw-semibold">{{ it.total_price|uzs }}</td>
+            </tr>
+            {% else %}
+            <tr>
+              <td>{{ order.order_type }}</td>
+              <td class="text-end num">{{ order.quantity }}</td>
+              <td class="text-end num">{{ order.unit_price|uzs }}</td>
+              <td class="text-end num fw-semibold">{{ order.total_price|uzs }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
       <hr>
       <div class="row text-center g-2">
         <div class="col-4">
@@ -92,6 +122,53 @@
         </select>
         <button class="btn btn-outline-primary text-nowrap"><i class="bi bi-check-lg"></i> Yangilash</button>
       </form>
+    </div>
+    {% endif %}
+
+    {% if has_perm('expenses.view') %}
+    <div class="card p-4 mt-3">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="fw-bold mb-0"><i class="bi bi-cash-stack me-1 text-muted"></i> Shu buyurtma xarajatlari</h6>
+        {% if has_perm('expenses.create') %}
+        <a href="{{ url_for('finance.new_expense', order_id=order.id) }}"
+           class="btn btn-sm btn-outline-primary no-print">
+          <i class="bi bi-plus-lg"></i> Xarajat qo'shish</a>
+        {% endif %}
+      </div>
+
+      {% if order.expenses %}
+      <table class="table table-sm mb-3">
+        <tbody>
+          {% for e in order.expenses %}
+          <tr>
+            <td>
+              <i class="bi {{ e.category|category_icon }} text-muted me-1"></i>{{ e.category }}
+              {% if e.description %}<div class="text-muted" style="font-size:.75rem">{{ e.description }}</div>{% endif %}
+            </td>
+            <td class="text-muted small num">{{ e.date|date_uz }}</td>
+            <td class="text-end num fw-semibold text-danger">{{ e.amount|uzs }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="text-muted small mb-3">Bu buyurtmaga hali xarajat yozilmagan.</p>
+      {% endif %}
+
+      <div class="row text-center g-2">
+        <div class="col-4">
+          <div class="stat-label">Summa</div>
+          <div class="fw-bold num">{{ order.total_price|uzs }}</div>
+        </div>
+        <div class="col-4">
+          <div class="stat-label">Xarajat</div>
+          <div class="fw-bold text-danger num">{{ order.expenses_total|uzs }}</div>
+        </div>
+        <div class="col-4">
+          <div class="stat-label">Foyda</div>
+          <div class="fw-bold num {% if order.profit < 0 %}text-danger{% else %}text-success{% endif %}">{{ order.profit|uzs }}</div>
+        </div>
+      </div>
     </div>
     {% endif %}
   </div>

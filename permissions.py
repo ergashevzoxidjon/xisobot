@@ -33,7 +33,7 @@ ROLE_DESCRIPTIONS = {
 PERMISSIONS = {
     "orders.view", "orders.create", "orders.edit", "orders.manage", "orders.delete",
     "clients.view", "clients.create", "clients.delete",
-    "expenses.view", "expenses.create",
+    "expenses.view", "expenses.create", "expenses.analytics",
     "reports.view", "reports.export",
     "users.manage",
     "settings.manage",
@@ -41,13 +41,15 @@ PERMISSIONS = {
 
 ROLE_PERMISSIONS = {
     "admin": set(PERMISSIONS),
+    # Menejer o'zi olgan buyurtmalarning xarajatini ham kiritadi
     "menejer": {
         "orders.view", "orders.create", "orders.edit", "orders.manage",
         "clients.view", "clients.create",
+        "expenses.view", "expenses.create",
     },
-    "xarajatchi": {"expenses.view", "expenses.create"},
+    "xarajatchi": {"expenses.view", "expenses.create", "expenses.analytics", "orders.view"},
     "buxgalter": {
-        "orders.view", "clients.view", "expenses.view",
+        "orders.view", "clients.view", "expenses.view", "expenses.analytics",
         "reports.view", "reports.export",
     },
 }

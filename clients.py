@@ -1,4 +1,6 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app
+from flask import (
+    Blueprint, render_template, request, redirect, url_for, flash, current_app, jsonify,
+)
 from flask_login import login_required, current_user
 
 from extensions import db
@@ -46,6 +48,33 @@ def list_clients():
     return render_template(
         "clients/list.html", clients=clients, pagination=pagination, q=q,
     )
+
+
+@clients_bp.route("/qidiruv")
+@login_required
+@permission_required("clients.view")
+def search_clients():
+    """Buyurtma formasidagi jonli qidiruv uchun — JSON qaytaradi.
+
+    Foydalanuvchi mijoz nomini yozayotganda mos keladiganlari ko'rsatiladi,
+    shu tufayli bir mijoz ikki marta kiritilib qolmaydi.
+    """
+    q = (request.args.get("q") or "").strip()
+    if not q:
+        return jsonify([])
+
+    rows = (
+        Client.query.filter(
+            Client.is_deleted.is_(False),
+            Client.name.ilike(f"%{q}%"),
+        )
+        .order_by(Client.name)
+        .limit(8)
+        .all()
+    )
+    return jsonify([
+        {"id": c.id, "name": c.name, "phone": c.phone or ""} for c in rows
+    ])
 
 
 @clients_bp.route("/<int:client_id>")

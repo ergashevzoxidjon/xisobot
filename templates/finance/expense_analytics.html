@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% block title %}Xarajat tahlili{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h3>Xarajat tahlili</h3>
+    <div class="subtitle">Pul qayerga ketayotgani — turkum, buyurtma va mahsulot kesimida</div>
+  </div>
+  <form method="get" class="d-flex gap-2 no-print">
+    <input type="number" class="form-control form-control-sm" name="year" value="{{ year }}"
+           min="2000" max="2100" style="width:110px">
+    <button class="btn btn-sm btn-outline-primary">Ko'rsatish</button>
+  </form>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-4">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon red"><i class="bi bi-cash-stack"></i></div>
+      <div>
+        <div class="stat-label">{{ year }}-yil jami xarajat</div>
+        <div class="stat-value num">{{ total|uzs }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon blue"><i class="bi bi-receipt"></i></div>
+      <div>
+        <div class="stat-label">Buyurtmalarga bog'langan</div>
+        <div class="stat-value num">{{ linked|uzs }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon slate"><i class="bi bi-building"></i></div>
+      <div>
+        <div class="stat-label">Umumiy (ijara, ish haqi...)</div>
+        <div class="stat-value num">{{ general|uzs }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if total <= 0 %}
+<div class="card p-4">
+  <div class="empty-state">
+    <i class="bi bi-bar-chart"></i>
+    <p>{{ year }}-yilda xarajat qayd etilmagan.</p>
+  </div>
+</div>
+{% else %}
+
+<div class="row g-3">
+
+  {# ---------- turkumlar ---------- #}
+  <div class="col-lg-5">
+    <div class="card p-4 h-100">
+      <h6 class="fw-bold mb-3"><i class="bi bi-tags me-1 text-muted"></i> Turkumlar bo'yicha</h6>
+      <div style="overflow-x:auto">
+        <table class="table table-sm mb-0">
+          <thead>
+            <tr><th>Turkum</th><th class="text-end">Soni</th><th class="text-end">Summa</th><th class="text-end">Ulush</th></tr>
+          </thead>
+          <tbody>
+            {% for row in category_rows %}
+            <tr>
+              <td><i class="bi {{ row.name|category_icon }} text-muted me-1"></i>{{ row.name }}</td>
+              <td class="text-end num text-muted">{{ row.count }}</td>
+              <td class="text-end num fw-semibold">{{ row.amount|uzs }}</td>
+              <td class="text-end num text-muted">
+                {{ ((row.amount / total) * 100)|round(1) }}%
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  {# ---------- mahsulot turlari ---------- #}
+  <div class="col-lg-7">
+    <div class="card p-4 h-100">
+      <h6 class="fw-bold mb-1"><i class="bi bi-box-seam me-1 text-muted"></i> Mahsulot turlari bo'yicha</h6>
+      <p class="text-muted small mb-3">
+        Buyurtma xarajati mahsulotlar orasida summasiga qarab taqsimlanadi.
+      </p>
+      {% if product_rows %}
+      <div style="overflow-x:auto">
+        <table class="table table-sm mb-0">
+          <thead>
+            <tr>
+              <th>Mahsulot</th>
+              <th class="text-end">Soni</th>
+              <th class="text-end">Tushum</th>
+              <th class="text-end">Xarajat</th>
+              <th class="text-end">Foyda</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in product_rows %}
+            <tr>
+              <td class="fw-semibold">{{ row.name }}</td>
+              <td class="text-end num text-muted">{{ row.count }}</td>
+              <td class="text-end num">{{ row.revenue|uzs }}</td>
+              <td class="text-end num text-danger">{{ row.spent|uzs }}</td>
+              <td class="text-end num fw-semibold {% if row.profit < 0 %}text-danger{% else %}text-success{% endif %}">
+                {{ row.profit|uzs }}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state py-4">
+        <i class="bi bi-box-seam"></i>
+        <p>Hali birorta xarajat buyurtmaga bog'lanmagan.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ---------- buyurtmalar ---------- #}
+  <div class="col-12">
+    <div class="card p-4">
+      <h6 class="fw-bold mb-1"><i class="bi bi-receipt-cutoff me-1 text-muted"></i> Eng ko'p xarajat ketgan buyurtmalar</h6>
+      <p class="text-muted small mb-3">Yuqoridan pastga — xarajati bo'yicha. Eng ko'pi 20 tasi ko'rsatiladi.</p>
+      {% if order_rows %}
+      <div style="overflow-x:auto">
+        <table class="table table-sm table-hover mb-0">
+          <thead>
+            <tr>
+              <th>№</th>
+              <th>Mijoz</th>
+              <th>Mahsulot</th>
+              <th class="text-end">Tushum</th>
+              <th class="text-end">Xarajat</th>
+              <th class="text-end">Foyda</th>
+              <th class="text-end">Rentabellik</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in order_rows %}
+            <tr>
+              <td>
+                <a href="{{ url_for('orders.order_detail', order_id=row.order.id) }}"
+                   class="fw-semibold">{{ row.order.order_number }}</a>
+              </td>
+              <td>{{ row.order.client.name if row.order.client else '-' }}</td>
+              <td class="text-muted small">{{ row.order.items_summary }}</td>
+              <td class="text-end num">{{ row.revenue|uzs }}</td>
+              <td class="text-end num text-danger">{{ row.spent|uzs }}</td>
+              <td class="text-end num fw-semibold {% if row.profit < 0 %}text-danger{% else %}text-success{% endif %}">
+                {{ row.profit|uzs }}
+              </td>
+              <td class="text-end num text-muted">
+                {% if row.revenue > 0 %}{{ ((row.profit / row.revenue) * 100)|round(1) }}%{% else %}-{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state py-4">
+        <i class="bi bi-receipt-cutoff"></i>
+        <p>Buyurtmaga bog'langan xarajat yo'q.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+{% endif %}
+{% endblock %}

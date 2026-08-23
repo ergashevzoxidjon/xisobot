@@ -28,6 +28,23 @@
     <input type="date" class="form-control" name="date" max="{{ today().isoformat() }}"
            value="{{ (expense.date.isoformat() if expense and expense.date else (src.date if src and src.date else today().isoformat())) }}">
   </div>
+  <div class="mb-3">
+    <label class="form-label">Buyurtma</label>
+    <select class="form-select" name="order_id">
+      <option value="">— umumiy xarajat (ijara, ish haqi, kommunal...) —</option>
+      {% for o in orders %}
+      <option value="{{ o.id }}"
+        {% if src and src.order_id and (src.order_id|string) == (o.id|string) %}selected{% endif %}>
+        {{ o.order_number }} · {{ o.client.name if o.client else '-' }} · {{ o.items_summary }}
+      </option>
+      {% endfor %}
+    </select>
+    <div class="form-text">
+      Aniq buyurtmaga sarflangan bo'lsa (qog'oz, bo'yoq, pechat) — o'sha buyurtmani tanlang.
+      Shunda har bir buyurtmaning haqiqiy foydasi ko'rinadi.
+    </div>
+  </div>
+
   <div class="mb-4">
     <label class="form-label">Izoh</label>
     <input class="form-control" name="description" maxlength="255" value="{{ src.description if src else '' }}">

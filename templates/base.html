@@ -207,6 +207,11 @@ a{ text-decoration:none; }
         <i class="bi bi-cash-stack"></i> Xarajatlar
       </a>
       {% endif %}
+      {% if has_perm('expenses.analytics') %}
+      <a href="{{ url_for('finance.expense_analytics') }}" class="{% if request.endpoint == 'finance.expense_analytics' %}active{% endif %}">
+        <i class="bi bi-bar-chart"></i> Xarajat tahlili
+      </a>
+      {% endif %}
       {% if has_perm('reports.view') %}
       <a href="{{ url_for('finance.report') }}" class="{% if request.endpoint == 'finance.report' %}active{% endif %}">
         <i class="bi bi-graph-up-arrow"></i> Moliyaviy hisobot

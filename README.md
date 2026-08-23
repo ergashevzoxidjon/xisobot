@@ -49,9 +49,9 @@ python seed_demo.py     # DIQQAT: real bazada ishlatmang
 | Rol | Nima qila oladi |
 |---|---|
 | **Admin** | Barchasi + foydalanuvchilar, sozlamalar, jurnal, o'chirish |
-| **Menejer** | Buyurtma yaratish/tahrirlash, to'lov, mijozlar, fayl biriktirish |
-| **Ish boshqaruvchi** | Faqat xarajat kiritish va ko'rish |
-| **Buxgalter** | Hisobotlarni ko'rish + Excel eksport (o'zgartira olmaydi) |
+| **Menejer** | Buyurtma yaratish/tahrirlash, to'lov, mijozlar, fayl biriktirish, **o'z buyurtmalari xarajatini kiritish** |
+| **Ish boshqaruvchi** | Xarajat kiritish, buyurtmalarni ko'rish, **xarajat tahlili** |
+| **Buxgalter** | Hisobotlarni ko'rish + Excel eksport + xarajat tahlili (o'zgartira olmaydi) |
 
 Himoya ikki qatlamli: menyuda ko'rinmaydi **va** server tomonida bloklanadi.
 
@@ -59,13 +59,19 @@ Himoya ikki qatlamli: menyuda ko'rinmaydi **va** server tomonida bloklanadi.
 
 ## Imkoniyatlar
 
-**Buyurtmalar** — yaratish, tahrirlash, nusxalash, o'chirish (tiklash mumkin), qidiruv va filtr, sahifalash, holat o'tishlari nazorati, hisob-faktura chop etish, fayl biriktirish (maket).
+**Buyurtmalar** — bitta buyurtmada bir nechta mahsulot (jadval ko'rinishida), yaratish, tahrirlash, nusxalash, o'chirish (tiklash mumkin), qidiruv va filtr, sahifalash, holat o'tishlari nazorati, hisob-faktura chop etish, fayl biriktirish (maket).
+
+**Mijozni tez kiritish** — buyurtma formasida mijoz nomini yozganda bazadagi mijozlar real vaqtda ko'rsatiladi. Mavjudi tanlanadi, yangisi esa buyurtma saqlanganda avtomatik ochiladi — oldin alohida mijoz yaratish shart emas.
+
+**Tezkor tanlash** — buyurtma turlari tugmalar ko'rinishida. Bosilganda tanlangan qatorga tur va standart narx qo'yiladi.
 
 **To'lovlar** — har biri alohida yoziladi. Tushum **to'lov sanasi** bo'yicha hisoblanadi. Qolgan qarzdan ortiq to'lov qabul qilinmaydi.
 
 **Mijozlar** — batafsil sahifa: buyurtmalar tarixi, jami summa, to'langan, qarzdorlik.
 
-**Xarajatlar** — 8 turkum, tahrirlash, filtr, kim kiritgani.
+**Xarajatlar** — 8 turkum, tahrirlash, filtr, kim kiritgani. Har bir xarajat **aniq buyurtmaga bog'lanishi** mumkin (qog'oz, bo'yoq, pechat) yoki umumiy bo'lib qolishi mumkin (ijara, ish haqi). Buyurtma sahifasida uning xarajati va haqiqiy foydasi ko'rinadi.
+
+**Xarajat tahlili** — pul qayerga ketayotgani: turkumlar bo'yicha, eng ko'p xarajat ketgan buyurtmalar (tushum/xarajat/foyda/rentabellik) va mahsulot turlari kesimida. Buyurtma xarajati mahsulotlar orasida summasiga qarab taqsimlanadi. Admin, ish boshqaruvchi va buxgalter ko'radi.
 
 **Moliyaviy hisobot** — oylar kesimida tushum/xarajat/foyda, grafik, turkum taqsimoti, Excel.
 
