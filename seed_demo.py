@@ -11,7 +11,11 @@ from decimal import Decimal
 
 from app import create_app
 from extensions import db
-from models import User, Client, Order, Payment, Expense
+from models import (
+    User, Client, Order, Payment, Expense,
+    STATUS_NEW, STATUS_PAYMENT, STATUS_DESIGN, STATUS_PRODUCTION,
+    STATUS_READY, STATUS_DELIVERED, STATUS_CANCELLED,
+)
 from utils import today_local, to_money
 
 
@@ -35,18 +39,18 @@ DEMO_CLIENTS = [
 
 # (mijoz, tur, tavsif, miqdor, narx, holat, to'lov ulushi, buyurtma kuni, muddat kuni)
 DEMO_ORDERS = [
-    ("Andijon Poligraf MChJ", "Vizitka", "Ikki tomonlama, glyanets laminatsiya", 1000, 150, "yetkazildi", 1.0, 55, 48),
-    ("Bek Trade MChJ", "Kitob", "120 bet, qattiq muqova", 50, 45000, "yetkazildi", 1.0, 50, 40),
-    ("Tashkent Reklama MChJ", "Banner", "3x2 metr, PVC banner", 6, 45000, "yetkazildi", 1.0, 40, 35),
-    ("Dilnoza Karimova", "Taklifnoma", "To'y taklifnomasi, oltin bosma", 300, 4500, "yetkazildi", 0.5, 35, 25),
-    ("Andijon Poligraf MChJ", "Taqvim", "Devoriy taqvim, 2027-yil", 200, 8000, "tayyor", 0.4, 25, 10),
-    ("Sardor Xolmatov", "Buklet", "A4, uch burma", 500, 2000, "jarayonda", 0.3, 18, -5),
-    ("Tashkent Reklama MChJ", "Plakat", "A2 format, 4+0 rang", 100, 5000, "jarayonda", 0.0, 12, -3),
-    ("Bek Trade MChJ", "Vizitka", "Bir tomonlama, matt", 2000, 130, "yangi", 0.0, 6, -12),
-    ("Dilnoza Karimova", "Naklekya (stiker)", "Doira shaklida, 5 sm", 1000, 800, "yangi", 0.0, 3, -20),
-    ("Sardor Xolmatov", "Banner", "2x1 metr", 2, 45000, "bekor qilindi", 0.0, 30, 20),
-    ("Andijon Poligraf MChJ", "Kitob", "80 bet, yumshoq muqova", 100, 28000, "yetkazildi", 0.6, 70, 60),
-    ("Bek Trade MChJ", "Buklet", "A5, ikki burma", 800, 1800, "yetkazildi", 1.0, 85, 75),
+    ("Andijon Poligraf MChJ", "Vizitka", "Ikki tomonlama, glyanets laminatsiya", 1000, 150, STATUS_DELIVERED, 1.0, 55, 48),
+    ("Bek Trade MChJ", "Kitob", "120 bet, qattiq muqova", 50, 45000, STATUS_DELIVERED, 1.0, 50, 40),
+    ("Tashkent Reklama MChJ", "Banner", "3x2 metr, PVC banner", 6, 45000, STATUS_DELIVERED, 1.0, 40, 35),
+    ("Dilnoza Karimova", "Taklifnoma", "To'y taklifnomasi, oltin bosma", 300, 4500, STATUS_DELIVERED, 0.5, 35, 25),
+    ("Andijon Poligraf MChJ", "Taqvim", "Devoriy taqvim, 2027-yil", 200, 8000, STATUS_READY, 0.4, 25, 10),
+    ("Sardor Xolmatov", "Buklet", "A4, uch burma", 500, 2000, STATUS_PRODUCTION, 0.3, 18, -5),
+    ("Tashkent Reklama MChJ", "Plakat", "A2 format, 4+0 rang", 100, 5000, STATUS_DESIGN, 0.0, 12, -3),
+    ("Bek Trade MChJ", "Vizitka", "Bir tomonlama, matt", 2000, 130, STATUS_PAYMENT, 0.0, 6, -12),
+    ("Dilnoza Karimova", "Naklekya (stiker)", "Doira shaklida, 5 sm", 1000, 800, STATUS_NEW, 0.0, 3, -20),
+    ("Sardor Xolmatov", "Banner", "2x1 metr", 2, 45000, STATUS_CANCELLED, 0.0, 30, 20),
+    ("Andijon Poligraf MChJ", "Kitob", "80 bet, yumshoq muqova", 100, 28000, STATUS_DELIVERED, 0.6, 70, 60),
+    ("Bek Trade MChJ", "Buklet", "A5, ikki burma", 800, 1800, STATUS_DELIVERED, 1.0, 85, 75),
 ]
 
 DEMO_EXPENSES = [

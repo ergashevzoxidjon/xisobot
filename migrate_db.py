@@ -183,6 +183,54 @@ def migrate_order_items():
     print(f"✓ {len(orders)} ta buyurtma mahsulot qatoriga ko'chirildi")
 
 
+def widen_order_status_column():
+    """order.status endi uzunroq nomlar saqlaydi (masalan "to'lov qilish
+    jarayonida" — 24 belgi), eski ustun esa VARCHAR(20) edi. MySQL bunday
+    uzunlikni QATTIQ bajaradi va qisqartirib tashlaydi — shuning uchun
+    ustun kengaytiriladi. SQLite VARCHAR uzunligini umuman bajarmaydi,
+    shuning uchun u yerda hech narsa qilish shart emas.
+    """
+    if "order" not in existing_tables():
+        return
+    if db.engine.dialect.name != "mysql":
+        print("  · order.status uzunligi (SQLite uzunlikni bajarmaydi) — o'tkazib yuborildi")
+        return
+    db.session.execute(text(
+        f"ALTER TABLE {quote_ident('order')} MODIFY COLUMN status VARCHAR(40) NOT NULL"
+    ))
+    db.session.commit()
+    print("✓ order.status ustuni VARCHAR(40) gacha kengaytirildi")
+
+
+def migrate_order_status_rename():
+    """Buyurtma holati 5 bosqichdan 6 bosqichli jarayonga o'tkazildi
+    (2026-08-27). Eski qiymatlar yangilariga avtomatik ko'chiriladi —
+    foydalanuvchi qarori bilan har biri eng yaqin mos bosqichga tushadi.
+    "bekor qilindi" o'zgarmaydi.
+    """
+    if "order" not in existing_tables():
+        return
+
+    RENAME_MAP = {
+        "yangi": "buyurtma yaratildi",
+        "jarayonda": "ishlab chiqarishda",
+        "tayyor": "yetkazish uchun tayyor",
+        "yetkazildi": "maxsulot yetkazildi",
+    }
+    total = 0
+    for old, new in RENAME_MAP.items():
+        result = db.session.execute(
+            text(f'UPDATE {quote_ident("order")} SET status = :new WHERE status = :old'),
+            {"new": new, "old": old},
+        )
+        total += result.rowcount
+    db.session.commit()
+    if total:
+        print(f"✓ {total} ta buyurtma holati yangi 6 bosqichli nomlarga ko'chirildi")
+    else:
+        print("  · eski nomdagi buyurtma holati topilmadi — ko'chirish shart emas")
+
+
 def ensure_upload_folder(app):
     folder = app.config.get("UPLOAD_FOLDER")
     if folder and not os.path.isdir(folder):
@@ -233,6 +281,12 @@ def main():
         # perechisleniye bo'lganda qaysi tashkilot orqali to'langani ---
         add_column("expense", "payment_method VARCHAR(20)", "payment_method")
         add_column("expense", "paid_via VARCHAR(150)", "paid_via")
+
+        # --- v8: buyurtma holati 6 bosqichli jarayonga o'tkazildi ---
+        # avval ustun kengaytiriladi, SO'NG eski qiymatlar ko'chiriladi —
+        # aks holda MySQL yangi (uzunroq) nomlarni kesib tashlaydi.
+        widen_order_status_column()
+        migrate_order_status_rename()
 
         migrate_paid_amount()
         ensure_upload_folder(app)

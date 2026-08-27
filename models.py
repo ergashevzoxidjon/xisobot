@@ -8,24 +8,40 @@ from utils import now_local, today_local, to_money, to_qty, ZERO, QTY_ZERO
 
 ROLES = ["admin", "menejer", "xarajatchi", "boss"]
 
-STATUS_NEW = "yangi"
-STATUS_IN_PROGRESS = "jarayonda"
-STATUS_READY = "tayyor"
-STATUS_DELIVERED = "yetkazildi"
+
+# Buyurtma holati 6 bosqichli ishlab chiqarish jarayonini aks ettiradi
+# (2026-08-27, foydalanuvchi qarori — "xolatni o'zgarishda ketma-ketlik
+# bo'lishi muhim"). O'tish FAQAT OLDINGA, bosqich tashlab o'tib bo'lmaydi —
+# yagona istisno "bekor qilindi" (istalgan bosqichdan, yetkazilgandan
+# tashqari) va undan qayta "buyurtma yaratildi"ga tiklash.
+STATUS_NEW = "buyurtma yaratildi"
+STATUS_PAYMENT = "to'lov qilish jarayonida"
+STATUS_DESIGN = "dizayn jarayonida"
+STATUS_PRODUCTION = "ishlab chiqarishda"
+STATUS_READY = "yetkazish uchun tayyor"
+STATUS_DELIVERED = "maxsulot yetkazildi"
 STATUS_CANCELLED = "bekor qilindi"
 
-ORDER_STATUSES = [STATUS_NEW, STATUS_IN_PROGRESS, STATUS_READY, STATUS_DELIVERED, STATUS_CANCELLED]
-# Bekor qilingan buyurtma moliyaviy hisob-kitobga kirmaydi
-ACTIVE_STATUSES = [STATUS_NEW, STATUS_IN_PROGRESS]
+ORDER_STATUSES = [STATUS_NEW, STATUS_PAYMENT, STATUS_DESIGN, STATUS_PRODUCTION,
+                  STATUS_READY, STATUS_DELIVERED, STATUS_CANCELLED]
+# Bekor qilingan buyurtma moliyaviy hisob-kitobga kirmaydi. "Faol" — hali
+# yetkazishga tayyor bo'lmagan, hamon jarayondagi buyurtmalar (bosh sahifa
+# statistikasi uchun).
+ACTIVE_STATUSES = [STATUS_NEW, STATUS_PAYMENT, STATUS_DESIGN, STATUS_PRODUCTION]
 COUNTABLE_STATUSES = [s for s in ORDER_STATUSES if s != STATUS_CANCELLED]
 
-# Ruxsat etilgan holat o'tishlari — "yetkazildi"dan "yangi"ga qaytib bo'lmaydi
+# Ruxsat etilgan holat o'tishlari — qat'iy ketma-ket, orqaga qaytish yo'q.
+# "Bekor qilindi" — istisno: yetkazilgandan tashqari istalgan bosqichdan
+# bekor qilish mumkin; bekor qilingan buyurtma faqat qaytadan boshidan
+# ("buyurtma yaratildi") tiklanadi.
 ALLOWED_TRANSITIONS = {
-    STATUS_NEW:         [STATUS_IN_PROGRESS, STATUS_READY, STATUS_CANCELLED],
-    STATUS_IN_PROGRESS: [STATUS_NEW, STATUS_READY, STATUS_CANCELLED],
-    STATUS_READY:       [STATUS_IN_PROGRESS, STATUS_DELIVERED, STATUS_CANCELLED],
-    STATUS_DELIVERED:   [STATUS_READY],   # faqat xato tuzatish uchun orqaga
-    STATUS_CANCELLED:   [STATUS_NEW],     # bekor qilinganini qayta tiklash
+    STATUS_NEW:        [STATUS_PAYMENT, STATUS_CANCELLED],
+    STATUS_PAYMENT:    [STATUS_DESIGN, STATUS_CANCELLED],
+    STATUS_DESIGN:     [STATUS_PRODUCTION, STATUS_CANCELLED],
+    STATUS_PRODUCTION: [STATUS_READY, STATUS_CANCELLED],
+    STATUS_READY:      [STATUS_DELIVERED, STATUS_CANCELLED],
+    STATUS_DELIVERED:  [],                # yakuniy bosqich — bu yerdan chiqib bo'lmaydi
+    STATUS_CANCELLED:  [STATUS_NEW],      # bekor qilinganini qaytadan boshidan tiklash
 }
 
 
@@ -271,7 +287,7 @@ class Order(db.Model):
     quantity = db.Column(db.Integer, default=1)
     unit_price = db.Column(MONEY, default=0)
     total_price = db.Column(MONEY, default=0)
-    status = db.Column(db.String(20), default=STATUS_NEW, nullable=False, index=True)
+    status = db.Column(db.String(40), default=STATUS_NEW, nullable=False, index=True)
     deadline = db.Column(db.Date, index=True)
     created_at = db.Column(db.DateTime, default=now_local, index=True)
     updated_at = db.Column(db.DateTime, default=now_local, onupdate=now_local)

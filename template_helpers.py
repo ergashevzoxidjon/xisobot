@@ -1,10 +1,12 @@
 from utils import money_str, qty_str, today_local
 
 ORDER_STATUS_COLORS = {
-    "yangi": "secondary",
-    "jarayonda": "primary",
-    "tayyor": "warning",
-    "yetkazildi": "success",
+    "buyurtma yaratildi": "secondary",
+    "to'lov qilish jarayonida": "info",
+    "dizayn jarayonida": "primary",
+    "ishlab chiqarishda": "warning",
+    "yetkazish uchun tayyor": "dark",
+    "maxsulot yetkazildi": "success",
     "bekor qilindi": "danger",
 }
 
@@ -15,10 +17,12 @@ PAYMENT_STATUS_COLORS = {
 }
 
 ORDER_STATUS_ICONS = {
-    "yangi": "bi-file-earmark-plus",
-    "jarayonda": "bi-arrow-repeat",
-    "tayyor": "bi-check2",
-    "yetkazildi": "bi-truck",
+    "buyurtma yaratildi": "bi-file-earmark-plus",
+    "to'lov qilish jarayonida": "bi-cash-coin",
+    "dizayn jarayonida": "bi-palette",
+    "ishlab chiqarishda": "bi-gear-fill",
+    "yetkazish uchun tayyor": "bi-box-seam",
+    "maxsulot yetkazildi": "bi-truck",
     "bekor qilindi": "bi-x-circle",
 }
 
