@@ -18,6 +18,7 @@ from flask import (
     Blueprint, render_template, request, redirect, url_for, flash, jsonify,
 )
 from flask_login import login_required, current_user
+from sqlalchemy import func
 from sqlalchemy.orm import joinedload
 
 from extensions import db
@@ -160,6 +161,18 @@ def edit_material(material_id):
 @permission_required("stock.view")
 def material_detail(material_id):
     m = Material.query.get_or_404(material_id)
+
+    # Jami qabul qilingan/sarflangan — BUTUN tarix bo'yicha (pastdagi `moves`
+    # faqat oxirgi 200 tasini ko'rsatish uchun, jamlarga tegishli emas).
+    totals = dict(
+        db.session.query(StockMove.kind, func.sum(StockMove.quantity * StockMove.unit_price))
+        .filter(StockMove.material_id == m.id)
+        .group_by(StockMove.kind)
+        .all()
+    )
+    received = to_money(totals.get(STOCK_IN) or 0)
+    used = to_money(totals.get(STOCK_OUT) or 0)
+
     moves = (
         StockMove.query.options(joinedload(StockMove.order).joinedload(Order.client))
         .filter(StockMove.material_id == m.id)
@@ -167,8 +180,6 @@ def material_detail(material_id):
         .limit(200)
         .all()
     )
-    received = sum((mv.total for mv in moves if mv.kind == STOCK_IN), ZERO)
-    used = sum((mv.total for mv in moves if mv.kind == STOCK_OUT), ZERO)
 
     return render_template(
         "stock/detail.html",

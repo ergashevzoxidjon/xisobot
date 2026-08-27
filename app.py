@@ -10,6 +10,24 @@ def create_app(config_object=Config):
     app = Flask(__name__)
     app.config.from_object(config_object)
 
+    # DIQQAT: bu tekshiruv atayin HAR BIR so'rovdan oldin ishlaydi (import
+    # vaqtida emas) — aks holda migrate_db.py/seed.py/reset_password.py kabi
+    # buyruq qatori skriptlari ham (ular `from app import create_app` qiladi,
+    # bu esa shu faylni to'liq ishga tushiradi) SECRET_KEY sozlanmagan bo'lsa
+    # ishlamay qolar edi, garchi ularga sessiya/cookie umuman kerak bo'lmasa
+    # ham. Haqiqiy xavf faqat ilova jonli so'rovlarga javob bera boshlaganda.
+    @app.before_request
+    def _guard_default_secret_key():
+        if not app.config["DEBUG"] and app.config["SECRET_KEY"] == "dev-secret-change-me":
+            raise RuntimeError(
+                "SECRET_KEY o'rnatilmagan! Standart kalit bilan production'da "
+                "so'rovlarga javob berish xavfsiz emas — sessiya cookie'sini "
+                "yasab, parolsiz admin bo'lib kirish mumkin. Server "
+                "sozlamalarida (cPanel -> Setup Python App -> Environment "
+                "variables) haqiqiy SECRET_KEY qiymatini belgilang va "
+                "RESTART qiling."
+            )
+
     db.init_app(app)
     login_manager.init_app(app)
     csrf.init_app(app)

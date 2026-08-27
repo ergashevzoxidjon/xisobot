@@ -445,7 +445,7 @@ def expense_breakdown(start, end):
     if order_expense:
         orders = (
             Order.query.options(joinedload(Order.client), selectinload(Order.items))
-            .filter(Order.id.in_(list(order_expense)))
+            .filter(Order.id.in_(list(order_expense)), Order.is_deleted.is_(False))
             .all()
         )
 
