@@ -4,12 +4,12 @@ from decimal import Decimal
 
 from flask import (
     Blueprint, render_template, request, redirect, url_for, flash,
-    current_app, send_from_directory,
+    current_app, send_from_directory, jsonify,
 )
 from flask_login import login_required, current_user
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 from werkzeug.utils import secure_filename
 
 from extensions import db
@@ -23,7 +23,7 @@ from permissions import permission_required, has_perm
 from queries import eager_orders
 from utils import (
     ValidationError, parse_money, parse_int, parse_date, parse_text, parse_choice,
-    to_money, today_local, now_local,
+    to_money, today_local, now_local, money_str,
 )
 
 orders_bp = Blueprint("orders", __name__, url_prefix="/buyurtmalar")
@@ -182,6 +182,42 @@ def list_orders():
         status=status,
         q=q,
     )
+
+
+@orders_bp.route("/qidiruv")
+@login_required
+@permission_required("orders.view")
+def search_orders():
+    """Xarajat formasidagi buyurtma qidiruvi uchun — JSON qaytaradi.
+
+    Raqam, mijoz nomi yoki mahsulot turi bo'yicha qidiradi.
+    """
+    q = (request.args.get("q") or "").strip()
+
+    query = (
+        Order.query.options(joinedload(Order.client), selectinload(Order.items))
+        .join(Client)
+        .filter(Order.is_deleted.is_(False))
+    )
+    if q:
+        like = f"%{q}%"
+        query = query.outerjoin(OrderItem, OrderItem.order_id == Order.id).filter(or_(
+            Order.order_number.ilike(like),
+            Client.name.ilike(like),
+            OrderItem.order_type.ilike(like),
+        )).distinct()
+
+    rows = query.order_by(Order.created_at.desc()).limit(10).all()
+    return jsonify([
+        {
+            "id": o.id,
+            "number": o.order_number,
+            "client": o.client.name if o.client else "",
+            "summary": o.items_summary,
+            "total": money_str(o.total_price),
+        }
+        for o in rows
+    ])
 
 
 @orders_bp.route("/yangi", methods=["GET", "POST"])
@@ -413,12 +449,8 @@ def add_payment(order_id):
         flash("To'lov sanasi kelajakda bo'lishi mumkin emas.", "danger")
         return redirect(url_for("orders.order_detail", order_id=order_id))
 
-    if amount > o.remaining:
-        flash(
-            f"Summa qolgan qarzdan ({o.remaining}) ko'p bo'lishi mumkin emas.", "danger",
-        )
-        return redirect(url_for("orders.order_detail", order_id=order_id))
-
+    # Qarzdan ko'p to'lash mumkin — ortiqchasi mijozning avansi (zapas puli)
+    # bo'lib qoladi. Faqat ogohlantiramiz, bloklamaymiz.
     p = Payment(
         order_id=o.id, amount=amount, paid_on=paid_on, note=note,
         created_by=current_user.id,
@@ -427,7 +459,15 @@ def add_payment(order_id):
     log_action(current_user, "payment", "order", o.id, f"{amount} so'm to'lov")
     db.session.commit()
     notify_payment(o, amount)
-    flash("To'lov qayd etildi.", "success")
+
+    overpaid = o.overpaid
+    if overpaid > ZERO:
+        flash(
+            f"To'lov qayd etildi. Ortiqcha {money_str(overpaid)} so'm "
+            f"mijozning avansi sifatida qoldi.", "warning",
+        )
+    else:
+        flash("To'lov qayd etildi.", "success")
     return redirect(url_for("orders.order_detail", order_id=order_id))
 
 

@@ -88,11 +88,16 @@ def new_order_message(order):
 
 
 def payment_message(order, amount):
+    if order.remaining < 0:
+        # qarzdan ko'p to'landi — ortiqchasi mijozning avansi
+        tail = f"Avans (zapas): <b>{fmt_money(-order.remaining)} so'm</b>"
+    else:
+        tail = f"Qolgan qarz: {fmt_money(order.remaining)} so'm"
     return (
         f"💰 <b>To'lov qabul qilindi</b>\n\n"
         f"№ {order.order_number} · {order.client.name}\n"
         f"Summa: <b>{fmt_money(amount)} so'm</b>\n"
-        f"Qolgan qarz: {fmt_money(order.remaining)} so'm"
+        + tail
     )
 
 

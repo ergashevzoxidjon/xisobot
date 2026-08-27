@@ -239,6 +239,50 @@ def user_toggle(user_id):
     return redirect(url_for("auth.users_list"))
 
 
+@auth_bp.route("/foydalanuvchilar/<int:user_id>/ochirish", methods=["POST"])
+@login_required
+@permission_required("users.manage")
+def user_delete(user_id):
+    """Foydalanuvchini bazadan butunlay o'chiradi.
+
+    Bloklash (`user_toggle`) yozuvni saqlaydi — bu esa o'chiradi. Uning
+    yaratgan buyurtma, to'lov, xarajat va ombor yozuvlari QOLADI, faqat
+    "kim kiritgan" havolasi bo'shatiladi, aks holda baza buzilardi.
+    """
+    from models import Order, Payment, Expense, OrderFile, StockMove, AuditLog, SupplierPayment
+
+    u = User.query.get_or_404(user_id)
+
+    if u.id == current_user.id:
+        flash("O'zingizni o'chira olmaysiz.", "danger")
+        return redirect(url_for("auth.users_list"))
+
+    if u.role == "admin":
+        admin_count = User.query.filter_by(role="admin").count()
+        if admin_count <= 1:
+            flash("Tizimda kamida bitta administrator qolishi kerak.", "danger")
+            return redirect(url_for("auth.users_list"))
+
+    username = u.username
+
+    # yozuvlardagi havolalarni bo'shatamiz (yozuvlarning o'zi o'chmaydi)
+    Order.query.filter_by(created_by=u.id).update({"created_by": None})
+    Order.query.filter_by(deleted_by=u.id).update({"deleted_by": None})
+    Payment.query.filter_by(created_by=u.id).update({"created_by": None})
+    Expense.query.filter_by(created_by=u.id).update({"created_by": None})
+    OrderFile.query.filter_by(created_by=u.id).update({"created_by": None})
+    StockMove.query.filter_by(created_by=u.id).update({"created_by": None})
+    SupplierPayment.query.filter_by(created_by=u.id).update({"created_by": None})
+    AuditLog.query.filter_by(user_id=u.id).update({"user_id": None})
+
+    # jurnalga yozuv o'chirilgandan keyin ham qolsin
+    log_action(current_user, "delete", "user", u.id, f"{username} butunlay o'chirildi")
+    db.session.delete(u)
+    db.session.commit()
+    flash(f"{username} tizimdan butunlay o'chirildi.", "success")
+    return redirect(url_for("auth.users_list"))
+
+
 @auth_bp.route("/jurnal")
 @login_required
 @permission_required("users.manage")

@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h3>Ombor</h3>
+    <div class="subtitle">Mahsulotlar, qoldiqlar va kirim-chiqim tarixi</div>
+  </div>
+  {% if has_perm('stock.manage') %}
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('stock.new_material') }}" class="btn btn-outline-primary">
+      <i class="bi bi-plus-lg"></i> Yangi mahsulot</a>
+    <a href="{{ url_for('stock.receive') }}" class="btn btn-primary">
+      <i class="bi bi-box-arrow-in-down"></i> Kirim</a>
+  </div>
+  {% endif %}
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-sm-6 col-lg-4">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon blue"><i class="bi bi-box-seam"></i></div>
+      <div>
+        <div class="stat-label">Mahsulotlar</div>
+        <div class="stat-value">{{ materials|length }} ta</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-4">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon green"><i class="bi bi-cash-stack"></i></div>
+      <div>
+        <div class="stat-label">Qoldiq qiymati</div>
+        <div class="stat-value num">{{ total_value|uzs }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-4">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon {% if low_count %}red{% else %}slate{% endif %}">
+        <i class="bi {% if low_count %}bi-exclamation-triangle{% else %}bi-check-circle{% endif %}"></i></div>
+      <div>
+        <div class="stat-label">Tugab qolgan</div>
+        <div class="stat-value {% if low_count %}text-danger{% endif %}">
+          {{ low_count }} ta{% if not low_count %} · yetarli{% endif %}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card p-3 mb-3">
+  <form method="get">
+    <div class="input-group">
+      <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+      <input type="text" name="q" value="{{ q }}" class="form-control border-start-0"
+             placeholder="Mahsulot nomi bo'yicha qidirish...">
+      {% if show_all %}<input type="hidden" name="all" value="1">{% endif %}
+      {% if q %}<a href="{{ url_for('stock.list_materials', all='1' if show_all else None) }}"
+                   class="btn btn-outline-secondary">Tozalash</a>{% endif %}
+    </div>
+  </form>
+  <div class="form-text mt-2">
+    {% if show_all %}
+      Faol va arxivdagi mahsulotlar ko'rsatilmoqda —
+      <a href="{{ url_for('stock.list_materials', q=q) }}">faqat faollarini ko'rish</a>
+    {% else %}
+      Faqat faol mahsulotlar —
+      <a href="{{ url_for('stock.list_materials', q=q, all='1') }}">arxivdagilarini ham ko'rsatish</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card p-3">
+{% if materials %}
+<div class="table-responsive">
+<table class="table table-hover">
+<thead><tr>
+  <th>Mahsulot</th><th>Birligi</th>
+  <th class="text-end">Qoldiq</th><th class="text-end">Oxirgi narx</th>
+  <th class="text-end">Qiymati</th><th></th>
+</tr></thead>
+<tbody>
+{% for m in materials %}
+<tr role="button" onclick="window.location='{{ url_for('stock.material_detail', material_id=m.id) }}'">
+  <td>
+    <span class="fw-semibold">{{ m.name }}</span>
+    {% if not m.is_active %}<span class="badge bg-secondary ms-1">arxiv</span>{% endif %}
+    {% if m.note %}<div class="text-muted" style="font-size:.75rem">{{ m.note }}</div>{% endif %}
+  </td>
+  <td class="text-muted">{{ m.unit }}</td>
+  <td class="text-end num">
+    {% if m.quantity < 0 %}
+      <span class="badge bg-danger">{{ m.quantity|qty }}</span>
+    {% elif m.is_low %}
+      <span class="badge bg-warning text-dark">{{ m.quantity|qty }}</span>
+    {% else %}
+      <span class="fw-semibold">{{ m.quantity|qty }}</span>
+    {% endif %}
+  </td>
+  <td class="text-end num">{{ m.last_price|uzs }}</td>
+  <td class="text-end num">{{ m.stock_value|uzs }}</td>
+  <td class="text-end no-print">
+    {% if has_perm('stock.manage') %}
+    <a href="{{ url_for('stock.receive', material_id=m.id) }}" class="btn btn-sm btn-outline-primary"
+       onclick="event.stopPropagation()" title="Kirim"><i class="bi bi-box-arrow-in-down"></i></a>
+    <a href="{{ url_for('stock.edit_material', material_id=m.id) }}" class="btn btn-sm btn-outline-secondary"
+       onclick="event.stopPropagation()" title="Tahrirlash"><i class="bi bi-pencil"></i></a>
+    {% endif %}
+  </td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% else %}
+<div class="empty-state">
+  <i class="bi bi-box-seam"></i>
+  <p>Omborda mahsulot yo'q</p>
+  {% if has_perm('stock.manage') %}
+  <a href="{{ url_for('stock.new_material') }}" class="btn btn-sm btn-primary mt-2">
+    <i class="bi bi-plus-lg"></i> Birinchi mahsulotni qo'shish</a>
+  {% endif %}
+</div>
+{% endif %}
+</div>
+{% endblock %}

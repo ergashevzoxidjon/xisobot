@@ -1,4 +1,4 @@
-from utils import money_str, today_local
+from utils import money_str, qty_str, today_local
 
 ORDER_STATUS_COLORS = {
     "yangi": "secondary",
@@ -55,6 +55,11 @@ def uzs(value):
     return money_str(value)
 
 
+def qty(value):
+    """Ombor miqdori: 240.000 -> '240', 1.500 -> '1.5'."""
+    return qty_str(value)
+
+
 def date_uz(value):
     if not value:
         return "-"
@@ -73,6 +78,7 @@ def register_template_helpers(app):
     app.jinja_env.filters["status_icon"] = status_icon
     app.jinja_env.filters["category_icon"] = category_icon
     app.jinja_env.filters["uzs"] = uzs
+    app.jinja_env.filters["qty"] = qty
     app.jinja_env.filters["date_uz"] = date_uz
     app.jinja_env.filters["datetime_uz"] = datetime_uz
     app.jinja_env.globals["today"] = today_local

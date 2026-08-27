@@ -40,6 +40,8 @@
   <td class="text-end">
     {% if c.total_debt > 0 %}
       <span class="badge bg-danger num">{{ c.total_debt|uzs }}</span>
+    {% elif c.total_debt < 0 %}
+      <span class="badge bg-success num" title="Ortiqcha to'lov — avans">Avans {{ (0 - c.total_debt)|uzs }}</span>
     {% else %}
       <span class="badge bg-success">Qarzi yo'q</span>
     {% endif %}

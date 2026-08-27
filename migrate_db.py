@@ -74,6 +74,27 @@ def add_column(table, column_ddl, column_name):
     print(f"✓ {table}.{column_name} ustuni qo'shildi")
 
 
+def migrate_role_rename():
+    """'buxgalter' roli 'boss' deb qayta nomlandi (2026-08-26).
+
+    Boss — korxona rahbari, admin bilan teng huquqli. Eski bazadagi
+    foydalanuvchilarning roli yangi nomga o'tkaziladi.
+    """
+    if "user" not in existing_tables():
+        return
+    if "role" not in columns_of("user"):
+        return
+
+    result = db.session.execute(text(
+        f"UPDATE {quote_ident('user')} SET role = 'boss' WHERE role = 'buxgalter'"
+    ))
+    db.session.commit()
+    if result.rowcount:
+        print(f"✓ {result.rowcount} ta foydalanuvchining roli 'buxgalter' → 'boss'")
+    else:
+        print("  · 'buxgalter' rolidagi foydalanuvchi yo'q")
+
+
 def migrate_paid_amount():
     """Eski order.paid_amount -> payment jadvaliga bitta yozuv sifatida."""
     if "order" not in existing_tables():
@@ -109,13 +130,25 @@ def migrate_paid_amount():
     print(f"✓ {moved} ta eski to'lov payment jadvaliga ko'chirildi")
 
 
-def drop_obsolete_tables():
+def drop_legacy_material():
+    """Eski (olib tashlangan) ombor modulidan qolgan jadvallarni tozalaydi.
+
+    2026-08-26 dan yangi ombor ham `material` jadvalidan foydalanadi, lekin
+    ustunlari boshqacha. Shuning uchun eski jadval — `last_price` ustuni
+    yo'q bo'lganidan bilinadi — o'chiriladi va `db.create_all()` yangisini
+    quradi. Bu funksiya create_all dan OLDIN chaqirilishi shart.
+    """
     tables = existing_tables()
-    for name in ("material_transaction", "material"):
-        if name in tables:
-            db.session.execute(text(f"DROP TABLE IF EXISTS {quote_ident(name)}"))
-            db.session.commit()
-            print(f"✓ Eski '{name}' jadvali o'chirildi")
+
+    if "material_transaction" in tables:
+        db.session.execute(text(f"DROP TABLE IF EXISTS {quote_ident('material_transaction')}"))
+        db.session.commit()
+        print("✓ Eski 'material_transaction' jadvali o'chirildi")
+
+    if "material" in tables and "last_price" not in columns_of("material"):
+        db.session.execute(text(f"DROP TABLE IF EXISTS {quote_ident('material')}"))
+        db.session.commit()
+        print("✓ Eski 'material' jadvali o'chirildi — yangi ombor uchun qayta quriladi")
 
 
 def migrate_order_items():
@@ -163,7 +196,11 @@ def main():
         print("=== Migratsiya boshlandi ===")
         backup_sqlite(app)
 
-        # create_all yangi jadvallarni (payment, order_type, audit_log) yaratadi
+        # eski ombor jadvallari yangisi qurilishidan OLDIN tozalanadi
+        drop_legacy_material()
+
+        # create_all yangi jadvallarni (payment, order_type, audit_log,
+        # material, stock_move) yaratadi
         db.create_all()
         print("✓ Yangi jadvallar tekshirildi/yaratildi")
 
@@ -184,8 +221,20 @@ def main():
         add_column("expense", "order_id INTEGER", "order_id")
         migrate_order_items()
 
+        # --- v5: 'buxgalter' roli 'boss' deb qayta nomlandi ---
+        migrate_role_rename()
+
+        # --- v6: taminotchilar (supplier, supplier_payment yangi jadvallar
+        # create_all bilan yaratiladi; expense'ga bog'lovchi ustunlar) ---
+        add_column("expense", "supplier_id INTEGER", "supplier_id")
+        add_column("expense", "is_paid BOOLEAN DEFAULT 1 NOT NULL", "is_paid")
+
+        # --- v7: ombor kirimida to'lov usuli (naqd / perechisleniye) va
+        # perechisleniye bo'lganda qaysi tashkilot orqali to'langani ---
+        add_column("expense", "payment_method VARCHAR(20)", "payment_method")
+        add_column("expense", "paid_via VARCHAR(150)", "paid_via")
+
         migrate_paid_amount()
-        drop_obsolete_tables()
         ensure_upload_folder(app)
 
         print("=== Migratsiya muvaffaqiyatli tugadi ===")

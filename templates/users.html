@@ -46,6 +46,13 @@
         <i class="bi {% if u.is_active_user %}bi-lock{% else %}bi-unlock{% endif %}"></i>
       </button>
     </form>
+    <form method="post" action="{{ url_for('auth.user_delete', user_id=u.id) }}" class="d-inline"
+          onsubmit="return confirm('{{ u.username }} BUTUNLAY o\'chirilsinmi? Bu amalni orqaga qaytarib bo\'lmaydi. Uning kiritgan buyurtma va xarajatlari saqlanadi.')">
+      {{ csrf() }}
+      <button class="btn btn-sm btn-danger" title="Butunlay o'chirish">
+        <i class="bi bi-trash"></i>
+      </button>
+    </form>
     {% endif %}
   </td>
 </tr>

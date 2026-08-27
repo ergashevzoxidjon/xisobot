@@ -27,7 +27,7 @@ a{ text-decoration:none; }
 .sidebar{
   width:252px; flex-shrink:0; background:var(--sidebar-bg); color:var(--sidebar-text);
   display:flex; flex-direction:column; position:fixed; top:0; bottom:0; left:0; z-index:1030;
-  transition:transform .2s ease;
+  transition:transform .2s ease; overflow:hidden;
 }
 .sidebar-brand{
   padding:1.35rem 1.35rem .9rem; font-weight:800; font-size:1.05rem; color:#fff;
@@ -47,18 +47,36 @@ a{ text-decoration:none; }
   margin-left:auto; background:#ef4444; color:#fff; font-size:.68rem; font-weight:700;
   padding:.1rem .4rem; border-radius:20px; min-width:1.2rem; text-align:center;
 }
-.sidebar-user{ padding:1rem 1.35rem; border-top:1px solid rgba(255,255,255,.08); }
+.sidebar-user{
+  padding:.85rem 1rem; border-top:1px solid rgba(255,255,255,.08);
+  display:flex; align-items:center; gap:.5rem;
+}
 .sidebar-user .avatar{
   width:34px; height:34px; border-radius:50%; background:var(--primary); color:#fff; font-weight:700;
   display:flex; align-items:center; justify-content:center; font-size:.85rem; flex-shrink:0;
 }
+.sidebar-user .who{ flex:1 1 auto; min-width:0; }
 .sidebar-user .name{ color:#fff; font-weight:600; font-size:.86rem; line-height:1.2; }
 .sidebar-user .role{ color:var(--sidebar-text); font-size:.75rem; }
-.sidebar-user a{ color:var(--sidebar-text); }
-.sidebar-user a:hover{ color:#fff; }
+.sidebar-user .icon-btn{
+  width:30px; height:30px; border-radius:8px; flex-shrink:0;
+  display:flex; align-items:center; justify-content:center;
+  color:var(--sidebar-text); font-size:.95rem; transition:background .12s, color .12s;
+}
+.sidebar-user .icon-btn:hover{ background:rgba(255,255,255,.08); color:#fff; }
+.sidebar-user .icon-btn.danger:hover{ background:rgba(240,68,56,.16); color:#fca5a5; }
 
 .main-area{ flex:1; margin-left:252px; min-width:0; }
-.main-area-guest{ margin-left:0; }
+.main-area-guest{
+  margin-left:0; min-height:100vh; display:flex; flex-direction:column;
+  background:
+    radial-gradient(1100px 620px at 15% -10%, #dbe6ff 0%, rgba(219,230,255,0) 60%),
+    radial-gradient(900px 560px at 100% 110%, #e3f0ff 0%, rgba(227,240,255,0) 55%),
+    var(--bg);
+}
+.main-area-guest .content{
+  margin:0 auto; width:100%; flex:1; display:flex; flex-direction:column; justify-content:center;
+}
 .topbar{
   display:none; align-items:center; gap:.75rem; background:#fff;
   padding:.8rem 1rem; border-bottom:1px solid #e5e9f0; position:sticky; top:0; z-index:1020;
@@ -119,6 +137,58 @@ a{ text-decoration:none; }
 .empty-state p{ margin:0; font-size:.9rem; }
 
 .alert{ border-radius:11px; border:none; font-size:.9rem; }
+
+/* ---- ko'p qatorli formalar (buyurtma, xarajat, ombor kirimi) ---- */
+.form-step{ border:1px solid #e5e9f0; border-radius:12px; padding:1.05rem 1.1rem; margin-bottom:1rem; }
+.form-step.active{ border-color:var(--primary); box-shadow:0 0 0 3px var(--primary-soft); }
+.form-step-head{ display:flex; align-items:center; gap:.65rem; margin-bottom:.85rem; }
+.form-step-head h6{ margin:0; font-weight:700; font-size:.95rem; }
+.form-step-head .hint{ color:#64748b; font-size:.79rem; margin-top:.1rem; }
+.step-num{
+  width:26px; height:26px; border-radius:50%; background:var(--primary); color:#fff;
+  display:flex; align-items:center; justify-content:center; font-size:.78rem; font-weight:700; flex-shrink:0;
+}
+.pick-chip{
+  display:inline-flex; align-items:center; gap:.35rem; padding:.28rem .6rem;
+  border-radius:20px; font-size:.78rem; font-weight:600;
+}
+.pick-chip.ok{ background:#ecfdf3; color:#067647; }
+.pick-chip.new{ background:#fffaeb; color:#b54708; }
+.pick-chip.muted{ background:#f1f5f9; color:#64748b; }
+
+.sticky-actions{
+  position:sticky; bottom:0; background:#fff; border-top:1px solid #e5e9f0;
+  padding:.8rem 0 .2rem; margin-top:.75rem; display:flex; gap:.6rem; align-items:center;
+  flex-wrap:wrap; z-index:5;
+}
+.total-pill{
+  margin-left:auto; background:var(--primary-soft); color:var(--primary-dark);
+  font-weight:800; padding:.42rem .9rem; border-radius:10px; font-size:1rem;
+  font-variant-numeric:tabular-nums;
+}
+.total-pill small{ font-weight:600; opacity:.7; margin-right:.35rem; }
+.row-num{ color:#94a3b8; font-size:.78rem; font-weight:700; }
+
+.quick-type{ text-align:left; line-height:1.15; padding:.45rem .7rem; }
+.quick-type .price{ display:block; font-size:.71rem; font-weight:600; opacity:.75; margin-top:.1rem; }
+
+/* Telefonda jadval qatorlari kartochkaga aylanadi */
+@media (max-width: 767px){
+  .stack-table thead{ display:none; }
+  .stack-table tbody tr{
+    display:block; border:1px solid #e5e9f0; border-radius:11px;
+    padding:.65rem .7rem; margin-bottom:.65rem;
+  }
+  .stack-table tbody td{
+    display:flex; align-items:center; gap:.6rem; padding:.28rem 0; border:none;
+    text-align:left !important;
+  }
+  .stack-table tbody td::before{
+    content:attr(data-label); flex:0 0 88px; color:#64748b; font-size:.77rem; font-weight:600;
+  }
+  .stack-table tbody td:empty{ display:none; }
+  .stack-table tfoot{ display:none; }
+}
 
 .alert-tile{ border-left:4px solid; padding:.85rem 1rem; border-radius:10px; background:#fff; box-shadow:var(--card-shadow); }
 .alert-tile.danger{ border-left-color:#f04438; }
@@ -185,7 +255,7 @@ a{ text-decoration:none; }
       </a>
       {% endif %}
 
-      {% if has_perm('orders.view') or has_perm('clients.view') %}
+      {% if has_perm('orders.view') or has_perm('clients.view') or has_perm('stock.view') %}
       <div class="sidebar-section">Faoliyat</div>
       {% endif %}
       {% if has_perm('orders.view') %}
@@ -198,6 +268,16 @@ a{ text-decoration:none; }
         <i class="bi bi-people"></i> Mijozlar
       </a>
       {% endif %}
+      {% if has_perm('stock.view') %}
+      <a href="{{ url_for('stock.list_materials') }}" class="{% if request.endpoint and request.endpoint.startswith('stock.') %}active{% endif %}">
+        <i class="bi bi-box-seam"></i> Ombor
+      </a>
+      {% endif %}
+      {% if has_perm('suppliers.view') %}
+      <a href="{{ url_for('suppliers.list_suppliers') }}" class="{% if request.endpoint and request.endpoint.startswith('suppliers.') %}active{% endif %}">
+        <i class="bi bi-truck"></i> Taminotchilar
+      </a>
+      {% endif %}
 
       {% if has_perm('expenses.view') or has_perm('reports.view') %}
       <div class="sidebar-section">Moliya</div>
@@ -205,11 +285,6 @@ a{ text-decoration:none; }
       {% if has_perm('expenses.view') %}
       <a href="{{ url_for('finance.expenses_list') }}" class="{% if request.endpoint in ['finance.expenses_list', 'finance.new_expense', 'finance.edit_expense'] %}active{% endif %}">
         <i class="bi bi-cash-stack"></i> Xarajatlar
-      </a>
-      {% endif %}
-      {% if has_perm('expenses.analytics') %}
-      <a href="{{ url_for('finance.expense_analytics') }}" class="{% if request.endpoint == 'finance.expense_analytics' %}active{% endif %}">
-        <i class="bi bi-bar-chart"></i> Xarajat tahlili
       </a>
       {% endif %}
       {% if has_perm('reports.view') %}
@@ -249,14 +324,14 @@ a{ text-decoration:none; }
       </a>
       {% endif %}
     </nav>
-    <div class="sidebar-user d-flex align-items-center gap-2">
+    <div class="sidebar-user">
       <div class="avatar">{{ current_user.display_name[0]|upper }}</div>
-      <div class="flex-grow-1 min-w-0">
+      <div class="who">
         <div class="name text-truncate">{{ current_user.display_name }}</div>
-        <div class="role">{{ role_label(current_user.role) }}</div>
+        <div class="role text-truncate">{{ role_label(current_user.role) }}</div>
       </div>
-      <a href="{{ url_for('auth.change_password') }}" title="Parolni o'zgartirish"><i class="bi bi-key"></i></a>
-      <a href="{{ url_for('auth.logout') }}" title="Chiqish" class="text-danger"><i class="bi bi-box-arrow-right"></i></a>
+      <a href="{{ url_for('auth.change_password') }}" title="Parolni o'zgartirish" class="icon-btn"><i class="bi bi-key"></i></a>
+      <a href="{{ url_for('auth.logout') }}" title="Chiqish" class="icon-btn danger"><i class="bi bi-box-arrow-right"></i></a>
     </div>
   </aside>
   <div class="sidebar-backdrop" id="sidebarBackdrop"></div>

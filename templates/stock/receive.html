@@ -1,0 +1,438 @@
+{% extends "base.html" %}
+
+{# xato bo'lganda kiritilgan qatorlarni tiklaymiz #}
+{% set posted_material_ids = form.getlist('row_material_id') if form and form.getlist is defined else [] %}
+{% set posted_material_names = form.getlist('row_material_name') if form and form.getlist is defined else [] %}
+{% set posted_units = form.getlist('row_unit') if form and form.getlist is defined else [] %}
+{% set posted_qtys = form.getlist('row_quantity') if form and form.getlist is defined else [] %}
+{% set posted_prices = form.getlist('row_price') if form and form.getlist is defined else [] %}
+{% set posted_supplier_id = form.get('supplier_id', '') if form and form.get is defined else '' %}
+{% set posted_supplier_name = form.get('supplier_name', '') if form and form.get is defined else '' %}
+{% set posted_payment_method = form.get('payment_method', 'naqd') if form and form.get is defined else 'naqd' %}
+{% set posted_paid_via = form.get('paid_via', '') if form and form.get is defined else '' %}
+
+{% set rows = [] %}
+{% if posted_material_names %}
+  {% for name in posted_material_names %}
+    {% set _ = rows.append({
+      'material_id': posted_material_ids[loop.index0] if posted_material_ids|length > loop.index0 else '',
+      'material_name': name,
+      'unit': posted_units[loop.index0] if posted_units|length > loop.index0 else '',
+      'quantity': posted_qtys[loop.index0] if posted_qtys|length > loop.index0 else '',
+      'price': posted_prices[loop.index0] if posted_prices|length > loop.index0 else '',
+    }) %}
+  {% endfor %}
+{% elif preselected_id %}
+  {% set _preselected = materials|selectattr('id', 'equalto', preselected_id)|list %}
+  {% set _ = rows.append({
+    'material_id': preselected_id,
+    'material_name': _preselected[0].name if _preselected else '',
+    'unit': '', 'quantity': '', 'price': '',
+  }) %}
+{% endif %}
+{% if not rows %}
+  {% set _ = rows.append({'material_id': '', 'material_name': '', 'unit': '', 'quantity': '', 'price': ''}) %}
+{% endif %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h3>Omborga kirim</h3>
+    <div class="subtitle">Sotib olingan mahsulot omborga qo'shiladi va shu kuni xarajat sifatida yoziladi</div>
+  </div>
+  {% if has_perm('stock.manage') %}
+  <a href="{{ url_for('stock.new_material') }}" class="btn btn-outline-primary">
+    <i class="bi bi-card-checklist"></i> Mahsulot kartochkasi</a>
+  {% endif %}
+</div>
+
+<div class="card p-4" style="max-width:1000px">
+<form method="post" id="receiveForm">
+  {{ csrf() }}
+
+  {# ---------------- 1. QABUL QILINGAN MAHSULOTLAR ---------------- #}
+  <div class="form-step">
+    <div class="form-step-head">
+      <span class="step-num">1</span>
+      <div>
+        <h6>Nima qabul qilindi</h6>
+        <div class="hint">Nomini yozing — bazadagilar chiqadi. Topilmasa, birligini tanlang: yangisi shu yerning o'zida ochiladi.</div>
+      </div>
+    </div>
+
+    {% if materials %}
+    <div class="mb-3">
+      <div class="d-flex flex-wrap gap-2">
+        {% for m in materials[:12] %}
+        <button type="button" class="btn btn-outline-primary btn-sm quick-type material-chip"
+                data-id="{{ m.id }}" data-name="{{ m.name }}" data-price="{{ m.last_price }}">
+          {{ m.name }}
+          <span class="price">qoldiq {{ m.quantity|qty }} {{ m.unit }}</span>
+        </button>
+        {% endfor %}
+      </div>
+      <div class="form-text">Bosing — bo'sh qatorga mahsulot va oxirgi narxi qo'yiladi.</div>
+    </div>
+    {% else %}
+    <div class="alert alert-light border py-2 mb-3 small">
+      <i class="bi bi-lightbulb"></i> Ombor hali bo'sh — pastdagi qatorga mahsulot nomini yozib, birligini
+      tanlang: birinchi mahsulot shu kirim bilan birga ochiladi.
+    </div>
+    {% endif %}
+
+    <div style="overflow-x:auto">
+      <table class="table stack-table align-middle mb-0">
+        <thead>
+          <tr>
+            <th style="width:34px"></th>
+            <th style="min-width:260px">Mahsulot</th>
+            <th style="width:120px" class="text-end">Soni</th>
+            <th style="width:150px" class="text-end">Narxi</th>
+            <th style="width:150px" class="text-end">Jami</th>
+            <th style="width:44px"></th>
+          </tr>
+        </thead>
+        <tbody id="receiveBody">
+          {% for row in rows %}
+          <tr class="receive-row">
+            <td class="row-num">{{ loop.index }}</td>
+            <td data-label="Mahsulot">
+              <input type="hidden" class="row-material-id" name="row_material_id" value="{{ row.material_id }}">
+              <div class="input-group input-group-sm">
+                <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+                <input class="form-control row-material-name border-start-0" name="row_material_name"
+                       list="materialList" autocomplete="off" placeholder="Mahsulot nomini yozing..."
+                       value="{{ row.material_name }}">
+              </div>
+              <div class="form-text row-hint"></div>
+              <div class="row-new-unit mt-1" style="display:none">
+                <div class="d-flex align-items-center flex-wrap gap-2">
+                  <span class="pick-chip new"><i class="bi bi-plus-circle"></i> yangi mahsulot</span>
+                  <select class="form-select form-select-sm row-unit" name="row_unit" style="width:auto">
+                    {% for u in units %}
+                    <option value="{{ u }}" {% if row.unit == u %}selected{% endif %}>{{ u }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+              </div>
+            </td>
+            <td data-label="Soni"><input type="number" step="0.001" min="0.001" class="form-control text-end row-qty"
+                       name="row_quantity" value="{{ row.quantity }}"></td>
+            <td data-label="Narxi"><input type="number" step="0.01" min="0.01" class="form-control text-end row-price"
+                       name="row_price" value="{{ row.price }}"></td>
+            <td data-label="Jami" class="text-end num fw-semibold row-line">0.00</td>
+            <td><button type="button" class="btn btn-sm btn-outline-danger row-remove"
+                        title="Qatorni o'chirish"><i class="bi bi-x-lg"></i></button></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="4" class="text-end fw-bold">Jami xarajat</td>
+            <td class="text-end fw-bold num" id="receiveTotalCell">0.00</td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+    <datalist id="materialList">
+      {% for m in materials %}
+      <option value="{{ m.name }}">{{ m.quantity|qty }} {{ m.unit }} · {{ m.last_price|uzs }}</option>
+      {% endfor %}
+    </datalist>
+
+    <button type="button" class="btn btn-outline-primary btn-sm mt-3" id="addReceiveRow">
+      <i class="bi bi-plus-lg"></i> Qator qo'shish
+    </button>
+  </div>
+
+  {# ---------------- 2. TAMINOTCHI VA TO'LOV ---------------- #}
+  <div class="form-step">
+    <div class="form-step-head">
+      <span class="step-num">2</span>
+      <div>
+        <h6>Kimdan olindi</h6>
+        <div class="hint">Ro'yxatdan tanlang yoki yangi nom yozing — o'zi qo'shiladi</div>
+      </div>
+    </div>
+
+    {% if suppliers %}
+    <div class="mb-2">
+      <div class="d-flex flex-wrap gap-2">
+        {% for s in suppliers[:10] %}
+        <button type="button" class="btn btn-outline-primary btn-sm quick-type supplier-chip"
+                data-id="{{ s.id }}" data-name="{{ s.name }}">
+          {{ s.name }}
+          {% if s.debt > 0 %}<span class="price text-danger">qarz {{ s.debt|uzs }}</span>{% endif %}
+        </button>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    <input type="hidden" name="supplier_id" id="supplierId" value="{{ posted_supplier_id }}">
+    <input class="form-control" id="supplierName" name="supplier_name" list="supplierList"
+           autocomplete="off" maxlength="150" placeholder="Taminotchi nomi..."
+           value="{{ posted_supplier_name }}">
+    <datalist id="supplierList">
+      {% for s in suppliers %}
+      <option value="{{ s.name }}">
+      {% endfor %}
+    </datalist>
+
+    <label class="form-label mt-3">To'lov holati</label>
+    <div class="d-flex flex-wrap gap-2">
+      <input type="radio" class="btn-check" name="payment_method" value="naqd" id="paidCash" autocomplete="off"
+             {% if posted_payment_method not in ['perechisleniye', 'qarzga'] %}checked{% endif %}>
+      <label class="btn btn-outline-success btn-sm" for="paidCash">
+        <i class="bi bi-check-circle me-1"></i>Naqd to'landi</label>
+
+      <input type="radio" class="btn-check" name="payment_method" value="perechisleniye" id="paidTransfer" autocomplete="off"
+             {% if posted_payment_method == 'perechisleniye' %}checked{% endif %}>
+      <label class="btn btn-outline-primary btn-sm" for="paidTransfer">
+        <i class="bi bi-bank me-1"></i>Perechisleniye</label>
+
+      <input type="radio" class="btn-check" name="payment_method" value="qarzga" id="paidNo" autocomplete="off"
+             {% if posted_payment_method == 'qarzga' %}checked{% endif %}>
+      <label class="btn btn-outline-warning btn-sm" for="paidNo">
+        <i class="bi bi-hourglass-split me-1"></i>Qarzga olindi</label>
+    </div>
+    <div class="form-text">Qarzga olinsa — summa taminotchi balansiga qo'shiladi, Taminotchilar bo'limida ko'rinadi.</div>
+
+    <div id="paidViaBlock" class="mt-3" style="display:none">
+      <label class="form-label">Qaysi tashkilot orqali</label>
+      <div class="d-flex flex-wrap gap-2">
+        {% for c in payer_companies %}
+        <input type="radio" class="btn-check" name="paid_via" value="{{ c }}" id="paidVia{{ loop.index }}" autocomplete="off"
+               {% if posted_paid_via == c %}checked{% endif %}>
+        <label class="btn btn-outline-secondary btn-sm" for="paidVia{{ loop.index }}">
+          <i class="bi bi-building me-1"></i>{{ c }}</label>
+        {% endfor %}
+      </div>
+      <div class="form-text">Xisobotda tashkilotlar bo'yicha alohida ko'rinadi.</div>
+    </div>
+  </div>
+
+  {# ---------------- 3. SANA VA IZOH ---------------- #}
+  <div class="form-step">
+    <div class="form-step-head">
+      <span class="step-num">3</span>
+      <div>
+        <h6>Qachon</h6>
+        <div class="hint">Xarajat shu sana bilan yoziladi</div>
+      </div>
+    </div>
+    <div class="row g-3">
+      <div class="col-sm-4">
+        <label class="form-label">Sana</label>
+        <input type="date" class="form-control" name="moved_on" max="{{ today_date.isoformat() }}"
+               value="{{ today_date.isoformat() }}">
+      </div>
+      <div class="col-sm-8">
+        <label class="form-label">Izoh</label>
+        <input class="form-control" name="note" maxlength="255"
+               placeholder="Hujjat raqami, izoh...">
+      </div>
+    </div>
+  </div>
+
+  <div class="sticky-actions">
+    <button class="btn btn-primary"><i class="bi bi-check-lg"></i> Qabul qilish</button>
+    <a href="{{ url_for('stock.list_materials') }}" class="btn btn-outline-secondary">Bekor qilish</a>
+    <span class="total-pill"><small>Jami xarajat</small><span id="receiveTotal">0.00</span> so'm</span>
+  </div>
+</form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+{% set material_json = [] %}
+{% for m in materials %}
+  {% set _ = material_json.append({'id': m.id, 'name': m.name, 'unit': m.unit,
+                                   'qty': m.quantity|qty, 'price': m.last_price|string}) %}
+{% endfor %}
+const MATERIALS = {{ material_json|tojson }};
+const MATERIALS_BY_NAME = {};
+MATERIALS.forEach(m => { MATERIALS_BY_NAME[m.name.toLowerCase()] = m; });
+
+const body = document.getElementById('receiveBody');
+const totalPill = document.getElementById('receiveTotal');
+const totalCell = document.getElementById('receiveTotalCell');
+const templateRow = body.querySelector('.receive-row');
+let activeRow = null;
+
+function money(v) {
+  return (v || 0).toLocaleString('ru-RU', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
+function setActive(tr) {
+  if (activeRow) activeRow.classList.remove('table-active');
+  activeRow = tr;
+  if (tr) tr.classList.add('table-active');
+}
+
+function renumber() {
+  body.querySelectorAll('.receive-row').forEach((tr, i) => {
+    tr.querySelector('.row-num').textContent = i + 1;
+  });
+}
+
+/* mahsulot nomi ombordagi bilan mos kelsa — id/narx o'zi to'ladi;
+   aks holda "yangi mahsulot" ko'rsatilib, birligi so'raladi */
+function matchMaterial(tr) {
+  const nameInput = tr.querySelector('.row-material-name');
+  const hidden = tr.querySelector('.row-material-id');
+  const price = tr.querySelector('.row-price');
+  const hint = tr.querySelector('.row-hint');
+  const newUnitBox = tr.querySelector('.row-new-unit');
+  const name = nameInput.value.trim();
+  const found = MATERIALS_BY_NAME[name.toLowerCase()];
+
+  if (found) {
+    hidden.value = found.id;
+    if (!price.value && parseFloat(found.price) > 0) price.value = found.price;
+    hint.className = 'form-text row-hint text-success';
+    hint.innerHTML = '<i class="bi bi-check-circle"></i> Omborda: ' + found.qty + ' ' + found.unit;
+    newUnitBox.style.display = 'none';
+  } else {
+    hidden.value = '';
+    hint.className = 'form-text row-hint';
+    hint.innerHTML = '';
+    newUnitBox.style.display = name ? '' : 'none';
+  }
+}
+
+function recalc() {
+  let sum = 0;
+  body.querySelectorAll('.receive-row').forEach(tr => {
+    const qty = parseFloat(tr.querySelector('.row-qty').value) || 0;
+    const price = parseFloat(tr.querySelector('.row-price').value) || 0;
+    const line = qty * price;
+    tr.querySelector('.row-line').textContent = money(line);
+    sum += line;
+  });
+  const text = money(sum);
+  totalPill.textContent = text;
+  totalCell.textContent = text;
+  renumber();
+}
+
+function addRow(focus) {
+  const tr = templateRow.cloneNode(true);
+  tr.querySelector('.row-material-id').value = '';
+  tr.querySelector('.row-material-name').value = '';
+  tr.querySelector('.row-unit').selectedIndex = 0;
+  tr.querySelector('.row-qty').value = '';
+  tr.querySelector('.row-price').value = '';
+  tr.querySelector('.row-line').textContent = '0.00';
+  tr.querySelector('.row-hint').innerHTML = '';
+  tr.querySelector('.row-new-unit').style.display = 'none';
+  body.appendChild(tr);
+  setActive(tr);
+  if (focus) tr.querySelector('.row-material-name').focus();
+  recalc();
+  return tr;
+}
+
+body.addEventListener('input', e => {
+  const tr = e.target.closest('.receive-row');
+  if (!tr) return;
+  if (e.target.matches('.row-material-name')) matchMaterial(tr);
+  recalc();
+});
+
+body.addEventListener('focusin', e => {
+  const tr = e.target.closest('.receive-row');
+  if (tr) setActive(tr);
+});
+
+body.addEventListener('click', e => {
+  const btn = e.target.closest('.row-remove');
+  if (!btn) return;
+  const rows = body.querySelectorAll('.receive-row');
+  if (rows.length <= 1) {
+    rows[0].querySelector('.row-material-id').value = '';
+    rows[0].querySelector('.row-material-name').value = '';
+    rows[0].querySelector('.row-unit').selectedIndex = 0;
+    rows[0].querySelector('.row-qty').value = '';
+    rows[0].querySelector('.row-price').value = '';
+    rows[0].querySelector('.row-hint').innerHTML = '';
+    rows[0].querySelector('.row-new-unit').style.display = 'none';
+    recalc();
+    return;
+  }
+  const tr = btn.closest('.receive-row');
+  if (tr === activeRow) setActive(null);
+  tr.remove();
+  recalc();
+});
+
+document.getElementById('addReceiveRow').addEventListener('click', () => addRow(true));
+
+/* mahsulot tugmalari — bo'sh qatorga qo'yadi */
+document.querySelectorAll('.material-chip').forEach(btn => {
+  btn.addEventListener('click', () => {
+    let tr = activeRow && activeRow.isConnected ? activeRow : null;
+    if (!tr) {
+      const rows = body.querySelectorAll('.receive-row');
+      tr = rows.length ? rows[rows.length - 1] : addRow(false);
+    }
+    if (tr.querySelector('.row-material-name').value.trim()) tr = addRow(false);
+
+    tr.querySelector('.row-material-name').value = btn.dataset.name;
+    tr.querySelector('.row-material-id').value = btn.dataset.id;
+    const price = parseFloat(btn.dataset.price);
+    if (!isNaN(price) && price > 0 && !tr.querySelector('.row-price').value) {
+      tr.querySelector('.row-price').value = price;
+    }
+    matchMaterial(tr);
+    setActive(tr);
+    tr.querySelector('.row-qty').focus();
+    recalc();
+  });
+});
+
+setActive(body.querySelector('.receive-row'));
+body.querySelectorAll('.receive-row').forEach(matchMaterial);
+recalc();
+
+/* ---------------- taminotchi ---------------- */
+
+const supplierName = document.getElementById('supplierName');
+const supplierId = document.getElementById('supplierId');
+const SUPPLIERS_BY_NAME = {};
+{% for s in suppliers %}
+SUPPLIERS_BY_NAME[{{ s.name|tojson }}.toLowerCase()] = {{ s.id }};
+{% endfor %}
+
+function matchSupplier() {
+  const found = SUPPLIERS_BY_NAME[supplierName.value.trim().toLowerCase()];
+  supplierId.value = found || '';
+}
+if (supplierName) {
+  supplierName.addEventListener('input', matchSupplier);
+  matchSupplier();
+}
+
+document.querySelectorAll('.supplier-chip').forEach(btn => {
+  btn.addEventListener('click', () => {
+    supplierName.value = btn.dataset.name;
+    supplierId.value = btn.dataset.id;
+  });
+});
+
+/* ---------------- to'lov usuli: perechisleniye bo'lsa tashkilot so'raladi ---------------- */
+
+const paidViaBlock = document.getElementById('paidViaBlock');
+function syncPaidVia() {
+  const checked = document.querySelector('input[name="payment_method"]:checked');
+  paidViaBlock.style.display = (checked && checked.value === 'perechisleniye') ? '' : 'none';
+}
+document.querySelectorAll('input[name="payment_method"]').forEach(r => {
+  r.addEventListener('change', syncPaidVia);
+});
+syncPaidVia();
+</script>
+{% endblock %}

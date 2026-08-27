@@ -87,10 +87,17 @@
         <td class="text-end text-success num py-1">{{ order.paid_amount_calc|uzs }} so'm</td>
       </tr>
       <tr style="border-top:2px solid #1e293b">
+        {% if order.overpaid > 0 %}
+        <td class="fw-bold py-2">Avans (zapas):</td>
+        <td class="text-end fw-bold fs-5 num py-2 text-success">
+          {{ order.overpaid|uzs }} so'm
+        </td>
+        {% else %}
         <td class="fw-bold py-2">Qolgan qarz:</td>
         <td class="text-end fw-bold fs-5 num py-2 {% if order.remaining > 0 %}text-danger{% else %}text-success{% endif %}">
           {{ order.remaining|uzs }} so'm
         </td>
+        {% endif %}
       </tr>
     </table>
   </div>

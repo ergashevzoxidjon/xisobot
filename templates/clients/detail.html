@@ -42,8 +42,13 @@
     <div class="card p-3 stat-card">
       <div class="stat-icon {% if total_debt > 0 %}red{% else %}green{% endif %}"><i class="bi bi-wallet2"></i></div>
       <div>
+        {% if total_debt < 0 %}
+        <div class="stat-label">Avans (zapas)</div>
+        <div class="stat-value num text-success">{{ (0 - total_debt)|uzs }}</div>
+        {% else %}
         <div class="stat-label">Qarzdorlik</div>
         <div class="stat-value num {% if total_debt > 0 %}text-danger{% else %}text-success{% endif %}">{{ total_debt|uzs }}</div>
+        {% endif %}
       </div>
     </div>
   </div>

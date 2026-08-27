@@ -5,7 +5,7 @@
     <h3>Moliyaviy hisobot</h3>
     <div class="subtitle">{{ year }}-yil · tushum to'lov sanasi bo'yicha hisoblanadi</div>
   </div>
-  <div class="d-flex gap-2">
+  <div class="d-flex gap-2 no-print">
     <form method="get" class="d-flex gap-2">
       <input type="number" name="year" value="{{ year }}" class="form-control" style="width:110px" min="2000" max="2100">
       <button class="btn btn-outline-primary"><i class="bi bi-search"></i></button>
@@ -17,40 +17,97 @@
   </div>
 </div>
 
+{# ---------------- 1. ASOSIY KO'RSATKICHLAR ---------------- #}
 <div class="row g-3 mb-3">
-  <div class="col-md-4">
+  <div class="col-sm-6 col-lg-3">
     <div class="card p-3 stat-card">
       <div class="stat-icon green"><i class="bi bi-graph-up-arrow"></i></div>
-      <div><div class="stat-label">Yillik tushum</div><div class="stat-value text-success num">{{ total_income|uzs }}</div></div>
+      <div><div class="stat-label">Yillik tushum</div>
+        <div class="stat-value num">{{ total_income|uzs }}</div></div>
     </div>
   </div>
-  <div class="col-md-4">
+  <div class="col-sm-6 col-lg-3">
     <div class="card p-3 stat-card">
       <div class="stat-icon red"><i class="bi bi-cash-stack"></i></div>
-      <div><div class="stat-label">Yillik xarajat</div><div class="stat-value text-danger num">{{ total_expense|uzs }}</div></div>
+      <div><div class="stat-label">Yillik xarajat</div>
+        <div class="stat-value num">{{ total_expense|uzs }}</div></div>
     </div>
   </div>
-  <div class="col-md-4">
+  <div class="col-sm-6 col-lg-3">
     <div class="card p-3 stat-card">
       <div class="stat-icon {% if total_profit >= 0 %}blue{% else %}red{% endif %}"><i class="bi bi-wallet2"></i></div>
       <div>
-        <div class="stat-label">Yillik sof foyda</div>
+        <div class="stat-label">Sof foyda</div>
         <div class="stat-value num {% if total_profit >= 0 %}text-success{% else %}text-danger{% endif %}">{{ total_profit|uzs }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon slate"><i class="bi bi-percent"></i></div>
+      <div>
+        <div class="stat-label">Rentabellik</div>
+        <div class="stat-value">
+          {% if total_income > 0 %}{{ ((total_profit / total_income) * 100)|round(1) }}%{% else %}—{% endif %}
+        </div>
+        <div class="chart-note">har 100 so'm tushumdan qolgani</div>
       </div>
     </div>
   </div>
 </div>
 
-<div class="card p-3 mb-3">
-  <canvas id="chart" height="90"></canvas>
+{# ---------------- 2. OYLIK GRAFIK ---------------- #}
+<div class="card p-4 mb-3">
+  <h6 class="fw-bold mb-1">Oylar kesimida — tushum, xarajat va foyda</h6>
+  <div class="chart-note mb-3">Ustunlar — pul kirimi va chiqimi; chiziq — sof foyda. Barchasi so'mda.</div>
+  <div class="chart-box h-lg"><canvas id="monthChart"></canvas></div>
 </div>
 
-<div class="row g-3">
-  <div class="col-lg-8">
-    <div class="card p-3">
-      <h6 class="fw-bold mb-3">Oylar kesimida</h6>
+<div class="row g-3 mb-3">
+  {# ---------------- 3. XARAJAT TURKUMLARI ---------------- #}
+  <div class="col-lg-6">
+    <div class="card p-4 h-100">
+      <h6 class="fw-bold mb-1"><i class="bi bi-tags me-1 text-muted"></i> Xarajat turkumlari</h6>
+      <div class="chart-note mb-3">Pulning qaysi turdagi xarajatga ketgani</div>
+      {% if category_rows %}
+      <div class="chart-box h-md mb-3"><canvas id="categoryChart"></canvas></div>
+      <div style="overflow-x:auto">
+        <table class="table table-sm mb-0">
+          <thead><tr><th>Turkum</th><th class="text-end">Soni</th><th class="text-end">Summa</th><th class="text-end">Ulush</th></tr></thead>
+          <tbody>
+          {% for c in category_rows %}
+          <tr>
+            <td><i class="bi {{ c.name|category_icon }} text-muted me-1"></i>{{ c.name }}</td>
+            <td class="text-end num text-muted">{{ c.count }}</td>
+            <td class="text-end num fw-semibold">{{ c.amount|uzs }}</td>
+            <td class="text-end num text-muted">
+              {% if total_expense > 0 %}{{ ((c.amount / total_expense) * 100)|round(1) }}%{% else %}—{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state py-4"><i class="bi bi-pie-chart"></i><p>Ma'lumot yo'q</p></div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ---------------- 4. OYLIK JADVAL ---------------- #}
+  <div class="col-lg-6">
+    <div class="card p-4 h-100">
+      <h6 class="fw-bold mb-1">Oylik jadval</h6>
+      <div class="chart-note mb-3">
+        Xarajatning {{ linked|uzs }} so'mi buyurtmalarga bog'langan,
+        {{ general|uzs }} so'mi umumiy.
+        {% if stock_used > 0 %}
+        Bundan tashqari {{ stock_used|uzs }} so'mlik mahsulot ombordan sarflangan
+        (puli kirimda hisoblangan, jamiga qo'shilmaydi).
+        {% endif %}
+      </div>
       <div class="table-responsive">
-      <table class="table table-hover">
+      <table class="table table-sm table-hover mb-0">
       <thead><tr><th>Oy</th><th class="text-end">Tushum</th><th class="text-end">Xarajat</th><th class="text-end">Foyda</th></tr></thead>
       <tbody>
       {% for m in months %}
@@ -63,7 +120,7 @@
       {% endfor %}
       </tbody>
       <tfoot>
-        <tr style="border-top:2px solid #e5e9f0">
+        <tr style="border-top:2px solid #e1e0d9">
           <td class="fw-bold">JAMI</td>
           <td class="text-end fw-bold num">{{ total_income|uzs }}</td>
           <td class="text-end fw-bold num text-danger">{{ total_expense|uzs }}</td>
@@ -74,47 +131,181 @@
       </div>
     </div>
   </div>
+</div>
 
-  <div class="col-lg-4">
-    <div class="card p-3">
-      <h6 class="fw-bold mb-3">Xarajat turkumlari</h6>
-      {% if category_rows %}
-      <table class="table table-sm">
+{# ---------------- 5. MAHSULOT TURLARI ---------------- #}
+{% if product_rows %}
+<div class="card p-4 mb-3">
+  <h6 class="fw-bold mb-1"><i class="bi bi-box-seam me-1 text-muted"></i> Mahsulot turlari bo'yicha foyda</h6>
+  <div class="chart-note mb-3">
+    Buyurtma xarajati mahsulotlar orasida summasiga qarab taqsimlanadi —
+    qaysi mahsulot ko'proq foyda keltirayotgani shundan ko'rinadi.
+  </div>
+  <div class="chart-box h-md mb-3"><canvas id="productChart"></canvas></div>
+  <div style="overflow-x:auto">
+    <table class="table table-sm mb-0">
+      <thead>
+        <tr>
+          <th>Mahsulot</th><th class="text-end">Soni</th><th class="text-end">Tushum</th>
+          <th class="text-end">Xarajat</th><th class="text-end">Foyda</th><th class="text-end">Rentabellik</th>
+        </tr>
+      </thead>
       <tbody>
-      {% for c in category_rows %}
-      <tr>
-        <td><i class="bi {{ c.name|category_icon }} text-muted me-1"></i>{{ c.name }}</td>
-        <td class="text-end num">{{ c.amount|uzs }}</td>
-      </tr>
-      {% endfor %}
+        {% for row in product_rows %}
+        <tr>
+          <td class="fw-semibold">{{ row.name }}</td>
+          <td class="text-end num text-muted">{{ row.count }}</td>
+          <td class="text-end num">{{ row.revenue|uzs }}</td>
+          <td class="text-end num text-danger">{{ row.spent|uzs }}</td>
+          <td class="text-end num fw-semibold {% if row.profit < 0 %}text-danger{% else %}text-success{% endif %}">
+            {{ row.profit|uzs }}
+          </td>
+          <td class="text-end num text-muted">
+            {% if row.revenue > 0 %}{{ ((row.profit / row.revenue) * 100)|round(1) }}%{% else %}—{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
       </tbody>
-      </table>
-      {% else %}
-      <div class="empty-state py-4"><i class="bi bi-pie-chart"></i><p>Ma'lumot yo'q</p></div>
-      {% endif %}
-    </div>
+    </table>
   </div>
 </div>
+{% endif %}
+
+{# ---------------- 6. BUYURTMALAR RENTABELLIGI ---------------- #}
+{% if order_rows %}
+<div class="card p-4">
+  <h6 class="fw-bold mb-1"><i class="bi bi-receipt-cutoff me-1 text-muted"></i> Buyurtmalar rentabelligi</h6>
+  <div class="chart-note mb-3">Xarajati eng ko'p 20 buyurtma. Grafikda birinchi 10 tasi.</div>
+  <div class="chart-box h-lg mb-3"><canvas id="orderChart"></canvas></div>
+  <div style="overflow-x:auto">
+    <table class="table table-sm table-hover mb-0">
+      <thead>
+        <tr>
+          <th>№</th><th>Mijoz</th><th>Mahsulot</th>
+          <th class="text-end">Tushum</th><th class="text-end">Xarajat</th>
+          <th class="text-end">Foyda</th><th class="text-end">Rentabellik</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in order_rows %}
+        <tr>
+          <td>
+            <a href="{{ url_for('orders.order_detail', order_id=row.order.id) }}"
+               class="fw-semibold">{{ row.order.order_number }}</a>
+          </td>
+          <td>{{ row.order.client.name if row.order.client else '-' }}</td>
+          <td class="text-muted small">{{ row.order.items_summary }}</td>
+          <td class="text-end num">{{ row.revenue|uzs }}</td>
+          <td class="text-end num text-danger">{{ row.spent|uzs }}</td>
+          <td class="text-end num fw-semibold {% if row.profit < 0 %}text-danger{% else %}text-success{% endif %}">
+            {{ row.profit|uzs }}
+          </td>
+          <td class="text-end num text-muted">
+            {% if row.revenue > 0 %}{{ ((row.profit / row.revenue) * 100)|round(1) }}%{% else %}—{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+{% include "charts.html" %}
 <script>
-new Chart(document.getElementById('chart'), {
-  type: 'bar',
+const MONTHS = {{ months|map(attribute='name')|list|tojson }};
+
+new Chart(document.getElementById('monthChart'), {
   data: {
-    labels: {{ months|map(attribute='name')|list|tojson }},
+    labels: MONTHS,
     datasets: [
-      { label: 'Tushum', data: {{ months|map(attribute='income')|map('float')|list|tojson }}, backgroundColor: '#12b76a', borderRadius: 4 },
-      { label: 'Xarajat', data: {{ months|map(attribute='expense')|map('float')|list|tojson }}, backgroundColor: '#f04438', borderRadius: 4 },
-      { label: 'Foyda', data: {{ months|map(attribute='profit')|map('float')|list|tojson }}, backgroundColor: '#2563eb', borderRadius: 4 }
+      {
+        type: 'bar', label: 'Tushum',
+        data: {{ months|map(attribute='income')|map('float')|list|tojson }},
+        backgroundColor: VIZ.series[0], borderRadius: 4, borderSkipped: false,
+        barPercentage: 0.78, categoryPercentage: 0.7, order: 2,
+      },
+      {
+        type: 'bar', label: 'Xarajat',
+        data: {{ months|map(attribute='expense')|map('float')|list|tojson }},
+        backgroundColor: VIZ.series[1], borderRadius: 4, borderSkipped: false,
+        barPercentage: 0.78, categoryPercentage: 0.7, order: 2,
+      },
+      {
+        type: 'line', label: 'Sof foyda',
+        data: {{ months|map(attribute='profit')|map('float')|list|tojson }},
+        borderColor: VIZ.series[2], backgroundColor: VIZ.series[2],
+        borderWidth: 2, tension: 0.25, order: 1,
+        pointRadius: 4, pointHoverRadius: 7,
+        pointBackgroundColor: VIZ.series[2],
+        pointBorderColor: '#ffffff', pointBorderWidth: 2,
+      },
     ]
   },
   options: {
-    responsive: true,
-    plugins: { legend: { position: 'bottom' } },
-    scales: { y: { grid: { color: '#f1f3f8' } }, x: { grid: { display: false } } }
+    interaction: {mode: 'index', intersect: false},
+    plugins: {tooltip: TOOLTIP},
+    scales: {y: moneyAxisY(), x: CATEGORY_AXIS},
   }
 });
+
+{% if category_rows %}
+const CAT = foldOther(
+  {{ category_rows|map(attribute='name')|list|tojson }},
+  {{ category_rows|map(attribute='amount')|map('float')|list|tojson }}
+);
+doughnut(document.getElementById('categoryChart'), CAT.labels, CAT.values, CAT.colors);
+{% endif %}
+
+{% if product_rows %}
+new Chart(document.getElementById('productChart'), {
+  type: 'bar',
+  data: {
+    labels: {{ product_rows|map(attribute='name')|list|tojson }},
+    datasets: [
+      {label: 'Tushum', data: {{ product_rows|map(attribute='revenue')|map('float')|list|tojson }},
+       backgroundColor: VIZ.series[0], borderRadius: 4, borderSkipped: false,
+       barPercentage: 0.8, categoryPercentage: 0.7},
+      {label: 'Xarajat', data: {{ product_rows|map(attribute='spent')|map('float')|list|tojson }},
+       backgroundColor: VIZ.series[1], borderRadius: 4, borderSkipped: false,
+       barPercentage: 0.8, categoryPercentage: 0.7},
+    ]
+  },
+  options: {
+    interaction: {mode: 'index', intersect: false},
+    plugins: {tooltip: TOOLTIP},
+    scales: {y: moneyAxisY(), x: CATEGORY_AXIS},
+  }
+});
+{% endif %}
+
+{% if order_rows %}
+new Chart(document.getElementById('orderChart'), {
+  type: 'bar',
+  data: {
+    labels: {{ order_rows|map(attribute='order')|map(attribute='order_number')|list|tojson }}.slice(0, 10),
+    datasets: [
+      {label: 'Tushum', data: {{ order_rows|map(attribute='revenue')|map('float')|list|tojson }}.slice(0, 10),
+       backgroundColor: VIZ.series[0], borderRadius: 4, borderSkipped: false,
+       barPercentage: 0.82, categoryPercentage: 0.72},
+      {label: 'Xarajat', data: {{ order_rows|map(attribute='spent')|map('float')|list|tojson }}.slice(0, 10),
+       backgroundColor: VIZ.series[1], borderRadius: 4, borderSkipped: false,
+       barPercentage: 0.82, categoryPercentage: 0.72},
+    ]
+  },
+  options: {
+    indexAxis: 'y',
+    interaction: {mode: 'index', intersect: false},
+    plugins: {
+      tooltip: Object.assign({}, TOOLTIP, {
+        callbacks: {label: c => ' ' + c.dataset.label + ': ' + fullUZS(c.parsed.x)}
+      })
+    },
+    scales: {x: moneyAxisX(), y: CATEGORY_AXIS},
+  }
+});
+{% endif %}
 </script>
 {% endblock %}

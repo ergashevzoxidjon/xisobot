@@ -1,32 +1,84 @@
 {% extends "base.html" %}
 {% block title %}Kirish · Poligrafiya Hisobot Tizimi{% endblock %}
+{% block head_extra %}
+<style>
+.login-wrap{ width:100%; max-width:404px; margin:0 auto; }
+.login-badge{
+  width:60px; height:60px; border-radius:18px;
+  background:linear-gradient(145deg, var(--primary), var(--primary-dark));
+  box-shadow:0 8px 20px -6px rgba(37,99,235,.55);
+  display:flex; align-items:center; justify-content:center;
+}
+.login-badge i{ font-size:1.7rem; color:#fff; }
+.login-card{
+  border:1px solid #e9edf5; border-radius:20px;
+  box-shadow:0 1px 2px rgba(15,23,42,.04), 0 20px 40px -16px rgba(15,23,42,.14);
+  padding:2.1rem 2rem;
+}
+.login-card .input-group-text{ background:#fff; color:#94a3b8; }
+.login-card .form-control{ padding-top:.62rem; padding-bottom:.62rem; }
+.login-card .form-control:focus + .toggle-pw,
+.login-card .input-group:focus-within .input-group-text{ border-color:var(--primary); color:var(--primary); }
+.toggle-pw{ background:#fff; color:#94a3b8; cursor:pointer; }
+.toggle-pw:hover{ color:#1e293b; }
+.login-foot{ color:#94a3b8; font-size:.78rem; }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="d-flex align-items-center justify-content-center" style="min-height:85vh">
-  <div style="width:100%; max-width:380px;">
-    <div class="text-center mb-4">
-      <div class="d-inline-flex align-items-center justify-content-center mb-2"
-           style="width:56px;height:56px;border-radius:16px;background:var(--primary-soft);">
-        <i class="bi bi-printer-fill" style="font-size:1.6rem;color:var(--primary);"></i>
+<div class="login-wrap">
+  <div class="text-center mb-4">
+    <div class="d-inline-flex login-badge mb-3">
+      <i class="bi bi-printer-fill"></i>
+    </div>
+    <h4 class="fw-bold mb-1">Poligrafiya tizimi</h4>
+    <div class="text-muted small">Hisobot va buyurtmalar boshqaruvi</div>
+  </div>
+
+  <div class="card login-card">
+    <form method="post">
+      {{ csrf() }}
+      <div class="mb-3">
+        <label class="form-label">Login</label>
+        <div class="input-group">
+          <span class="input-group-text"><i class="bi bi-person"></i></span>
+          <input type="text" name="username" class="form-control" required autofocus
+                 placeholder="masalan: admin" autocomplete="username">
+        </div>
       </div>
-      <h4 class="fw-bold mb-0">Poligrafiya tizimi</h4>
-      <div class="text-muted small">Hisobot va buyurtmalar boshqaruvi</div>
-    </div>
-    <div class="card p-4">
-      <form method="post">
-        {{ csrf() }}
-        <div class="mb-3">
-          <label class="form-label">Login</label>
-          <input type="text" name="username" class="form-control" required autofocus placeholder="masalan: admin">
+      <div class="mb-4">
+        <label class="form-label">Parol</label>
+        <div class="input-group">
+          <span class="input-group-text"><i class="bi bi-lock"></i></span>
+          <input type="password" name="password" id="loginPw" class="form-control" required
+                 placeholder="••••••••" autocomplete="current-password">
+          <span class="input-group-text toggle-pw" id="togglePw" title="Parolni ko'rsatish">
+            <i class="bi bi-eye"></i>
+          </span>
         </div>
-        <div class="mb-4">
-          <label class="form-label">Parol</label>
-          <input type="password" name="password" class="form-control" required placeholder="••••••••">
-        </div>
-        <button type="submit" class="btn btn-primary w-100 py-2">
-          <i class="bi bi-box-arrow-in-right me-1"></i> Kirish
-        </button>
-      </form>
-    </div>
+      </div>
+      <button type="submit" class="btn btn-primary w-100 py-2">
+        <i class="bi bi-box-arrow-in-right me-1"></i> Kirish
+      </button>
+    </form>
+  </div>
+
+  <div class="text-center login-foot mt-4">
+    <i class="bi bi-shield-check me-1"></i>Ma'lumotlaringiz himoyalangan
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const togglePw = document.getElementById('togglePw');
+const pwInput = document.getElementById('loginPw');
+if (togglePw && pwInput) {
+  togglePw.addEventListener('click', () => {
+    const showing = pwInput.type === 'text';
+    pwInput.type = showing ? 'password' : 'text';
+    togglePw.querySelector('i').className = showing ? 'bi bi-eye' : 'bi bi-eye-slash';
+  });
+}
+</script>
 {% endblock %}

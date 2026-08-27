@@ -13,6 +13,10 @@ TASHKENT_TZ = timezone(timedelta(hours=5))
 ZERO = Decimal("0.00")
 MAX_MONEY = Decimal("999999999999.99")
 
+# Ombor miqdori — kg va metr uchun kasr kerak, shuning uchun 3 xona
+QTY_ZERO = Decimal("0.000")
+MAX_QTY = Decimal("99999999.999")
+
 
 # ---------- vaqt ----------
 
@@ -65,6 +69,29 @@ def money_str(value):
     return f"{sign}{grouped}.{frac}"
 
 
+# ---------- ombor miqdori ----------
+
+def to_qty(value, default=QTY_ZERO):
+    """Miqdorni 3 xonali Decimal'ga aylantiradi (0.5 kg, 2.75 metr)."""
+    if value is None:
+        return default
+    if isinstance(value, Decimal):
+        d = value
+    else:
+        try:
+            d = Decimal(str(value))
+        except (InvalidOperation, ValueError, TypeError):
+            return default
+    return d.quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
+
+
+def qty_str(value):
+    """2.000 -> '2', 1.500 -> '1.5' — ortiqcha nollar olib tashlanadi."""
+    d = to_qty(value)
+    text = f"{d:f}".rstrip("0").rstrip(".")
+    return text or "0"
+
+
 # ---------- kiritilgan ma'lumotni xavfsiz o'qish ----------
 
 class ValidationError(Exception):
@@ -86,6 +113,27 @@ def parse_money(raw, field, required=True, min_value=ZERO, max_value=MAX_MONEY):
     d = d.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     if d < min_value:
         raise ValidationError(f"{field}: {money_str(min_value)} dan kichik bo'lishi mumkin emas.")
+    if d > max_value:
+        raise ValidationError(f"{field}: juda katta qiymat.")
+    return d
+
+
+def parse_qty(raw, field, required=True, min_value=QTY_ZERO, max_value=MAX_QTY):
+    """Ombor miqdorini o'qiydi — kasr son bo'lishi mumkin (0.5 kg)."""
+    raw = (raw or "").strip().replace(" ", "").replace(",", ".")
+    if not raw:
+        if required:
+            raise ValidationError(f"{field}: qiymat kiritilmagan.")
+        return QTY_ZERO
+    try:
+        d = Decimal(raw)
+    except (InvalidOperation, ValueError):
+        raise ValidationError(f"{field}: faqat raqam kiriting.")
+    if not d.is_finite():
+        raise ValidationError(f"{field}: noto'g'ri qiymat.")
+    d = d.quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
+    if d < min_value:
+        raise ValidationError(f"{field}: {qty_str(min_value)} dan kichik bo'lishi mumkin emas.")
     if d > max_value:
         raise ValidationError(f"{field}: juda katta qiymat.")
     return d

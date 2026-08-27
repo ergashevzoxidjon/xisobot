@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h3>{{ supplier.name }}</h3>
+    <div class="subtitle">
+      {% if supplier.phone %}<i class="bi bi-telephone"></i> {{ supplier.phone }}{% endif %}
+      {% if supplier.address %}
+        {% if supplier.phone %} · {% endif %}
+        {% if supplier.address.startswith('http') %}
+        <a href="{{ supplier.address }}" target="_blank" rel="noopener"><i class="bi bi-geo-alt"></i> Xaritada ko'rish</a>
+        {% else %}
+        <i class="bi bi-geo-alt"></i> {{ supplier.address }}
+        {% endif %}
+      {% endif %}
+    </div>
+  </div>
+  {% if has_perm('suppliers.manage') %}
+  <a href="{{ url_for('suppliers.edit_supplier', supplier_id=supplier.id) }}" class="btn btn-outline-secondary">
+    <i class="bi bi-pencil"></i> Tahrirlash</a>
+  {% endif %}
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-sm-6 col-lg-3">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon blue"><i class="bi bi-box-seam"></i></div>
+      <div><div class="stat-label">Xaridlar</div><div class="stat-value">{{ supplier.purchase_count }}</div></div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon slate"><i class="bi bi-cart-check"></i></div>
+      <div><div class="stat-label">Jami xarid summasi</div><div class="stat-value num">{{ supplier.total_purchased|uzs }}</div></div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon green"><i class="bi bi-cash-coin"></i></div>
+      <div><div class="stat-label">Qarzga to'langan</div><div class="stat-value text-success num">{{ supplier.total_paid|uzs }}</div></div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon {% if supplier.debt > 0 %}red{% else %}green{% endif %}"><i class="bi bi-wallet2"></i></div>
+      <div>
+        {% if supplier.credit > 0 %}
+        <div class="stat-label">Ortiqcha to'langan</div>
+        <div class="stat-value num text-success">{{ supplier.credit|uzs }}</div>
+        {% else %}
+        <div class="stat-label">Qarzimiz</div>
+        <div class="stat-value num {% if supplier.debt > 0 %}text-danger{% else %}text-success{% endif %}">{{ supplier.debt|uzs }}</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-6">
+    {% if has_perm('suppliers.manage') %}
+    <div class="card p-4 no-print">
+      <h6 class="fw-bold mb-3"><i class="bi bi-cash-coin me-1 text-muted"></i> To'lov qilish</h6>
+      <form method="post" action="{{ url_for('suppliers.pay_supplier', supplier_id=supplier.id) }}">
+        {{ csrf() }}
+        <div class="row g-2">
+          <div class="col-sm-5">
+            <input type="number" step="0.01" min="0.01" name="amount" class="form-control" placeholder="Summa" required>
+          </div>
+          <div class="col-sm-4">
+            <input type="date" name="paid_on" class="form-control" value="{{ today().isoformat() }}" max="{{ today().isoformat() }}">
+          </div>
+          <div class="col-sm-3">
+            <button class="btn btn-success w-100"><i class="bi bi-plus-lg"></i> Qo'shish</button>
+          </div>
+          <div class="col-12">
+            <input type="text" name="note" class="form-control" placeholder="Izoh (ixtiyoriy)">
+          </div>
+        </div>
+        <div class="form-text mt-2">
+          {% if supplier.debt > 0 %}
+            Qarzimiz: {{ supplier.debt|uzs }} so'm.
+          {% elif supplier.credit > 0 %}
+            Qarzimiz yo'q, ustiga {{ supplier.credit|uzs }} so'm ortiqcha to'langan.
+          {% else %}
+            Qarzimiz yo'q.
+          {% endif %}
+        </div>
+      </form>
+    </div>
+    {% endif %}
+
+    <div class="card p-4 {% if has_perm('suppliers.manage') %}mt-3{% endif %}">
+      <h6 class="fw-bold mb-3"><i class="bi bi-list-check me-1 text-muted"></i> To'lovlar tarixi</h6>
+      {% if payments %}
+      <table class="table table-sm">
+        <thead><tr><th>Sana</th><th class="text-end">Summa</th><th>Izoh</th><th></th></tr></thead>
+        <tbody>
+        {% for p in payments %}
+        <tr>
+          <td class="num">{{ p.paid_on|date_uz }}</td>
+          <td class="text-end num fw-semibold text-success">{{ p.amount|uzs }}</td>
+          <td class="small text-muted">
+            {{ p.note or '-' }}
+            {% if p.creator %}<br><span class="text-muted" style="font-size:.75rem">{{ p.creator.display_name }}</span>{% endif %}
+          </td>
+          <td class="text-end no-print">
+            {% if has_perm('suppliers.manage') %}
+            <form method="post" action="{{ url_for('suppliers.delete_payment', payment_id=p.id) }}"
+                  onsubmit="return confirm('To\'lov yozuvi o\'chirilsinmi?')">
+              {{ csrf() }}
+              <button class="btn btn-sm btn-link text-danger p-0" title="O'chirish"><i class="bi bi-trash"></i></button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="empty-state py-4"><i class="bi bi-cash-coin"></i><p>Hali to'lov qilinmagan</p></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card p-4">
+      <h6 class="fw-bold mb-3"><i class="bi bi-clock-history me-1 text-muted"></i> Xaridlar tarixi</h6>
+      {% if purchases %}
+      <div class="table-responsive">
+      <table class="table table-sm">
+        <thead><tr><th>Sana</th><th>Mahsulot</th><th class="text-end">Summa</th><th>Holat</th></tr></thead>
+        <tbody>
+        {% for e in purchases %}
+        <tr>
+          <td class="num">{{ e.date|date_uz }}</td>
+          <td class="small">{{ e.description or '-' }}</td>
+          <td class="text-end num fw-semibold">{{ e.amount|uzs }}</td>
+          <td>
+            {% if e.is_paid %}
+            <span class="badge bg-success">to'landi</span>
+            {% else %}
+            <span class="badge bg-warning text-dark">qarzga</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      {% else %}
+      <div class="empty-state py-4"><i class="bi bi-box-seam"></i><p>Bu taminotchidan hali xarid qilinmagan</p></div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

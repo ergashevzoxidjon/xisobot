@@ -12,14 +12,16 @@ from sqlalchemy.orm import joinedload, selectinload
 
 from extensions import db
 from models import (
-    Expense, Order, OrderItem, Payment, Client, log_action,
-    EXPENSE_CATEGORIES, STATUS_CANCELLED, ZERO,
+    Expense, Order, OrderItem, Payment, Client, Material, StockMove, log_action,
+    EXPENSE_CATEGORIES, GENERAL_EXPENSE_CATEGORIES, EXPENSE_ORDER_CATEGORY,
+    STATUS_CANCELLED, STOCK_OUT, ZERO, PAYMENT_TRANSFER,
 )
 from permissions import permission_required
-from queries import top_debtors, eager_orders
+from queries import top_debtors, eager_orders, materials_with_stock
+from stock import consume, shortage
 from utils import (
     ValidationError, parse_money, parse_date, parse_text, parse_choice, parse_int,
-    to_money, today_local, month_bounds, money_str,
+    parse_qty, to_money, today_local, month_bounds, money_str, qty_str, QTY_ZERO,
 )
 
 finance_bp = Blueprint("finance", __name__, url_prefix="/moliya")
@@ -76,29 +78,7 @@ def year_rows(year):
 
 # ---------- xarajatlar ----------
 
-# Xarajatni bog'lash uchun ro'yxatda ko'rsatiladigan buyurtmalar soni
-ORDER_CHOICE_LIMIT = 300
-
-
-def order_choices(include_id=None):
-    """Xarajat formasida tanlash uchun buyurtmalar ro'yxati.
-
-    Yaqinda yaratilganlari ko'rsatiladi. Tahrirlanayotgan xarajat eski
-    buyurtmaga bog'langan bo'lsa, o'sha buyurtma ham ro'yxatga qo'shiladi.
-    """
-    query = (
-        Order.query.options(joinedload(Order.client))
-        .filter(Order.is_deleted.is_(False))
-        .order_by(Order.created_at.desc())
-        .limit(ORDER_CHOICE_LIMIT)
-    )
-    orders = query.all()
-
-    if include_id and all(o.id != include_id for o in orders):
-        extra = Order.query.options(joinedload(Order.client)).get(include_id)
-        if extra:
-            orders.insert(0, extra)
-    return orders
+MAX_EXPENSE_ROWS = 30
 
 
 def parse_expense_order(form):
@@ -110,7 +90,108 @@ def parse_expense_order(form):
     order = db.session.get(Order, order_id)
     if not order or order.is_deleted:
         raise ValidationError("Buyurtma: tanlangan buyurtma topilmadi.")
-    return order.id
+    return order
+
+
+def expense_rows_from_form(form, require_material=False):
+    """Formadagi xarajat qatorlarini o'qiydi: mahsulot, soni, narxi.
+
+    Jami avtomatik hisoblanadi (soni × narxi). Qator ombordagi mahsulotga
+    tegishli bo'lsa `material` to'ladi — bunday qator yangi xarajat emas,
+    ombordan chiqim sifatida yoziladi (puli kirimda allaqachon yozilgan).
+
+    `require_material=True` bo'lsa (buyurtma xarajati) ombordan tanlanmagan
+    qator qabul qilinmaydi — avval mahsulot omborga kirim qilinishi kerak.
+    """
+    material_ids = form.getlist("expense_material")
+    descriptions = form.getlist("expense_description")
+    quantities = form.getlist("expense_quantity")
+    prices = form.getlist("expense_unit_price")
+
+    count = max(len(material_ids), len(descriptions), len(quantities), len(prices))
+    if count > MAX_EXPENSE_ROWS:
+        raise ValidationError(f"Bir marta {MAX_EXPENSE_ROWS} tadan ko'p qator kiritib bo'lmaydi.")
+
+    def cell(values, index):
+        return (values[index] if index < len(values) else "").strip()
+
+    rows = []
+    for index in range(count):
+        raw_id = cell(material_ids, index)
+        description = cell(descriptions, index)
+        qty_text = cell(quantities, index)
+        price_text = cell(prices, index)
+
+        if not raw_id and not description and not qty_text and not price_text:
+            continue
+
+        row = index + 1
+        material = None
+        if raw_id:
+            material = db.session.get(Material, int(raw_id)) if raw_id.isdigit() else None
+            if material is None:
+                raise ValidationError(f"{row}-qator: mahsulot topilmadi.")
+        elif description:
+            # foydalanuvchi ro'yxatdan tanlamay, nomini yozgan bo'lishi mumkin
+            material = Material.query.filter(Material.name.ilike(description)).first()
+
+        if material is None and require_material:
+            raise ValidationError(
+                f"{row}-qator: «{description or '—'}» omborda yo'q. "
+                f"Avval Ombor → Kirim orqali qabul qiling."
+            )
+
+        quantity = parse_qty(qty_text or "1", f"{row}-qator, soni",
+                             min_value=Decimal("0.001"))
+        unit_price = parse_money(price_text, f"{row}-qator, narxi",
+                                 min_value=Decimal("0.01"))
+
+        rows.append({
+            "material": material,
+            "description": material.name if material else parse_text(
+                description, f"{row}-qator, nomi", required=True, max_length=255),
+            "quantity": quantity,
+            "unit_price": unit_price,
+            "amount": to_money(quantity * unit_price),
+        })
+
+    if not rows:
+        raise ValidationError("Kamida bitta xarajat qatorini to'ldiring.")
+    return rows
+
+
+def stock_shortages(rows):
+    """Qatorlardagi mahsulotlar bo'yicha yetishmayotgan miqdorlar ro'yxati.
+
+    Bir mahsulot bir necha qatorda kelsa, miqdorlar qo'shib tekshiriladi.
+    Yozuvdan OLDIN chaqiriladi — aks holda yangi chiqimlar qoldiqni buzadi.
+    """
+    needed = {}
+    for data in rows:
+        material = data["material"]
+        if material is not None:
+            needed[material] = needed.get(material, QTY_ZERO) + data["quantity"]
+
+    messages = []
+    for material, qty in needed.items():
+        missing = shortage(material, qty)
+        if missing > QTY_ZERO:
+            messages.append(
+                f"«{material.name}»: omborda {qty_str(material.quantity)} {material.unit} "
+                f"bor, {qty_str(missing)} {material.unit} yetishmadi — qoldiq minusga o'tdi."
+            )
+    return messages
+
+
+def expense_category(form, order):
+    """Buyurtmaga bog'langan xarajat turkumi avtomatik qo'yiladi.
+
+    Foydalanuvchi turkumni faqat umumiy xarajatlar uchun tanlaydi —
+    buyurtma xarajatida bu maydon ko'rinmaydi.
+    """
+    if order is not None:
+        return EXPENSE_ORDER_CATEGORY
+    return parse_choice(form.get("category"), "Turkum", GENERAL_EXPENSE_CATEGORIES)
 
 
 @finance_bp.route("/xarajatlar")
@@ -135,6 +216,19 @@ def expenses_list():
         total_query = total_query.filter(Expense.category == category)
     total_all = to_money(total_query.scalar())
 
+    # Perechisleniye qilingan xaridlar — qaysi tashkilot hisobidan qancha
+    # to'langani (ombor kirimidan kelgan xarajatlar bo'yicha, umumiy —
+    # filtrga qaramay, xuddi taminotchi qarzi kabi doimiy ko'rinadi).
+    transfer_rows = (
+        db.session.query(Expense.paid_via, func.coalesce(func.sum(Expense.amount), 0))
+        .filter(Expense.payment_method == PAYMENT_TRANSFER)
+        .group_by(Expense.paid_via)
+        .order_by(func.sum(Expense.amount).desc())
+        .all()
+    )
+    transfer_totals = [{"company": c or "Noma'lum", "total": to_money(t)} for c, t in transfer_rows]
+    transfer_total_all = sum((row["total"] for row in transfer_totals), ZERO)
+
     return render_template(
         "finance/expenses.html",
         expenses=pagination.items,
@@ -142,6 +236,8 @@ def expenses_list():
         categories=EXPENSE_CATEGORIES,
         category=category,
         total_all=total_all,
+        transfer_totals=transfer_totals,
+        transfer_total_all=transfer_total_all,
     )
 
 
@@ -150,37 +246,84 @@ def expenses_list():
 @permission_required("expenses.create")
 def new_expense():
     if request.method == "POST":
-        orders = order_choices()
+        order = None
         try:
-            category = parse_choice(request.form.get("category"), "Turkum", EXPENSE_CATEGORIES)
-            amount = parse_money(request.form.get("amount"), "Summa", min_value=Decimal("0.01"))
+            order = parse_expense_order(request.form)
+            category = expense_category(request.form, order)
+            # Buyurtma xarajatida mahsulot faqat ombordan olinadi
+            rows = expense_rows_from_form(request.form, require_material=order is not None)
             exp_date = parse_date(request.form.get("date"), "Sana", required=False) or today_local()
-            description = parse_text(request.form.get("description"), "Izoh", required=False, max_length=255)
-            order_id = parse_expense_order(request.form)
         except ValidationError as e:
             flash(str(e), "danger")
-            return render_template("finance/expense_form.html", categories=EXPENSE_CATEGORIES,
-                                   orders=orders, expense=None, form=request.form)
+            return _expense_page(selected_order=order, expense=None, form=request.form)
 
         if exp_date > today_local():
             flash("Xarajat sanasi kelajakda bo'lishi mumkin emas.", "danger")
-            return render_template("finance/expense_form.html", categories=EXPENSE_CATEGORIES,
-                                   orders=orders, expense=None, form=request.form)
+            return _expense_page(selected_order=order, expense=None, form=request.form)
 
-        e = Expense(category=category, amount=amount, description=description,
-                    date=exp_date, order_id=order_id, created_by=current_user.id)
-        db.session.add(e)
-        db.session.flush()
-        log_action(current_user, "create", "expense", e.id, f"{category} — {amount}")
+        # yozuvdan oldin: qoldiq yetadimi
+        warnings = stock_shortages(rows)
+
+        total = ZERO
+        from_stock = 0
+        direct = 0
+        for data in rows:
+            if data["material"] is not None:
+                # ombordan chiqim — puli kirimda yozilgan, yangi xarajat yo'q
+                consume(data["material"], data["quantity"], data["unit_price"],
+                        order, exp_date)
+                from_stock += 1
+            else:
+                e = Expense(category=category, amount=data["amount"],
+                            description=data["description"], date=exp_date,
+                            order_id=order.id if order else None,
+                            created_by=current_user.id)
+                db.session.add(e)
+                db.session.flush()
+                log_action(current_user, "create", "expense", e.id,
+                           f"{category} — {data['amount']}"
+                           + (f" ({order.order_number})" if order else ""))
+                direct += 1
+            total += data["amount"]
+
         db.session.commit()
-        flash("Xarajat qo'shildi.", "success")
+        for message in warnings:
+            flash(message, "warning")
+
+        parts = []
+        if from_stock:
+            parts.append(f"{from_stock} ta mahsulot ombordan sarflandi")
+        if direct:
+            parts.append(f"{direct} ta xarajat yozildi")
+        summary = ", ".join(parts) + f" — jami {money_str(total)} so'm."
+
+        if order:
+            flash(f"{order.order_number}: {summary}", "success")
+            return redirect(url_for("orders.order_detail", order_id=order.id))
+        flash(summary[0].upper() + summary[1:], "success")
+        if from_stock and not direct:
+            return redirect(url_for("stock.list_materials"))
         return redirect(url_for("finance.expenses_list"))
 
     # Buyurtma sahifasidagi "Xarajat qo'shish" tugmasi o'sha buyurtmani tanlab beradi
-    preselected = request.args.get("order_id", type=int)
-    return render_template("finance/expense_form.html", categories=EXPENSE_CATEGORIES,
-                           orders=order_choices(preselected), expense=None,
-                           form={"order_id": preselected} if preselected else None)
+    preselected_id = request.args.get("order_id", type=int)
+    selected_order = None
+    if preselected_id:
+        selected_order = (
+            Order.query.options(joinedload(Order.client), selectinload(Order.items))
+            .get(preselected_id)
+        )
+    return _expense_page(selected_order=selected_order, expense=None, form=None)
+
+
+def _expense_page(selected_order, expense, form):
+    """Xarajat formasi — ombordagi mahsulotlar ro'yxati bilan."""
+    return render_template(
+        "finance/expense_form.html",
+        categories=GENERAL_EXPENSE_CATEGORIES,
+        materials=materials_with_stock(only_active=True),
+        selected_order=selected_order, expense=expense, form=form,
+    )
 
 
 @finance_bp.route("/xarajatlar/<int:expense_id>/tahrirlash", methods=["GET", "POST"])
@@ -188,27 +331,33 @@ def new_expense():
 @permission_required("expenses.create")
 def edit_expense(expense_id):
     e = Expense.query.get_or_404(expense_id)
-    orders = order_choices(e.order_id)
 
     if request.method == "POST":
         try:
-            e.category = parse_choice(request.form.get("category"), "Turkum", EXPENSE_CATEGORIES)
-            e.amount = parse_money(request.form.get("amount"), "Summa", min_value=Decimal("0.01"))
-            e.date = parse_date(request.form.get("date"), "Sana", required=False) or e.date
-            e.description = parse_text(request.form.get("description"), "Izoh", required=False, max_length=255)
-            e.order_id = parse_expense_order(request.form)
+            order = parse_expense_order(request.form)
+            category = expense_category(request.form, order)
+            rows = expense_rows_from_form(request.form)
+            exp_date = parse_date(request.form.get("date"), "Sana", required=False) or e.date
         except ValidationError as err:
             db.session.rollback()
             flash(str(err), "danger")
-            return render_template("finance/expense_form.html", categories=EXPENSE_CATEGORIES,
-                                   orders=orders, expense=e, form=request.form)
+            return _expense_page(selected_order=e.order, expense=e, form=request.form)
+
+        # Tahrirlashda bitta yozuv o'zgaradi — birinchi qator hisobga olinadi
+        e.order_id = order.id if order else None
+        e.category = category
+        e.amount = rows[0]["amount"]
+        e.description = rows[0]["description"]
+        e.date = exp_date
+
         log_action(current_user, "update", "expense", e.id, f"{e.category} — {e.amount}")
         db.session.commit()
         flash("Xarajat yangilandi.", "success")
+        if e.order_id:
+            return redirect(url_for("orders.order_detail", order_id=e.order_id))
         return redirect(url_for("finance.expenses_list"))
 
-    return render_template("finance/expense_form.html", categories=EXPENSE_CATEGORIES,
-                           orders=orders, expense=e, form=None)
+    return _expense_page(selected_order=e.order, expense=e, form=None)
 
 
 # ---------- moliyaviy hisobot ----------
@@ -226,23 +375,127 @@ def report():
     total_expense = sum((m["expense"] for m in months), ZERO)
     total_profit = total_income - total_expense
 
-    # turkum bo'yicha xarajat taqsimoti
     start, end = date_range_for_year(year)
-    by_category = (
-        db.session.query(Expense.category, func.coalesce(func.sum(Expense.amount), 0))
-        .filter(Expense.date >= start, Expense.date < end)
-        .group_by(Expense.category)
-        .order_by(func.sum(Expense.amount).desc())
-        .all()
-    )
-    category_rows = [{"name": c, "amount": to_money(a)} for c, a in by_category]
 
     return render_template(
         "finance/report.html",
         months=months, year=year,
         total_income=total_income, total_expense=total_expense, total_profit=total_profit,
-        category_rows=category_rows,
+        **expense_breakdown(start, end),
     )
+
+
+def expense_breakdown(start, end):
+    """Xarajatning uch kesimi: turkum, buyurtma va mahsulot turi.
+
+    Ilgari alohida "Xarajat tahlili" sahifasi bo'lgan — moliyaviy hisobot
+    bilan bir xil ishni qilgani uchun (2026-08-26) shu yerga ko'chirildi.
+    """
+    total = expenses_between(start, end)
+
+    by_category = (
+        db.session.query(
+            Expense.category,
+            func.coalesce(func.sum(Expense.amount), 0),
+            func.count(Expense.id),
+        )
+        .filter(Expense.date >= start, Expense.date < end)
+        .group_by(Expense.category)
+        .order_by(func.sum(Expense.amount).desc())
+        .all()
+    )
+    category_rows = [
+        {"name": name, "amount": to_money(amount), "count": count}
+        for name, amount, count in by_category
+    ]
+
+    # buyurtmaga bog'langan xarajatlar
+    per_order = (
+        db.session.query(Expense.order_id, func.coalesce(func.sum(Expense.amount), 0))
+        .filter(Expense.date >= start, Expense.date < end, Expense.order_id.isnot(None))
+        .group_by(Expense.order_id)
+        .all()
+    )
+    order_expense = {order_id: to_money(amount) for order_id, amount in per_order}
+    linked = sum(order_expense.values(), ZERO)
+    general = total - linked
+
+    # Ombordan sarflangan mahsulotlar. Ularning puli kirim paytida xarajat
+    # sifatida yozilgan, shuning uchun `total` ga QO'SHILMAYDI — faqat
+    # buyurtmaning tannarxiga kiradi.
+    per_order_stock = (
+        db.session.query(
+            StockMove.order_id,
+            func.coalesce(func.sum(StockMove.quantity * StockMove.unit_price), 0),
+        )
+        .filter(StockMove.moved_on >= start, StockMove.moved_on < end,
+                StockMove.kind == STOCK_OUT, StockMove.order_id.isnot(None))
+        .group_by(StockMove.order_id)
+        .all()
+    )
+    stock_used = ZERO
+    for order_id, amount in per_order_stock:
+        amount = to_money(amount)
+        order_expense[order_id] = order_expense.get(order_id, ZERO) + amount
+        stock_used += amount
+
+    orders = []
+    if order_expense:
+        orders = (
+            Order.query.options(joinedload(Order.client), selectinload(Order.items))
+            .filter(Order.id.in_(list(order_expense)))
+            .all()
+        )
+
+    order_rows = []
+    product_totals = {}
+    for o in orders:
+        spent = order_expense.get(o.id, ZERO)
+        revenue = to_money(o.total_price)
+        order_rows.append({
+            "order": o, "spent": spent, "revenue": revenue, "profit": revenue - spent,
+        })
+
+        # Buyurtma xarajatini mahsulot turlari orasida ulushga qarab taqsimlaymiz:
+        # 100 000 so'mlik buyurtmadagi 60 000 so'mlik vizitkaga xarajatning 60% i tegadi.
+        items = o.items
+        if not items:
+            continue
+        items_total = sum((to_money(i.total_price) for i in items), ZERO)
+        for item in items:
+            if items_total > ZERO:
+                share = to_money(spent * to_money(item.total_price) / items_total)
+            else:
+                share = to_money(spent / len(items))
+            row = product_totals.setdefault(
+                item.order_type, {"spent": ZERO, "revenue": ZERO, "count": 0}
+            )
+            row["spent"] += share
+            row["revenue"] += to_money(item.total_price)
+            row["count"] += 1
+
+    order_rows.sort(key=lambda r: r["spent"], reverse=True)
+
+    product_rows = [
+        {
+            "name": name,
+            "spent": values["spent"],
+            "revenue": values["revenue"],
+            "profit": values["revenue"] - values["spent"],
+            "count": values["count"],
+        }
+        for name, values in product_totals.items()
+    ]
+    product_rows.sort(key=lambda r: r["spent"], reverse=True)
+
+    return {
+        "category_rows": category_rows,
+        "linked": linked,
+        "general": general,
+        "stock_used": stock_used,
+        "order_rows": order_rows[:20],
+        "product_rows": product_rows,
+    }
 
 
 def date_range_for_year(year):
@@ -318,105 +571,6 @@ def analytics():
         total_orders=total_orders, cancelled=cancelled, cancel_rate=cancel_rate,
         avg_order=avg_order, revenue_sum=revenue_sum,
         debtors=debtors,
-    )
-
-
-# ---------- xarajat tahlili ----------
-
-@finance_bp.route("/xarajat-tahlili")
-@login_required
-@permission_required("expenses.analytics")
-def expense_analytics():
-    """Xarajatlar qayerga ketayotganini ko'rsatadi: turkum, buyurtma va mahsulot kesimida."""
-    year = request.args.get("year", today_local().year, type=int)
-    if year < 2000 or year > 2100:
-        year = today_local().year
-    start, end = date_range_for_year(year)
-
-    total = expenses_between(start, end)
-
-    by_category = (
-        db.session.query(
-            Expense.category,
-            func.coalesce(func.sum(Expense.amount), 0),
-            func.count(Expense.id),
-        )
-        .filter(Expense.date >= start, Expense.date < end)
-        .group_by(Expense.category)
-        .order_by(func.sum(Expense.amount).desc())
-        .all()
-    )
-    category_rows = [
-        {"name": name, "amount": to_money(amount), "count": count}
-        for name, amount, count in by_category
-    ]
-
-    # buyurtmaga bog'langan xarajatlar
-    per_order = (
-        db.session.query(Expense.order_id, func.coalesce(func.sum(Expense.amount), 0))
-        .filter(Expense.date >= start, Expense.date < end, Expense.order_id.isnot(None))
-        .group_by(Expense.order_id)
-        .all()
-    )
-    order_expense = {order_id: to_money(amount) for order_id, amount in per_order}
-    linked = sum(order_expense.values(), ZERO)
-    general = total - linked
-
-    orders = []
-    if order_expense:
-        orders = (
-            Order.query.options(joinedload(Order.client), selectinload(Order.items))
-            .filter(Order.id.in_(list(order_expense)))
-            .all()
-        )
-
-    order_rows = []
-    product_totals = {}
-    for o in orders:
-        spent = order_expense.get(o.id, ZERO)
-        revenue = to_money(o.total_price)
-        order_rows.append({
-            "order": o, "spent": spent, "revenue": revenue, "profit": revenue - spent,
-        })
-
-        # Buyurtma xarajatini mahsulot turlari orasida ulushga qarab taqsimlaymiz:
-        # 100 000 so'mlik buyurtmadagi 60 000 so'mlik vizitkaga xarajatning 60% i tegadi.
-        items = o.items
-        if not items:
-            continue
-        items_total = sum((to_money(i.total_price) for i in items), ZERO)
-        for item in items:
-            if items_total > ZERO:
-                share = to_money(spent * to_money(item.total_price) / items_total)
-            else:
-                share = to_money(spent / len(items))
-            row = product_totals.setdefault(
-                item.order_type, {"spent": ZERO, "revenue": ZERO, "count": 0}
-            )
-            row["spent"] += share
-            row["revenue"] += to_money(item.total_price)
-            row["count"] += 1
-
-    order_rows.sort(key=lambda r: r["spent"], reverse=True)
-
-    product_rows = [
-        {
-            "name": name,
-            "spent": values["spent"],
-            "revenue": values["revenue"],
-            "profit": values["revenue"] - values["spent"],
-            "count": values["count"],
-        }
-        for name, values in product_totals.items()
-    ]
-    product_rows.sort(key=lambda r: r["spent"], reverse=True)
-
-    return render_template(
-        "finance/expense_analytics.html",
-        year=year, total=total, linked=linked, general=general,
-        category_rows=category_rows,
-        order_rows=order_rows[:20],
-        product_rows=product_rows,
     )
 
 

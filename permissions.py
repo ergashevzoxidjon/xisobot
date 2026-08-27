@@ -3,9 +3,9 @@ Rolli kirish nazorati (RBAC).
 
 4 ta rol:
 - admin        — barchasini nazorat qiladi
-- menejer      — buyurtma (zakaz) kiritadi va boshqaradi
+- menejer      — buyurtma (zakaz) kiritadi va boshqaradi, moliyani ko'rmaydi
 - xarajatchi   — faqat xarajat kiritadi (ish boshqaruvchi)
-- buxgalter    — barcha hisobotlarni faqat ko'radi (tahrirlay olmaydi)
+- boss         — rahbar, faqat KO'RADI: hisobot, tahlil, eksport (o'zgartirmaydi)
 
 Himoya ikki qatlamli: shablonda menyu/tugma yashiriladi (has_perm) va
 route darajasida bloklanadi (permission_required).
@@ -20,20 +20,22 @@ ROLE_LABELS = {
     "admin": "Administrator",
     "menejer": "Menejer",
     "xarajatchi": "Ish boshqaruvchi",
-    "buxgalter": "Buxgalter",
+    "boss": "Boss",
 }
 
 ROLE_DESCRIPTIONS = {
     "admin": "Barcha bo'limlar va foydalanuvchilar boshqaruvi",
     "menejer": "Buyurtma va mijozlar bilan ishlaydi",
     "xarajatchi": "Xarajatlarni kiritadi",
-    "buxgalter": "Barcha hisobotlarni ko'radi (o'zgartira olmaydi)",
+    "boss": "Rahbar — barcha hisobot va tahlillarni ko'radi (o'zgartirmaydi)",
 }
 
 PERMISSIONS = {
     "orders.view", "orders.create", "orders.edit", "orders.manage", "orders.delete",
     "clients.view", "clients.create", "clients.delete",
-    "expenses.view", "expenses.create", "expenses.analytics",
+    "expenses.view", "expenses.create",
+    "stock.view", "stock.manage",
+    "suppliers.view", "suppliers.manage",
     "reports.view", "reports.export",
     "users.manage",
     "settings.manage",
@@ -41,15 +43,22 @@ PERMISSIONS = {
 
 ROLE_PERMISSIONS = {
     "admin": set(PERMISSIONS),
-    # Menejer o'zi olgan buyurtmalarning xarajatini ham kiritadi
+    # Menejer moliya bilan ishlamaydi — faqat buyurtma va mijoz.
+    # Xarajat, foyda va hisobotlar unga ko'rinmaydi.
     "menejer": {
         "orders.view", "orders.create", "orders.edit", "orders.manage",
         "clients.view", "clients.create",
-        "expenses.view", "expenses.create",
     },
-    "xarajatchi": {"expenses.view", "expenses.create", "expenses.analytics", "orders.view"},
-    "buxgalter": {
-        "orders.view", "clients.view", "expenses.view", "expenses.analytics",
+    # Ish boshqaruvchi omborni yuritadi: mahsulot qabul qiladi va sarflaydi,
+    # taminotchilar bilan ishlaydi (qarz-to'lov)
+    "xarajatchi": {"expenses.view", "expenses.create", "orders.view",
+                   "stock.view", "stock.manage",
+                   "suppliers.view", "suppliers.manage"},
+    # Boss — korxona rahbari. Hamma narsani KO'RADI, hech narsani
+    # o'zgartirmaydi: buyurtma, mijoz, ombor va sozlamalarga tegmaydi.
+    "boss": {
+        "orders.view", "clients.view", "stock.view",
+        "expenses.view", "suppliers.view",
         "reports.view", "reports.export",
     },
 }
@@ -57,7 +66,7 @@ ROLE_PERMISSIONS = {
 # rol uchun kirishdan keyingi asosiy sahifa
 ROLE_HOME_ENDPOINT = {
     "admin": "main.dashboard",
-    "buxgalter": "main.dashboard",
+    "boss": "main.dashboard",
     "menejer": "orders.list_orders",
     "xarajatchi": "finance.expenses_list",
 }

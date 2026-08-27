@@ -4,29 +4,61 @@
 <div class="page-header">
   <div>
     <h3>{{ 'Mijozni tahrirlash' if client else 'Yangi mijoz' }}</h3>
-    <div class="subtitle">Mijoz ma'lumotlarini kiriting</div>
+    <div class="subtitle">
+      {% if client %}{{ client.name }}
+      {% else %}Faqat nomi majburiy — qolganini keyin ham to'ldirsangiz bo'ladi{% endif %}
+    </div>
   </div>
 </div>
-<div class="card p-4" style="max-width:520px">
+
+<div class="card p-4" style="max-width:640px">
 <form method="post">
   {{ csrf() }}
-  <div class="mb-3">
+
+  <div class="form-step">
+    <div class="form-step-head">
+      <span class="step-num"><i class="bi bi-person"></i></span>
+      <div>
+        <h6>Kim</h6>
+        <div class="hint">Ism yoki tashkilot nomi — buyurtmalarda shu ko'rinadi</div>
+      </div>
+    </div>
     <label class="form-label">Ism / Tashkilot nomi</label>
-    <input class="form-control" name="name" value="{{ src.name if src else '' }}" required autofocus maxlength="150">
+    <input class="form-control form-control-lg" name="name" value="{{ src.name if src else '' }}"
+           required autofocus maxlength="150" placeholder="Andijon Poligraf MChJ">
   </div>
-  <div class="mb-3">
-    <label class="form-label">Telefon</label>
-    <input class="form-control" name="phone" value="{{ src.phone if src else '' }}" placeholder="+998 90 123 45 67" maxlength="50">
+
+  <div class="form-step">
+    <div class="form-step-head">
+      <span class="step-num"><i class="bi bi-telephone"></i></span>
+      <div>
+        <h6>Aloqa</h6>
+        <div class="hint">Ixtiyoriy, lekin qarzdorlik chiqqanda qo'l keladi</div>
+      </div>
+    </div>
+    <div class="row g-3">
+      <div class="col-sm-6">
+        <label class="form-label">Telefon</label>
+        <div class="input-group">
+          <span class="input-group-text bg-white border-end-0"><i class="bi bi-telephone text-muted"></i></span>
+          <input class="form-control border-start-0" name="phone" inputmode="tel"
+                 value="{{ src.phone if src else '' }}" placeholder="+998 90 123 45 67" maxlength="50">
+        </div>
+      </div>
+      <div class="col-sm-6">
+        <label class="form-label">Manzil</label>
+        <input class="form-control" name="address" value="{{ src.address if src else '' }}"
+               maxlength="255" placeholder="Shahar, ko'cha">
+      </div>
+      <div class="col-12">
+        <label class="form-label">Izoh</label>
+        <textarea class="form-control" name="notes" rows="2"
+                  placeholder="Doimiy mijoz, chegirma, to'lov sharti...">{{ src.notes if src else '' }}</textarea>
+      </div>
+    </div>
   </div>
-  <div class="mb-3">
-    <label class="form-label">Manzil</label>
-    <input class="form-control" name="address" value="{{ src.address if src else '' }}" maxlength="255">
-  </div>
-  <div class="mb-4">
-    <label class="form-label">Izoh</label>
-    <textarea class="form-control" name="notes" rows="3">{{ src.notes if src else '' }}</textarea>
-  </div>
-  <div class="d-flex gap-2">
+
+  <div class="sticky-actions">
     <button class="btn btn-primary"><i class="bi bi-check-lg"></i> Saqlash</button>
     <a href="{{ url_for('clients.client_detail', client_id=client.id) if client else url_for('clients.list_clients') }}"
        class="btn btn-outline-secondary">Bekor qilish</a>

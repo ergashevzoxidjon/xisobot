@@ -49,9 +49,9 @@ python seed_demo.py     # DIQQAT: real bazada ishlatmang
 | Rol | Nima qila oladi |
 |---|---|
 | **Admin** | Barchasi + foydalanuvchilar, sozlamalar, jurnal, o'chirish |
-| **Menejer** | Buyurtma yaratish/tahrirlash, to'lov, mijozlar, fayl biriktirish, **o'z buyurtmalari xarajatini kiritish** |
-| **Ish boshqaruvchi** | Xarajat kiritish, buyurtmalarni ko'rish, **xarajat tahlili** |
-| **Buxgalter** | Hisobotlarni ko'rish + Excel eksport + xarajat tahlili (o'zgartira olmaydi) |
+| **Boss** | Korxona rahbari — hamma narsani **faqat ko'radi**: hisobot, tahlil, Excel. Hech narsani o'zgartirmaydi |
+| **Menejer** | Buyurtma yaratish/tahrirlash, to'lov, mijozlar, fayl biriktirish. **Moliya bo'limi ko'rinmaydi** — xarajat ham, foyda ham |
+| **Ish boshqaruvchi** | **Ombor** (mahsulot qabul qilish va sarflash), **taminotchilar** (qarz-to'lov), xarajat kiritish, buyurtmalarni ko'rish |
 
 Himoya ikki qatlamli: menyuda ko'rinmaydi **va** server tomonida bloklanadi.
 
@@ -65,15 +65,17 @@ Himoya ikki qatlamli: menyuda ko'rinmaydi **va** server tomonida bloklanadi.
 
 **Tezkor tanlash** — buyurtma turlari tugmalar ko'rinishida. Bosilganda tanlangan qatorga tur va standart narx qo'yiladi.
 
-**To'lovlar** — har biri alohida yoziladi. Tushum **to'lov sanasi** bo'yicha hisoblanadi. Qolgan qarzdan ortiq to'lov qabul qilinmaydi.
+**To'lovlar** — har biri alohida yoziladi. Tushum **to'lov sanasi** bo'yicha hisoblanadi. Mijoz qarzidan ko'p to'lasa qabul qilinadi: ortiqchasi **avans (zapas)** bo'lib qoladi va buyurtmada, mijoz kartasida hamda hisob-fakturada yashil rangda ko'rsatiladi. Kiritilganda ogohlantirish chiqadi.
 
 **Mijozlar** — batafsil sahifa: buyurtmalar tarixi, jami summa, to'langan, qarzdorlik.
 
-**Xarajatlar** — 8 turkum, tahrirlash, filtr, kim kiritgani. Har bir xarajat **aniq buyurtmaga bog'lanishi** mumkin (qog'oz, bo'yoq, pechat) yoki umumiy bo'lib qolishi mumkin (ijara, ish haqi). Buyurtma sahifasida uning xarajati va haqiqiy foydasi ko'rinadi.
+**Ombor** — qog'oz, bo'yoq, plyonka va boshqa mahsulotlar. Har mahsulotning kartochkasi bor: nomi, birligi, eng kam qoldiq. Kirim jadvalining har qatorida mahsulot nomi yozib qidiriladi (avtomatik takliflar bilan); bazada topilmasa, o'sha yerda birligini tanlab, sahifadan chiqmasdan yangi mahsulot ochiladi va kirim bilan birga saqlanadi. **Kirim** — sotib olingan mahsulot omborga qo'shiladi, **kimdan olinganligi (taminotchi)** va **to'lov holati** belgilanadi: naqd, **perechisleniye** (bank o'tkazmasi — qaysi tashkilot hisobidan to'langani ham so'raladi: Marvel Creative MChJ yoki MyPrint MChJ) yoki qarzga. O'sha kuni `xomashyo` turkumidagi xarajat sifatida yoziladi. **Chiqim** — mahsulot buyurtmaga sarflanadi: yangi xarajat yozilmaydi, faqat qoldiq kamayadi va o'sha buyurtmaning tannarxiga qo'shiladi. Shu tufayli bir xil pul ikki marta sanalmaydi. Har bir kirim va chiqim jurnalda saqlanadi: sana, soni, narx, kim qildi, qaysi buyurtmaga.
 
-**Xarajat tahlili** — pul qayerga ketayotgani: turkumlar bo'yicha, eng ko'p xarajat ketgan buyurtmalar (tushum/xarajat/foyda/rentabellik) va mahsulot turlari kesimida. Buyurtma xarajati mahsulotlar orasida summasiga qarab taqsimlanadi. Admin, ish boshqaruvchi va buxgalter ko'radi.
+**Taminotchilar** — ombor kirimi "qarzga olindi" deb belgilansa, summa taminotchi balansiga qo'shiladi. Taminotchi kartochkasida: jami xarid, to'lovlar tarixi, joriy qarz. Qarzni qisman yoki to'liq to'lash mumkin (mijoz to'lovi kabi). Ro'yxatda eng ko'p savdo qilingan taminotchilar ajratib ko'rsatiladi — admin, boss va ish boshqaruvchi ko'radi. **Xarajatlar** sahifasida perechisleniye orqali to'langan summalar tashkilot (Marvel Creative MChJ / MyPrint MChJ) bo'yicha alohida jamlanadi — admin, boss va ish boshqaruvchi ko'radi.
 
-**Moliyaviy hisobot** — oylar kesimida tushum/xarajat/foyda, grafik, turkum taqsimoti, Excel.
+**Xarajatlar** — avval buyurtma tanlanadi (raqam, mijoz yoki mahsulot nomi bo'yicha qidiriladi), so'ng jadvalga qatorlar yoziladi: **mahsulot, soni, narxi va jami** (jami avtomatik hisoblanadi). Buyurtma xarajatida mahsulot faqat **ombordan** olinadi — omborda yo'q narsani yozib bo'lmaydi, avval kirim qilish kerak. Qoldiq yetmasa ish to'xtamaydi, ogohlantirish chiqadi. Umumiy xarajatlarda (ijara, ish haqi, kommunal) turkum tugmalar orqali tanlanadi va matn erkin yoziladi. Buyurtma sahifasida uning xarajati va haqiqiy foydasi ko'rinadi.
+
+**Moliyaviy hisobot** — oylar kesimida tushum/xarajat/foyda (ustunli grafik + foyda chizig'i), xarajat turkumlari halqasi, mahsulot turlari va **har bir buyurtmaning rentabelligi**, Excel. Ilgari alohida "Xarajat tahlili" sahifasi bo'lgan — bir xil ishni qilgani uchun shu yerga birlashtirildi.
 
 **Tahlil** — eng foydali mijozlar, mahsulot turlari, o'rtacha buyurtma, bekor qilish darajasi, qarzdorlar.
 
@@ -178,6 +180,8 @@ ulang, aks holda har deploy'da fayllar yo'qoladi. cPanel'da bu muammo yo'q.
 | `permissions.py` | 4 rol va 14 ruxsat |
 | `orders.py` | Buyurtmalar, to'lovlar, fayllar, hisob-faktura |
 | `finance.py` | Xarajatlar, hisobot, tahlil, Excel |
+| `stock.py` | Ombor: mahsulotlar, kirim va chiqim |
+| `suppliers.py` | Taminotchilar: qarz-to'lov balansi |
 | `clients.py` · `auth.py` · `settings.py` | Mijozlar, kirish, sozlamalar |
 | `telegram_bot.py` · `notifications.py` | Telegram integratsiyasi |
 | `send_daily.py` | Kunlik xulosa (server vazifasi) |

@@ -106,8 +106,13 @@
           <div class="fw-bold text-success num">{{ order.paid_amount_calc|uzs }}</div>
         </div>
         <div class="col-4">
+          {% if order.overpaid > 0 %}
+          <div class="stat-label">Avans (zapas)</div>
+          <div class="fw-bold num text-success">{{ order.overpaid|uzs }}</div>
+          {% else %}
           <div class="stat-label">Qolgan</div>
           <div class="fw-bold num {% if order.remaining > 0 %}text-danger{% endif %}">{{ order.remaining|uzs }}</div>
+          {% endif %}
         </div>
       </div>
     </div>
@@ -136,7 +141,28 @@
         {% endif %}
       </div>
 
+      {% if order.materials_used %}
+      <div class="stat-label mb-1">Ombordan sarflandi</div>
+      <table class="table table-sm mb-3">
+        <tbody>
+          {% for mv in order.materials_used %}
+          <tr>
+            <td>
+              <i class="bi bi-box-seam text-muted me-1"></i>{{ mv.material.name }}
+              <div class="text-muted" style="font-size:.75rem">
+                {{ mv.quantity|qty }} {{ mv.material.unit }} × {{ mv.unit_price|uzs }}
+              </div>
+            </td>
+            <td class="text-muted small num">{{ mv.moved_on|date_uz }}</td>
+            <td class="text-end num fw-semibold text-danger">{{ mv.total|uzs }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+
       {% if order.expenses %}
+      <div class="stat-label mb-1">Boshqa xarajatlar</div>
       <table class="table table-sm mb-3">
         <tbody>
           {% for e in order.expenses %}
@@ -151,7 +177,9 @@
           {% endfor %}
         </tbody>
       </table>
-      {% else %}
+      {% endif %}
+
+      {% if not order.expenses and not order.materials_used %}
       <p class="text-muted small mb-3">Bu buyurtmaga hali xarajat yozilmagan.</p>
       {% endif %}
 
@@ -174,7 +202,7 @@
   </div>
 
   <div class="col-lg-6">
-    {% if has_perm('orders.manage') and order.status != 'bekor qilindi' and order.remaining > 0 %}
+    {% if has_perm('orders.manage') and order.status != 'bekor qilindi' %}
     <div class="card p-4 no-print">
       <h6 class="fw-bold mb-3"><i class="bi bi-cash-coin me-1 text-muted"></i> To'lov qo'shish</h6>
       <form method="post" action="{{ url_for('orders.add_payment', order_id=order.id) }}">
@@ -193,12 +221,21 @@
             <input type="text" name="note" class="form-control" placeholder="Izoh (ixtiyoriy)">
           </div>
         </div>
-        <div class="form-text mt-2">Maksimal: {{ order.remaining|uzs }} so'm</div>
+        <div class="form-text mt-2">
+          {% if order.remaining > 0 %}
+            Qolgan qarz: {{ order.remaining|uzs }} so'm. Ko'proq kiritsangiz,
+            ortiqchasi mijozning avansi bo'lib qoladi.
+          {% elif order.overpaid > 0 %}
+            Buyurtma to'liq to'langan, ustiga {{ order.overpaid|uzs }} so'm avans bor.
+          {% else %}
+            Buyurtma to'liq to'langan. Yangi summa avans sifatida yoziladi.
+          {% endif %}
+        </div>
       </form>
     </div>
     {% endif %}
 
-    <div class="card p-4 {% if has_perm('orders.manage') and order.status != 'bekor qilindi' and order.remaining > 0 %}mt-3{% endif %}">
+    <div class="card p-4 {% if has_perm('orders.manage') and order.status != 'bekor qilindi' %}mt-3{% endif %}">
       <h6 class="fw-bold mb-3"><i class="bi bi-list-check me-1 text-muted"></i> To'lovlar tarixi</h6>
       {% if payments %}
       <table class="table table-sm">

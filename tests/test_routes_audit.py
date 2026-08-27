@@ -12,7 +12,8 @@ import sys
 
 import os
 APP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-ROUTE_FILES = ["auth.py", "main.py", "clients.py", "orders.py", "finance.py", "settings.py"]
+ROUTE_FILES = ["auth.py", "main.py", "clients.py", "orders.py", "finance.py",
+               "stock.py", "suppliers.py", "settings.py"]
 ALL_PY = [f for f in os.listdir(APP) if f.endswith(".py")]
 
 fails = []
@@ -136,8 +137,6 @@ for fname in sorted(ALL_PY):
 # ---------------------------------------------------------- 3. o'lik kod / qoldiqlar
 print("\n=== ESKI KOD QOLDIQLARI ===")
 patterns = {
-    r"\bMaterial\b": "ombor moduli qoldig'i",
-    r"material_transaction": "ombor jadvali qoldig'i",
     r"\.paid_amount\s*\+=": "eski to'lov mantig'i (paid_amount +=)",
     r"debug\s*=\s*True": "qattiq yozilgan debug=True",
     r"datetime\.utcnow": "UTC vaqt (mahalliy vaqt ishlatilishi kerak)",
@@ -265,7 +264,8 @@ checks = [
     ("Payment klassi", r"class Payment\(db\.Model\)", True),
     ("OrderType klassi", r"class OrderType\(db\.Model\)", True),
     ("AuditLog klassi", r"class AuditLog\(db\.Model\)", True),
-    ("Material klassi (bo'lmasligi kerak)", r"class Material\(", False),
+    ("Material klassi (ombor)", r"class Material\(db\.Model\)", True),
+    ("StockMove klassi (ombor harakati)", r"class StockMove\(db\.Model\)", True),
     ("Numeric pul turi", r"MONEY = db\.Numeric\(14, 2\)", True),
     ("Expense.created_by", r"created_by = db\.Column\(db\.Integer, db\.ForeignKey\(\"user\.id\"\)\)", True),
     ("User.is_active_user", r"is_active_user = db\.Column", True),

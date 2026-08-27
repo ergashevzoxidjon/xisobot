@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% set src = form or supplier %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h3>{{ 'Taminotchini tahrirlash' if supplier else 'Yangi taminotchi' }}</h3>
+    <div class="subtitle">
+      {% if supplier %}{{ supplier.name }}
+      {% else %}Faqat nomi majburiy — qolganini keyin ham to'ldirsangiz bo'ladi{% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="card p-4" style="max-width:640px">
+<form method="post">
+  {{ csrf() }}
+
+  <div class="form-step">
+    <div class="form-step-head">
+      <span class="step-num"><i class="bi bi-truck"></i></span>
+      <div>
+        <h6>Kim</h6>
+        <div class="hint">Ombor kirimi formasida shu nom bilan tanlanadi</div>
+      </div>
+    </div>
+    <label class="form-label">Nomi</label>
+    <input class="form-control form-control-lg" name="name" value="{{ src.name if src else '' }}"
+           required autofocus maxlength="150" placeholder="Andijon Qog'oz MChJ">
+  </div>
+
+  <div class="form-step">
+    <div class="form-step-head">
+      <span class="step-num"><i class="bi bi-telephone"></i></span>
+      <div>
+        <h6>Aloqa</h6>
+        <div class="hint">Ixtiyoriy</div>
+      </div>
+    </div>
+    <div class="row g-3">
+      <div class="col-sm-6">
+        <label class="form-label">Telefon</label>
+        <div class="input-group">
+          <span class="input-group-text bg-white border-end-0"><i class="bi bi-telephone text-muted"></i></span>
+          <input class="form-control border-start-0" name="phone" inputmode="tel"
+                 value="{{ src.phone if src else '' }}" placeholder="+998 90 123 45 67" maxlength="50">
+        </div>
+      </div>
+      <div class="col-sm-6">
+        <label class="form-label">Lokatsiya</label>
+        <div class="input-group">
+          <span class="input-group-text bg-white border-end-0"><i class="bi bi-geo-alt text-muted"></i></span>
+          <input class="form-control border-start-0" name="address"
+                 value="{{ src.address if src else '' }}"
+                 maxlength="255" placeholder="Google Maps havolasi yoki manzil">
+          <a href="https://www.google.com/maps" target="_blank" rel="noopener"
+             class="btn btn-outline-secondary" title="Xaritadan joy tanlab, havolani nusxalang">
+            <i class="bi bi-map"></i></a>
+        </div>
+        <div class="form-text">Xaritadagi joyni ulashib, havolasini shu yerga joylashtiring</div>
+      </div>
+    </div>
+
+    {% if supplier %}
+    <div class="form-check form-switch mt-3 mb-0">
+      <input class="form-check-input" type="checkbox" role="switch" name="is_active" value="1"
+             id="isActive" {% if supplier.is_active %}checked{% endif %}>
+      <label class="form-check-label" for="isActive">
+        Faol — ombor kirimi formasida ko'rinadi
+      </label>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="sticky-actions">
+    <button class="btn btn-primary"><i class="bi bi-check-lg"></i> Saqlash</button>
+    <a href="{{ url_for('suppliers.supplier_detail', supplier_id=supplier.id) if supplier else url_for('suppliers.list_suppliers') }}"
+       class="btn btn-outline-secondary">Bekor qilish</a>
+  </div>
+</form>
+</div>
+{% endblock %}

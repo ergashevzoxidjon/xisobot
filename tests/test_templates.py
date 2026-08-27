@@ -17,14 +17,15 @@ sys.path.insert(0, APP)
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from template_helpers import (
-    status_color, payment_color, status_icon, category_icon, uzs, date_uz, datetime_uz,
+    status_color, payment_color, status_icon, category_icon, uzs, qty, date_uz, datetime_uz,
 )
 from utils import today_local
 
 fails = []
 
 # ---------------------------------------------------------------- 1. endpointlar
-ROUTE_FILES = ["auth.py", "main.py", "clients.py", "orders.py", "finance.py", "settings.py"]
+ROUTE_FILES = ["auth.py", "main.py", "clients.py", "orders.py", "finance.py",
+               "stock.py", "suppliers.py", "settings.py"]
 endpoints = set()
 for fname in ROUTE_FILES:
     src = open(f"{APP}/{fname}").read()
@@ -86,17 +87,39 @@ if not any("CSRF YO'Q" in f for f in fails):
 ROLE_PERMISSIONS = {
     "admin": {"orders.view", "orders.create", "orders.edit", "orders.manage", "orders.delete",
               "clients.view", "clients.create", "clients.delete",
-              "expenses.view", "expenses.create", "expenses.analytics",
+              "expenses.view", "expenses.create",
+              "stock.view", "stock.manage",
+              "suppliers.view", "suppliers.manage",
               "reports.view", "reports.export", "users.manage", "settings.manage"},
     "menejer": {"orders.view", "orders.create", "orders.edit", "orders.manage",
-                "clients.view", "clients.create",
-                "expenses.view", "expenses.create"},
-    "xarajatchi": {"expenses.view", "expenses.create", "expenses.analytics", "orders.view"},
-    "buxgalter": {"orders.view", "clients.view", "expenses.view", "expenses.analytics",
-                  "reports.view", "reports.export"},
+                "clients.view", "clients.create"},
+    "xarajatchi": {"expenses.view", "expenses.create", "orders.view",
+                   "stock.view", "stock.manage",
+                   "suppliers.view", "suppliers.manage"},
+    "boss": {"orders.view", "clients.view", "stock.view",
+             "expenses.view", "suppliers.view",
+             "reports.view", "reports.export"},
 }
 ROLE_LABELS = {"admin": "Administrator", "menejer": "Menejer",
-               "xarajatchi": "Ish boshqaruvchi", "buxgalter": "Buxgalter"}
+               "xarajatchi": "Ish boshqaruvchi", "boss": "Boss"}
+
+# Yuqoridagi nusxa `permissions.py` bilan bir xilligini tekshiramiz — qo'lda
+# ko'chirilgani uchun ular ajralib qolishi mumkin edi.
+_perm_src = "\n".join(
+    line for line in open(f"{APP}/permissions.py", encoding="utf-8").read().splitlines()
+    if not line.startswith(("from flask", "import flask"))
+)
+_perm_ns = {}
+exec(compile(_perm_src, "permissions.py", "exec"), _perm_ns)
+if _perm_ns["ROLE_PERMISSIONS"] != ROLE_PERMISSIONS:
+    for r in set(_perm_ns["ROLE_PERMISSIONS"]) | set(ROLE_PERMISSIONS):
+        real, copy = _perm_ns["ROLE_PERMISSIONS"].get(r), ROLE_PERMISSIONS.get(r)
+        if real != copy:
+            fails.append(f"ROLE_PERMISSIONS['{r}'] permissions.py bilan mos emas: "
+                         f"permissions.py={real}, test={copy}")
+if _perm_ns["ROLE_LABELS"] != ROLE_LABELS:
+    fails.append(f"ROLE_LABELS mos emas: permissions.py={_perm_ns['ROLE_LABELS']}, "
+                 f"test={ROLE_LABELS}")
 
 
 def fake_url_for(endpoint, **kw):
@@ -145,46 +168,107 @@ item_a = SimpleNamespace(id=1, order_type="Vizitka", description="Yaltiroq lamin
 item_b = SimpleNamespace(id=2, order_type="Buklet", description="",
                          quantity=50, unit_price=Decimal("2000.00"),
                          total_price=Decimal("100000.00"), position=1)
+material = SimpleNamespace(
+    id=1, name="Qog'oz A4 80g", unit="list", quantity=Decimal("240.000"),
+    last_price=Decimal("450.00"), min_qty=Decimal("100.000"), is_active=True,
+    note="Sifatli ofset", stock_value=Decimal("108000.00"), is_low=False,
+)
+move_in = SimpleNamespace(
+    id=1, material=material, kind="kirim", quantity=Decimal("500.000"),
+    unit_price=Decimal("450.00"), moved_on=TODAY, order=None, note="Bozordan",
+    creator=user, total=Decimal("225000.00"), signed_quantity=Decimal("500.000"),
+)
 order_expense = SimpleNamespace(id=2, date=TODAY, category="xomashyo",
                                 amount=Decimal("12000.00"), description="Qog'oz",
                                 creator=user, order_id=1)
+
+supplier = SimpleNamespace(
+    id=1, name="Andijon Qog'oz MChJ", phone="+998901112233", address="Andijon",
+    note="Ofset qog'oz yetkazadi", is_active=True,
+    purchase_count=4, total_purchased=Decimal("620000.00"),
+    total_paid=Decimal("200000.00"), debt=Decimal("420000.00"), credit=Decimal("0.00"),
+)
+supplier_no_debt = SimpleNamespace(
+    id=2, name="Toshkent Plyonka", phone="", address="", note="", is_active=True,
+    purchase_count=1, total_purchased=Decimal("50000.00"),
+    total_paid=Decimal("50000.00"), debt=Decimal("0.00"), credit=Decimal("0.00"),
+)
+supplier_payment = SimpleNamespace(id=1, amount=Decimal("200000.00"), paid_on=TODAY,
+                                   note="Qisman to'lov", creator=user)
+supplier_purchase = SimpleNamespace(id=3, date=TODAY, description="Qog'oz A4 80g — 500 list",
+                                    amount=Decimal("225000.00"), is_paid=False)
 
 order = SimpleNamespace(
     id=1, order_number="B-2026-0001", client=client, client_id=1, order_type="Vizitka",
     description="Test tavsif", quantity=100, unit_price=Decimal("500.00"),
     total_price=Decimal("50000.00"), status="jarayonda", payment_status="qisman",
     paid_amount_calc=Decimal("20000.00"), remaining=Decimal("30000.00"),
+    debt=Decimal("30000.00"), overpaid=Decimal("0.00"),
     deadline=TODAY + timedelta(days=5), created_at=datetime.now(),
     creator=user, payments=[payment], is_overdue=False, days_left=5,
     version=1, is_deleted=False, deleted_at=None, files=[order_file],
     items=[item_a, item_b], items_summary="Vizitka +1 ta",
     expenses=[order_expense], expenses_total=Decimal("12000.00"),
-    profit=Decimal("38000.00"),
+    direct_expenses=Decimal("12000.00"), stock_cost=Decimal("0.00"),
+    materials_used=[], profit=Decimal("38000.00"),
 )
 overdue_order = SimpleNamespace(
     id=2, order_number="B-2026-0002", client=client, client_id=1, order_type="Banner",
     description="", quantity=2, unit_price=Decimal("250000.00"),
     total_price=Decimal("500000.00"), status="yangi", payment_status="to'lanmagan",
     paid_amount_calc=Decimal("0.00"), remaining=Decimal("500000.00"),
+    debt=Decimal("500000.00"), overpaid=Decimal("0.00"),
     deadline=TODAY - timedelta(days=3), created_at=datetime.now(),
     creator=user, payments=[], is_overdue=True, days_left=-3,
     version=1, is_deleted=False, deleted_at=None, files=[],
     items=[], items_summary="Banner",
-    expenses=[], expenses_total=Decimal("0.00"), profit=Decimal("500000.00"),
+    expenses=[], expenses_total=Decimal("0.00"),
+    direct_expenses=Decimal("0.00"), stock_cost=Decimal("0.00"),
+    materials_used=[], profit=Decimal("500000.00"),
 )
+move_out = SimpleNamespace(
+    id=2, material=material, kind="chiqim", quantity=Decimal("260.000"),
+    unit_price=Decimal("450.00"), moved_on=TODAY, order=order, note=None,
+    creator=user, total=Decimal("117000.00"), signed_quantity=Decimal("-260.000"),
+)
+
 expense = SimpleNamespace(id=1, date=TODAY, category="ijara",
                           amount=Decimal("500000.00"), description="Ofis ijarasi",
-                          creator=user, order=None, order_id=None)
+                          creator=user, order=None, order_id=None,
+                          supplier=None, is_paid=True, payment_method=None, paid_via=None)
 linked_expense = SimpleNamespace(id=2, date=TODAY, category="xomashyo",
                                  amount=Decimal("12000.00"), description="Qog'oz",
-                                 creator=user, order=order, order_id=1)
+                                 creator=user, order=order, order_id=1,
+                                 supplier=None, is_paid=True, payment_method=None, paid_via=None)
+transfer_expense = SimpleNamespace(id=3, date=TODAY, category="xomashyo",
+                                   amount=Decimal("300000.00"), description="Ombor kirimi: Bo'yoq",
+                                   creator=user, order=None, order_id=None,
+                                   supplier=SimpleNamespace(id=1, name="Andijon Qog'oz MChJ"),
+                                   is_paid=True, payment_method="perechisleniye",
+                                   paid_via="Marvel Creative MChJ")
+debt_expense = SimpleNamespace(id=4, date=TODAY, category="xomashyo",
+                               amount=Decimal("150000.00"), description="Ombor kirimi: Plyonka",
+                               creator=user, order=None, order_id=None,
+                               supplier=SimpleNamespace(id=2, name="Toshkent Plyonka"),
+                               is_paid=False, payment_method=None, paid_via=None)
 order_type = SimpleNamespace(id=1, name="Vizitka", unit="dona",
                              default_price=Decimal("150.00"), is_active=True)
+UZ_MONTHS = ["Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun",
+             "Iyul", "Avgust", "Sentabr", "Oktabr", "Noyabr", "Dekabr"]
+months_rows = [
+    {"name": name,
+     "income": Decimal("4000000.00"),
+     "expense": Decimal("2583333.33"),
+     "profit": Decimal("1416666.67")}
+    for name in UZ_MONTHS
+]
+
 audit = SimpleNamespace(id=1, created_at=datetime.now(), user=user, action="create",
                         entity="order", entity_id=1, detail="B-2026-0001 yaratildi")
 
 CONTEXTS = {
     "login.html": {},
+    "charts.html": {},
     "dashboard.html": dict(
         total_orders=12, active_orders=4, total_clients=5,
         month_income=Decimal("15000000.00"), month_expenses=Decimal("8000000.00"),
@@ -210,28 +294,46 @@ CONTEXTS = {
     "orders/invoice.html": dict(order=order, today=TODAY, company=company),
     "orders/deleted.html": dict(orders=[order]),
     "finance/expenses.html": dict(
-        expenses=[expense, linked_expense], pagination=FakePagination([expense], 33),
+        expenses=[expense, linked_expense, transfer_expense, debt_expense],
+        pagination=FakePagination([expense], 33),
         categories=["ijara", "ish haqi", "boshqa"], category="",
         total_all=Decimal("25000000.00"),
+        transfer_totals=[{"company": "Marvel Creative MChJ", "total": Decimal("300000.00")},
+                         {"company": "MyPrint MChJ", "total": Decimal("120000.00")}],
+        transfer_total_all=Decimal("420000.00"),
     ),
-    "finance/expense_form.html": dict(categories=["ijara", "boshqa"], orders=[order],
-                                      expense=None, form=None),
-    "finance/expense_analytics.html": dict(
-        year=2026, total=Decimal("1200000.00"), linked=Decimal("800000.00"),
-        general=Decimal("400000.00"),
-        category_rows=[{"name": "xomashyo", "amount": Decimal("800000.00"), "count": 12}],
-        order_rows=[{"order": order, "spent": Decimal("12000.00"),
-                     "revenue": Decimal("150000.00"), "profit": Decimal("138000.00")}],
-        product_rows=[{"name": "Vizitka", "spent": Decimal("4000.00"),
-                       "revenue": Decimal("50000.00"), "profit": Decimal("46000.00"),
-                       "count": 3}],
-    ),
+    "finance/expense_form.html": dict(categories=["ijara", "boshqa"],
+                                      materials=[material],
+                                      selected_order=None, expense=None, form=None),
+    "stock/list.html": dict(materials=[material], q="", show_all=False,
+                            total_value=Decimal("108000.00"), low_count=0),
+    "stock/material_form.html": dict(material=None, form=None,
+                                     units=["dona", "list", "kg"]),
+    "stock/receive.html": dict(materials=[material], suppliers=[supplier, supplier_no_debt],
+                               preselected_id=None, today_date=TODAY, form=None,
+                               units=["dona", "list", "kg"],
+                               payer_companies=["Marvel Creative MChJ", "MyPrint MChJ"]),
+    "stock/detail.html": dict(material=material, moves=[move_in, move_out],
+                              received=Decimal("225000.00"), used=Decimal("117000.00")),
+    "suppliers/list.html": dict(suppliers=[supplier, supplier_no_debt], q="", show_all=False,
+                                total_debt=Decimal("420000.00"),
+                                top=[{"supplier": supplier, "purchased": Decimal("620000.00"), "count": 4},
+                                     {"supplier": supplier_no_debt, "purchased": Decimal("50000.00"), "count": 1}]),
+    "suppliers/form.html": dict(supplier=None, form=None),
+    "suppliers/detail.html": dict(supplier=supplier, purchases=[supplier_purchase],
+                                  payments=[supplier_payment]),
     "finance/report.html": dict(
-        months=[{"name": "Yanvar", "month": 1, "income": Decimal("100.00"),
-                 "expense": Decimal("10.00"), "profit": Decimal("90.00")}],
-        year=2026, total_income=Decimal("1000.00"), total_expense=Decimal("400.00"),
-        total_profit=Decimal("600.00"),
-        category_rows=[{"name": "ijara", "amount": Decimal("300.00")}],
+        year=2026, months=months_rows,
+        total_income=Decimal("48000000.00"), total_expense=Decimal("31000000.00"),
+        total_profit=Decimal("17000000.00"),
+        category_rows=[{"name": "ijara", "amount": Decimal("12000000.00"), "count": 12},
+                       {"name": "ish haqi", "amount": Decimal("19000000.00"), "count": 24}],
+        linked=Decimal("800000.00"), general=Decimal("30200000.00"),
+        stock_used=Decimal("117000.00"),
+        order_rows=[{"order": order, "spent": Decimal("12000.00"),
+                     "revenue": Decimal("50000.00"), "profit": Decimal("38000.00")}],
+        product_rows=[{"name": "Vizitka", "spent": Decimal("12000.00"),
+                       "revenue": Decimal("50000.00"), "profit": Decimal("38000.00"), "count": 3}],
     ),
     "finance/analytics.html": dict(
         year=2026,
@@ -260,8 +362,7 @@ if uncovered:
         fails.append(f"TEST QILINMAGAN shablon: {u}")
         print(f"\n  FAIL test qilinmagan shablon: {u}")
 
-print(f"\n=== RENDER: {len(CONTEXTS)} shablon × 4 rol ===")
-for role, perms in ROLE_PERMISSIONS.items():
+def make_env(role, perms):
     env = Environment(loader=FileSystemLoader(f"{APP}/templates"), undefined=StrictUndefined)
     env.globals["url_for"] = fake_url_for
     env.globals["get_flashed_messages"] = lambda with_categories=False: (
@@ -282,8 +383,15 @@ for role, perms in ROLE_PERMISSIONS.items():
     env.filters["status_icon"] = status_icon
     env.filters["category_icon"] = category_icon
     env.filters["uzs"] = uzs
+    env.filters["qty"] = qty
     env.filters["date_uz"] = date_uz
     env.filters["datetime_uz"] = datetime_uz
+    return env
+
+
+print(f"\n=== RENDER: {len(CONTEXTS)} shablon × 4 rol ===")
+for role, perms in ROLE_PERMISSIONS.items():
+    env = make_env(role, perms)
 
     errors = 0
     for tpl, ctx in CONTEXTS.items():
@@ -296,17 +404,70 @@ for role, perms in ROLE_PERMISSIONS.items():
     if errors == 0:
         print(f"  OK   {role:<12} — {len(CONTEXTS)} shablon xatosiz")
 
+# ---------------------------------------------------------------- 3b. ortiqcha to'lov
+# Mijoz qarzdan ko'p to'lasa "Avans (zapas)" tarmog'i ham render bo'lishi kerak.
+print("\n=== ORTIQCHA TO'LOV (AVANS) SHABLONLARI ===")
+prepaid_client = SimpleNamespace(
+    id=2, name="Avansli MChJ", phone="+998901112233", address="Samarqand",
+    notes=None, total_debt=Decimal("-30000.00"), orders_count=1,
+)
+prepaid_order = SimpleNamespace(
+    id=3, order_number="B-2026-0003", client=prepaid_client, client_id=2,
+    order_type="Banner", description="", quantity=1,
+    unit_price=Decimal("70000.00"), total_price=Decimal("70000.00"),
+    status="yangi", payment_status="to'liq",
+    paid_amount_calc=Decimal("100000.00"), remaining=Decimal("-30000.00"),
+    debt=Decimal("0.00"), overpaid=Decimal("30000.00"),
+    deadline=None, created_at=datetime.now(), creator=user,
+    payments=[payment], is_overdue=False, days_left=None,
+    version=1, is_deleted=False, deleted_at=None, files=[],
+    items=[item_a], items_summary="Banner",
+    expenses=[], expenses_total=Decimal("0.00"),
+    direct_expenses=Decimal("0.00"), stock_cost=Decimal("0.00"),
+    materials_used=[], profit=Decimal("70000.00"),
+)
+PREPAID_CONTEXTS = {
+    "orders/detail.html": dict(order=prepaid_order, payments=[payment],
+                               statuses=["yangi", "jarayonda", "tayyor"]),
+    "orders/list.html": dict(orders=[prepaid_order],
+                             pagination=FakePagination([prepaid_order], 1),
+                             statuses=["yangi", "jarayonda", "tayyor",
+                                       "yetkazildi", "bekor qilindi"],
+                             status="", q=""),
+    "clients/list.html": dict(clients=[prepaid_client],
+                              pagination=FakePagination([prepaid_client], 1), q=""),
+    "clients/detail.html": dict(
+        client=prepaid_client, orders=[prepaid_order],
+        total_ordered=Decimal("70000.00"), total_paid=Decimal("100000.00"),
+        total_debt=Decimal("-30000.00"),
+    ),
+    "orders/invoice.html": dict(order=prepaid_order, today=TODAY, company=company),
+}
+for role, perms in ROLE_PERMISSIONS.items():
+    env = make_env(role, perms)
+    for tpl, ctx in PREPAID_CONTEXTS.items():
+        try:
+            html = env.get_template(tpl).render(**ctx)
+        except Exception as e:
+            fails.append(f"[avans/{role}] {tpl}: {type(e).__name__}: {e}")
+            print(f"  FAIL [avans/{role}] {tpl}: {type(e).__name__}: {e}")
+            continue
+        if "Avans" not in html:
+            fails.append(f"[avans/{role}] {tpl}: 'Avans' matni ko'rinmadi")
+            print(f"  FAIL [avans/{role}] {tpl}: 'Avans' matni ko'rinmadi")
+print(f"  OK   4 rol × {len(PREPAID_CONTEXTS)} shablon avans holatida")
+
 # ---------------------------------------------------------------- 4. rol ajratish
 print("\n=== ROLLAR BO'YICHA MENYU AJRATILISHI ===")
 EXPECTED_MENU = {
-    "admin": ["Bosh sahifa", "Buyurtmalar", "Mijozlar", "Xarajatlar", "Xarajat tahlili",
+    "admin": ["Bosh sahifa", "Buyurtmalar", "Mijozlar", "Ombor", "Taminotchilar", "Xarajatlar",
               "Moliyaviy hisobot", "Tahlil", "Firma ma'lumotlari",
               "Buyurtma turlari", "Telegram", "O'chirilganlar",
               "Foydalanuvchilar", "Harakatlar jurnali"],
-    "menejer": ["Buyurtmalar", "Mijozlar", "Xarajatlar"],
-    "xarajatchi": ["Buyurtmalar", "Xarajatlar", "Xarajat tahlili"],
-    "buxgalter": ["Bosh sahifa", "Buyurtmalar", "Mijozlar", "Xarajatlar", "Xarajat tahlili",
-                  "Moliyaviy hisobot", "Tahlil"],
+    "menejer": ["Buyurtmalar", "Mijozlar"],
+    "xarajatchi": ["Buyurtmalar", "Ombor", "Taminotchilar", "Xarajatlar"],
+    "boss": ["Bosh sahifa", "Buyurtmalar", "Mijozlar", "Ombor", "Taminotchilar", "Xarajatlar",
+             "Moliyaviy hisobot", "Tahlil"],
 }
 for role, perms in ROLE_PERMISSIONS.items():
     env = Environment(loader=FileSystemLoader(f"{APP}/templates"), undefined=StrictUndefined)
@@ -323,7 +484,7 @@ for role, perms in ROLE_PERMISSIONS.items():
     })
     for n, f in [("status_color", status_color), ("payment_color", payment_color),
                  ("status_icon", status_icon), ("category_icon", category_icon),
-                 ("uzs", uzs), ("date_uz", date_uz), ("datetime_uz", datetime_uz)]:
+                 ("uzs", uzs), ("qty", qty), ("date_uz", date_uz), ("datetime_uz", datetime_uz)]:
         env.filters[n] = f
 
     out = env.get_template("dashboard.html").render(**CONTEXTS["dashboard.html"])
@@ -354,20 +515,37 @@ def render_for(role, tpl):
     })
     for n, f in [("status_color", status_color), ("payment_color", payment_color),
                  ("status_icon", status_icon), ("category_icon", category_icon),
-                 ("uzs", uzs), ("date_uz", date_uz), ("datetime_uz", datetime_uz)]:
+                 ("uzs", uzs), ("qty", qty), ("date_uz", date_uz), ("datetime_uz", datetime_uz)]:
         env.filters[n] = f
     return env.get_template(tpl).render(**CONTEXTS[tpl])
 
 checks = [
-    ("buxgalter", "orders/list.html", "Yangi buyurtma", False, "buxgalter buyurtma yarata olmaydi"),
-    ("buxgalter", "orders/list.html", "Excel", True, "buxgalter Excel eksport qila oladi"),
+    ("boss", "orders/list.html", "Yangi buyurtma", False, "boss buyurtma yarata olmaydi"),
+    ("boss", "orders/list.html", "Excel", True, "boss Excel eksport qila oladi"),
+    ("boss", "orders/detail.html", "To'lov qo'shish", False, "boss to'lov qo'sha olmaydi"),
+    ("boss", "finance/expenses.html", "Yangi xarajat", False, "boss xarajat kirita olmaydi"),
+    ("boss", "clients/list.html", "Yangi mijoz", False, "boss mijoz qo'sha olmaydi"),
+    ("boss", "stock/list.html", "Yangi mahsulot", False, "boss omborga mahsulot qo'sha olmaydi"),
+    ("xarajatchi", "stock/list.html", "Yangi mahsulot", True, "xarajatchi omborni yuritadi"),
     ("menejer", "orders/list.html", "Yangi buyurtma", True, "menejer buyurtma yarata oladi"),
     ("menejer", "orders/list.html", "Excel", False, "menejerda eksport huquqi yo'q"),
-    ("buxgalter", "orders/detail.html", "To'lov qo'shish", False, "buxgalter to'lov qo'sha olmaydi"),
     ("menejer", "orders/detail.html", "To'lov qo'shish", True, "menejer to'lov qo'sha oladi"),
-    ("buxgalter", "clients/list.html", "Yangi mijoz", False, "buxgalter mijoz qo'sha olmaydi"),
-    ("buxgalter", "finance/expenses.html", "Yangi xarajat", False, "buxgalter xarajat kirita olmaydi"),
+    ("menejer", "orders/detail.html", "Shu buyurtma xarajatlari", False,
+     "menejerga buyurtma xarajati ko'rinmaydi"),
+    ("menejer", "finance/expenses.html", "Yangi xarajat", False,
+     "menejer xarajat kirita olmaydi"),
+    ("xarajatchi", "orders/list.html", "Yangi buyurtma", False,
+     "xarajatchi buyurtma yarata olmaydi"),
+    ("xarajatchi", "clients/list.html", "Yangi mijoz", False, "xarajatchi mijoz qo'sha olmaydi"),
     ("xarajatchi", "finance/expenses.html", "Yangi xarajat", True, "xarajatchi xarajat kirita oladi"),
+    ("boss", "suppliers/list.html", "Yangi taminotchi", False,
+     "boss taminotchi qo'sha olmaydi"),
+    ("boss", "suppliers/detail.html", "To'lov qilish", False,
+     "boss taminotchiga to'lov qila olmaydi"),
+    ("xarajatchi", "suppliers/list.html", "Yangi taminotchi", True,
+     "xarajatchi taminotchi qo'sha oladi"),
+    ("xarajatchi", "suppliers/detail.html", "To'lov qilish", True,
+     "xarajatchi taminotchiga to'lov qila oladi"),
 ]
 for role, tpl, needle, should_exist, desc in checks:
     out = render_for(role, tpl)

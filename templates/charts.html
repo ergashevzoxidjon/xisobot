@@ -1,0 +1,161 @@
+{#
+  Grafikalar uchun umumiy sozlama — hisobot sahifalari `{% include %}` qiladi.
+
+  Ranglar tasodifiy tanlanmagan: bu ketma-ketlik rang ko'rmaslik (daltonizm)
+  uchun tekshirilgan. Seriya rangi HAR DOIM shu tartibda beriladi va
+  aylantirilmaydi; 8 tadan ko'p bo'lsa qolgani "Boshqa" ga yig'iladi.
+#}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script>
+const VIZ = {
+  series: ['#2a78d6', '#eb6834', '#1baf7a', '#eda100',
+           '#e87ba4', '#008300', '#4a3aa7', '#e34948'],
+  other:  '#898781',
+  grid:   '#e1e0d9',
+  axis:   '#c3c2b7',
+  muted:  '#898781',
+  ink:    '#52514e',
+};
+
+Chart.defaults.font.family = "Inter, system-ui, -apple-system, 'Segoe UI', sans-serif";
+Chart.defaults.font.size = 12;
+Chart.defaults.color = VIZ.muted;
+Chart.defaults.maintainAspectRatio = false;
+Chart.defaults.plugins.legend.position = 'bottom';
+Chart.defaults.plugins.legend.labels.usePointStyle = true;
+Chart.defaults.plugins.legend.labels.pointStyle = 'circle';
+Chart.defaults.plugins.legend.labels.boxWidth = 8;
+Chart.defaults.plugins.legend.labels.boxHeight = 8;
+Chart.defaults.plugins.legend.labels.padding = 16;
+Chart.defaults.plugins.legend.labels.color = VIZ.ink;
+
+/* 1 850 000 -> "1.9 mln" — o'q belgilari qisqa bo'lishi uchun */
+function shortUZS(v) {
+  const a = Math.abs(v);
+  if (a >= 1e9) return (v / 1e9).toFixed(1).replace(/\.0$/, '') + ' mlrd';
+  if (a >= 1e6) return (v / 1e6).toFixed(1).replace(/\.0$/, '') + ' mln';
+  if (a >= 1e3) return Math.round(v / 1e3) + ' ming';
+  return String(Math.round(v));
+}
+
+function fullUZS(v) {
+  return (v || 0).toLocaleString('ru-RU', {maximumFractionDigits: 0}) + " so'm";
+}
+
+const TOOLTIP = {
+  backgroundColor: '#0b0b0b',
+  padding: 10,
+  cornerRadius: 8,
+  usePointStyle: true,
+  boxPadding: 5,
+  titleFont: {weight: '600'},
+  callbacks: {
+    label: c => {
+      const v = (c.parsed.y !== undefined && c.parsed.y !== null) ? c.parsed.y
+              : (c.parsed.x !== undefined && c.parsed.x !== null) ? c.parsed.x
+              : c.parsed;
+      const name = c.dataset.label || c.label;
+      return ' ' + name + ': ' + fullUZS(v);
+    }
+  }
+};
+
+/* pul o'qi (vertikal) */
+function moneyAxisY() {
+  return {
+    beginAtZero: true,
+    grid: {color: VIZ.grid, drawTicks: false},
+    border: {display: false},
+    ticks: {callback: shortUZS, padding: 8},
+  };
+}
+
+/* pul o'qi (gorizontal bar uchun) */
+function moneyAxisX() {
+  return {
+    beginAtZero: true,
+    grid: {color: VIZ.grid, drawTicks: false},
+    border: {display: false},
+    ticks: {callback: shortUZS, padding: 6},
+  };
+}
+
+const CATEGORY_AXIS = {grid: {display: false}, border: {color: VIZ.axis}};
+
+/* 8 tadan ko'p bo'lsa qolganini "Boshqa" ga yig'amiz —
+   9-rang o'ylab topilmaydi (ranglar chalkashib ketardi) */
+function foldOther(labels, values, keep) {
+  keep = keep || 6;
+  if (labels.length <= keep + 1) return {labels: labels, values: values, colors: VIZ.series.slice(0, labels.length)};
+  const head = labels.slice(0, keep);
+  const rest = values.slice(keep).reduce((a, b) => a + b, 0);
+  return {
+    labels: head.concat(['Boshqa (' + (labels.length - keep) + ' ta)']),
+    values: values.slice(0, keep).concat([rest]),
+    colors: VIZ.series.slice(0, keep).concat([VIZ.other]),
+  };
+}
+
+/* halqa (doughnut) — ulush ko'rsatish uchun */
+function doughnut(el, labels, values, colors) {
+  if (!el) return null;
+  return new Chart(el, {
+    type: 'doughnut',
+    data: {
+      labels: labels,
+      datasets: [{
+        data: values,
+        backgroundColor: colors,
+        borderColor: '#ffffff',
+        borderWidth: 2,      /* segmentlar orasidagi 2px oraliq */
+        hoverOffset: 6,
+      }]
+    },
+    options: {
+      cutout: '62%',
+      plugins: {
+        legend: {position: 'right', labels: {padding: 12}},
+        tooltip: Object.assign({}, TOOLTIP, {
+          callbacks: {
+            label: c => {
+              const total = c.dataset.data.reduce((a, b) => a + b, 0);
+              const pct = total ? (c.parsed * 100 / total).toFixed(1) : 0;
+              return ' ' + c.label + ': ' + fullUZS(c.parsed) + ' (' + pct + '%)';
+            }
+          }
+        })
+      }
+    }
+  });
+}
+
+/* gorizontal reyting — bitta seriya, shuning uchun legenda kerak emas */
+function rankBar(el, labels, values, color) {
+  if (!el) return null;
+  return new Chart(el, {
+    type: 'bar',
+    data: {labels: labels, datasets: [{data: values, backgroundColor: color || VIZ.series[0],
+                                       borderRadius: 4, borderSkipped: false, barPercentage: 0.72}]},
+    options: {
+      indexAxis: 'y',
+      plugins: {
+        legend: {display: false},
+        tooltip: Object.assign({}, TOOLTIP, {
+          callbacks: {label: c => ' ' + fullUZS(c.parsed.x)}
+        })
+      },
+      scales: {x: moneyAxisX(), y: CATEGORY_AXIS},
+    }
+  });
+}
+</script>
+
+<style>
+  .chart-box { position: relative; width: 100%; }
+  .chart-box.h-sm  { height: 240px; }
+  .chart-box.h-md  { height: 320px; }
+  .chart-box.h-lg  { height: 380px; }
+  .chart-note { color: #898781; font-size: .78rem; }
+  .legend-dot { display:inline-block; width:10px; height:10px; border-radius:50%;
+                margin-right:.45rem; vertical-align:middle; }
+</style>

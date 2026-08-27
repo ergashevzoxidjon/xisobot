@@ -27,6 +27,8 @@ def create_app(config_object=Config):
     from clients import clients_bp
     from orders import orders_bp
     from finance import finance_bp
+    from stock import stock_bp
+    from suppliers import suppliers_bp
     from settings import settings_bp
 
     app.register_blueprint(auth_bp)
@@ -34,6 +36,8 @@ def create_app(config_object=Config):
     app.register_blueprint(clients_bp)
     app.register_blueprint(orders_bp)
     app.register_blueprint(finance_bp)
+    app.register_blueprint(stock_bp)
+    app.register_blueprint(suppliers_bp)
     app.register_blueprint(settings_bp)
 
     register_error_handlers(app)

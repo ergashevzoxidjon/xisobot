@@ -22,7 +22,7 @@ def days_ago(n):
 DEMO_USERS = [
     ("menejer1", "Jasur Tursunov", "menejer"),
     ("xarajatchi1", "Otabek Yusupov", "xarajatchi"),
-    ("buxgalter1", "Nilufar Rashidova", "buxgalter"),
+    ("boss1", "Nilufar Rashidova", "boss"),
 ]
 
 DEMO_CLIENTS = [

@@ -10,7 +10,11 @@ from sqlalchemy import func, case
 from sqlalchemy.orm import joinedload, selectinload
 
 from extensions import db
-from models import Order, Client, Payment, STATUS_CANCELLED, STATUS_DELIVERED
+from models import (
+    Order, Client, Payment, Material, StockMove,
+    Supplier, SupplierPayment, Expense,
+    STATUS_CANCELLED, STATUS_DELIVERED, STOCK_IN,
+)
 from utils import to_money, ZERO
 
 
@@ -169,3 +173,124 @@ def client_totals(client_id):
     )
     ordered, paid_sum = to_money(row[0]), to_money(row[1])
     return ordered, paid_sum, ordered - paid_sum
+
+
+# ---------- ombor ----------
+
+def stock_per_material_subq():
+    """material_id -> joriy qoldiq (kirim minus chiqim)."""
+    signed = func.sum(
+        case((StockMove.kind == STOCK_IN, StockMove.quantity), else_=-StockMove.quantity)
+    )
+    return (
+        db.session.query(
+            StockMove.material_id.label("material_id"),
+            func.coalesce(signed, 0).label("qty"),
+        )
+        .group_by(StockMove.material_id)
+        .subquery()
+    )
+
+
+def materials_with_stock(only_active=True, q=""):
+    """Mahsulotlar va ularning qoldig'i — bitta so'rovda."""
+    stock = stock_per_material_subq()
+    query = (
+        db.session.query(Material, func.coalesce(stock.c.qty, 0))
+        .select_from(Material)
+        .outerjoin(stock, stock.c.material_id == Material.id)
+    )
+    if only_active:
+        query = query.filter(Material.is_active.is_(True))
+    if q:
+        query = query.filter(Material.name.ilike(f"%{q}%"))
+
+    rows = query.order_by(Material.name).all()
+    materials = []
+    for material, qty in rows:
+        material.attach_quantity(qty)
+        materials.append(material)
+    return materials
+
+
+# ---------- taminotchilar ----------
+
+def supplier_purchase_subq():
+    """supplier_id -> xarid soni, jami summa, qarzga olingan (to'lanmagan) summa."""
+    unpaid_amount = case((Expense.is_paid.is_(False), Expense.amount), else_=0)
+    return (
+        db.session.query(
+            Expense.supplier_id.label("supplier_id"),
+            func.count(Expense.id).label("purchase_count"),
+            func.coalesce(func.sum(Expense.amount), 0).label("purchased"),
+            func.coalesce(func.sum(unpaid_amount), 0).label("unpaid"),
+        )
+        .filter(Expense.supplier_id.isnot(None))
+        .group_by(Expense.supplier_id)
+        .subquery()
+    )
+
+
+def supplier_paid_subq():
+    """supplier_id -> taminotchiga qilingan to'lovlar jami."""
+    return (
+        db.session.query(
+            SupplierPayment.supplier_id.label("supplier_id"),
+            func.coalesce(func.sum(SupplierPayment.amount), 0).label("paid"),
+        )
+        .group_by(SupplierPayment.supplier_id)
+        .subquery()
+    )
+
+
+def suppliers_with_stats(q="", only_active=True):
+    """Taminotchilar ro'yxati: xarid va qarz — bitta so'rovda."""
+    purchases = supplier_purchase_subq()
+    paid = supplier_paid_subq()
+
+    query = Supplier.query
+    if only_active:
+        query = query.filter(Supplier.is_active.is_(True))
+    if q:
+        query = query.filter(Supplier.name.ilike(f"%{q}%"))
+
+    rows = (
+        query.outerjoin(purchases, purchases.c.supplier_id == Supplier.id)
+        .outerjoin(paid, paid.c.supplier_id == Supplier.id)
+        .add_columns(
+            func.coalesce(purchases.c.purchase_count, 0),
+            func.coalesce(purchases.c.purchased, 0),
+            func.coalesce(purchases.c.unpaid, 0),
+            func.coalesce(paid.c.paid, 0),
+        )
+        .order_by(Supplier.name)
+        .all()
+    )
+
+    suppliers = []
+    for supplier, purchase_count, purchased, unpaid, paid_sum in rows:
+        supplier.attach_stats(
+            purchase_count=purchase_count or 0,
+            purchased=to_money(purchased),
+            unpaid=to_money(unpaid),
+            paid=to_money(paid_sum),
+        )
+        suppliers.append(supplier)
+    return suppliers
+
+
+def top_suppliers(limit=5):
+    """Eng ko'p savdo qilingan taminotchilar — xarid summasi bo'yicha."""
+    purchases = supplier_purchase_subq()
+    rows = (
+        db.session.query(Supplier, purchases.c.purchased, purchases.c.purchase_count)
+        .join(purchases, purchases.c.supplier_id == Supplier.id)
+        .filter(Supplier.is_active.is_(True))
+        .order_by(purchases.c.purchased.desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {"supplier": s, "purchased": to_money(purchased), "count": count}
+        for s, purchased, count in rows
+    ]

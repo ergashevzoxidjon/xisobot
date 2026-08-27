@@ -4,9 +4,9 @@ from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from extensions import db, login_manager
-from utils import now_local, today_local, to_money, ZERO
+from utils import now_local, today_local, to_money, to_qty, ZERO, QTY_ZERO
 
-ROLES = ["admin", "menejer", "xarajatchi", "buxgalter"]
+ROLES = ["admin", "menejer", "xarajatchi", "boss"]
 
 STATUS_NEW = "yangi"
 STATUS_IN_PROGRESS = "jarayonda"
@@ -39,9 +39,42 @@ PAYMENT_PARTIAL = "qisman"
 PAYMENT_FULL = "to'liq"
 PAYMENT_STATUSES = [PAYMENT_UNPAID, PAYMENT_PARTIAL, PAYMENT_FULL]
 
-EXPENSE_CATEGORIES = ["ijara", "ish haqi", "kommunal", "transport", "xomashyo", "jihoz", "soliq", "boshqa"]
+# "buyurtma" — aniq buyurtmaga sarflangan xarajat. Uni foydalanuvchi qo'lda
+# tanlamaydi: buyurtma tanlanganda tizim o'zi shu turkumni qo'yadi.
+EXPENSE_ORDER_CATEGORY = "buyurtma"
+
+EXPENSE_CATEGORIES = ["ijara", "ish haqi", "kommunal", "transport", "xomashyo",
+                      "jihoz", "soliq", EXPENSE_ORDER_CATEGORY, "boshqa"]
+
+# Formada qo'lda tanlanadigan turkumlar (umumiy xarajatlar uchun)
+GENERAL_EXPENSE_CATEGORIES = [c for c in EXPENSE_CATEGORIES if c != EXPENSE_ORDER_CATEGORY]
+
+# ---------- ombor ----------
+
+STOCK_IN = "kirim"
+STOCK_OUT = "chiqim"
+STOCK_KINDS = [STOCK_IN, STOCK_OUT]
+
+STOCK_UNITS = ["dona", "list", "kg", "metr", "kv.metr", "litr", "rulon", "quti"]
+
+# Ombor kirimi shu turkumdagi xarajat sifatida yoziladi
+STOCK_EXPENSE_CATEGORY = "xomashyo"
+
+# ---------- ombor kirimida to'lov usuli ----------
+
+PAYMENT_CASH = "naqd"
+PAYMENT_TRANSFER = "perechisleniye"
+# Faqat is_paid=True bo'lganda mantiqiy — qarzga olinganda bo'sh qoladi.
+PAYMENT_METHODS = [PAYMENT_CASH, PAYMENT_TRANSFER]
+
+# Perechisleniye qilinganda pul shu tashkilotlardan birining hisobidan
+# ketadi — hisobot/tahlilda qaysi tashkilot orqali qancha to'langani
+# alohida ko'rinishi kerak.
+PAYER_COMPANIES = ["Marvel Creative MChJ", "MyPrint MChJ"]
 
 MONEY = db.Numeric(14, 2)
+# kg va metr uchun kasr miqdor kerak
+QTY = db.Numeric(14, 3)
 
 
 class User(UserMixin, db.Model):
@@ -125,6 +158,96 @@ class Client(db.Model):
         return total
 
 
+class Supplier(db.Model):
+    """Taminotchi — ombordagi mahsulotlarni kimdan olganimiz.
+
+    Qarz balansi mijoz qarzdorligiga o'xshab hisoblanadi, faqat teskari
+    yo'nalishda: BIZ taminotchiga qarzdormiz. "Qarzga olindi" deb belgilangan
+    kirimlar (Expense.is_paid=False) yig'indisidan to'lovlar ayiriladi.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(150), nullable=False, unique=True, index=True)
+    phone = db.Column(db.String(50))
+    address = db.Column(db.String(255))
+    note = db.Column(db.String(255))
+    is_active = db.Column(db.Boolean, default=True, nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=now_local)
+
+    # SQL agregat orqali oldindan hisoblangan (queries.suppliers_with_stats)
+    _stats = None
+
+    def attach_stats(self, purchase_count, purchased, unpaid, paid):
+        self._stats = {
+            "purchase_count": purchase_count,
+            "purchased": purchased,
+            "unpaid": unpaid,
+            "paid": paid,
+        }
+
+    @property
+    def purchase_count(self):
+        if self._stats is not None:
+            return self._stats["purchase_count"]
+        return len(self.expenses)
+
+    @property
+    def total_purchased(self):
+        """Jami xarid summasi — to'langan va qarzga olinganlar birga."""
+        if self._stats is not None:
+            return self._stats["purchased"]
+        total = ZERO
+        for e in self.expenses:
+            total += to_money(e.amount)
+        return total
+
+    @property
+    def total_paid(self):
+        if self._stats is not None:
+            return self._stats["paid"]
+        total = ZERO
+        for p in self.payments:
+            total += to_money(p.amount)
+        return total
+
+    @property
+    def balance(self):
+        """Qarzga olingan xaridlar minus to'lovlar. Manfiy — ortiqcha to'langan."""
+        if self._stats is not None:
+            unpaid = self._stats["unpaid"]
+        else:
+            unpaid = ZERO
+            for e in self.expenses:
+                if not e.is_paid:
+                    unpaid += to_money(e.amount)
+        return unpaid - self.total_paid
+
+    @property
+    def debt(self):
+        """Taminotchiga qolgan qarzimiz (manfiy bo'lmaydi)."""
+        b = self.balance
+        return b if b > ZERO else ZERO
+
+    @property
+    def credit(self):
+        """Biz ortiqcha to'lagan summa."""
+        b = self.balance
+        return -b if b < ZERO else ZERO
+
+
+class SupplierPayment(db.Model):
+    """Taminotchiga qilingan to'lov — qarz balansini kamaytiradi."""
+    id = db.Column(db.Integer, primary_key=True)
+    supplier_id = db.Column(db.Integer, db.ForeignKey("supplier.id"), nullable=False, index=True)
+    amount = db.Column(MONEY, nullable=False)
+    paid_on = db.Column(db.Date, default=today_local, nullable=False, index=True)
+    note = db.Column(db.String(255))
+    created_at = db.Column(db.DateTime, default=now_local)
+    created_by = db.Column(db.Integer, db.ForeignKey("user.id"))
+
+    creator = db.relationship("User", foreign_keys=[created_by])
+    supplier = db.relationship("Supplier", backref="payments", foreign_keys=[supplier_id])
+
+
 class OrderType(db.Model):
     """Buyurtma turlari ma'lumotnomasi — narx avtomatik qo'yilishi uchun."""
     id = db.Column(db.Integer, primary_key=True)
@@ -187,7 +310,20 @@ class Order(db.Model):
 
     @property
     def remaining(self):
+        """Buyurtma bo'yicha soldo. Manfiy bo'lsa — mijoz ortiqcha to'lagan."""
         return to_money(self.total_price) - self.paid_amount_calc
+
+    @property
+    def debt(self):
+        """Qolgan qarz. Ortiqcha to'langan bo'lsa nol (manfiy bo'lmaydi)."""
+        rem = self.remaining
+        return rem if rem > ZERO else ZERO
+
+    @property
+    def overpaid(self):
+        """Ortiqcha to'langan summa — mijozning zapas puli (avansi)."""
+        rem = self.remaining
+        return -rem if rem < ZERO else ZERO
 
     @property
     def payment_status(self):
@@ -261,8 +397,8 @@ class Order(db.Model):
         self._expense_cache = to_money(amount)
 
     @property
-    def expenses_total(self):
-        """Shu buyurtmaga yozilgan xarajatlar jami."""
+    def direct_expenses(self):
+        """To'g'ridan-to'g'ri yozilgan xarajatlar (ombordan tashqari)."""
         if self._expense_cache is not None:
             return self._expense_cache
         total = ZERO
@@ -271,8 +407,34 @@ class Order(db.Model):
         return total
 
     @property
+    def stock_cost(self):
+        """Shu buyurtmaga ombordan sarflangan mahsulotlar qiymati.
+
+        Bu pul ombor kirimida allaqachon xarajat sifatida yozilgan —
+        umumiy xarajat hisobiga ikkinchi marta qo'shilmaydi, faqat shu
+        buyurtmaning tannarxini ko'rsatadi.
+        """
+        total = ZERO
+        for m in self.stock_moves:
+            if m.kind == STOCK_OUT:
+                total += m.total
+        return total
+
+    @property
+    def materials_used(self):
+        """Buyurtmaga sarflangan ombor yozuvlari (eng yangisi birinchi)."""
+        moves = [m for m in self.stock_moves if m.kind == STOCK_OUT]
+        moves.sort(key=lambda m: (m.moved_on, m.id), reverse=True)
+        return moves
+
+    @property
+    def expenses_total(self):
+        """Buyurtma tannarxi: to'g'ridan-to'g'ri xarajat + ombordan sarf."""
+        return self.direct_expenses + self.stock_cost
+
+    @property
     def profit(self):
-        """Buyurtma summasi minus shu buyurtmaga yozilgan xarajatlar."""
+        """Buyurtma summasi minus shu buyurtmaning tannarxi."""
         return to_money(self.total_price) - self.expenses_total
 
 
@@ -318,9 +480,104 @@ class Expense(db.Model):
     # Xarajat aniq bir buyurtmaga tegishli bo'lishi mumkin (qog'oz, bo'yoq,
     # pechat) yoki umumiy bo'lishi mumkin (ijara, ish haqi) — o'shanda bo'sh.
     order_id = db.Column(db.Integer, db.ForeignKey("order.id"), index=True)
+    # Ombor kirimi qaysi taminotchidan olinganini bildiradi (faqat "xomashyo").
+    supplier_id = db.Column(db.Integer, db.ForeignKey("supplier.id"), index=True)
+    # False — qarzga olindi, hali to'lanmagan (taminotchi balansiga qo'shiladi).
+    # Boshqa (taminotchisiz) xarajatlar uchun har doim True.
+    is_paid = db.Column(db.Boolean, default=True, nullable=False)
+    # To'lov usuli — faqat is_paid=True bo'lganda to'ldiriladi (PAYMENT_METHODS
+    # dan biri). Qarzga olinganda va taminotchisiz umumiy xarajatlarda bo'sh.
+    payment_method = db.Column(db.String(20))
+    # payment_method="perechisleniye" bo'lganda — qaysi tashkilot hisobidan
+    # to'langani (PAYER_COMPANIES dan biri).
+    paid_via = db.Column(db.String(150))
 
     creator = db.relationship("User", foreign_keys=[created_by])
     order = db.relationship("Order", backref="expenses", foreign_keys=[order_id])
+    supplier = db.relationship("Supplier", backref="expenses", foreign_keys=[supplier_id])
+
+
+class Material(db.Model):
+    """Ombordagi mahsulot: qog'oz, bo'yoq, plyonka va hokazo.
+
+    Qoldiq alohida ustunda saqlanmaydi — kirim va chiqim yozuvlaridan
+    hisoblanadi (to'lovlar `payment` jadvalidan hisoblangani kabi).
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), unique=True, nullable=False, index=True)
+    unit = db.Column(db.String(20), default="dona", nullable=False)
+    # oxirgi kirim narxi — xarajat formasida avtomatik taklif qilinadi
+    last_price = db.Column(MONEY, default=0, nullable=False)
+    # qoldiq shu chegaradan tushsa ro'yxatda ogohlantiriladi
+    min_qty = db.Column(QTY, default=0, nullable=False)
+    is_active = db.Column(db.Boolean, default=True, nullable=False, index=True)
+    note = db.Column(db.String(255))
+    created_at = db.Column(db.DateTime, default=now_local)
+
+    moves = db.relationship(
+        "StockMove", backref="material", lazy="select", cascade="all, delete-orphan"
+    )
+
+    # SQL agregat orqali oldindan hisoblangan qoldiq (queries.py)
+    _qty_cache = None
+
+    def attach_quantity(self, amount):
+        self._qty_cache = to_qty(amount)
+
+    @property
+    def quantity(self):
+        """Joriy qoldiq — kirimlar minus chiqimlar."""
+        if self._qty_cache is not None:
+            return self._qty_cache
+        total = QTY_ZERO
+        for m in self.moves:
+            if m.kind == STOCK_IN:
+                total += to_qty(m.quantity)
+            else:
+                total -= to_qty(m.quantity)
+        return total
+
+    @property
+    def stock_value(self):
+        """Qoldiqning oxirgi narxdagi qiymati."""
+        return to_money(self.quantity * to_money(self.last_price))
+
+    @property
+    def is_low(self):
+        return self.quantity <= to_qty(self.min_qty)
+
+
+class StockMove(db.Model):
+    """Ombor harakati: kirim (sotib olindi) yoki chiqim (buyurtmaga sarflandi).
+
+    Kirim har doim `Expense` bilan juftlanadi — pul o'sha kuni chiqadi.
+    Chiqimda yangi xarajat yozilmaydi, faqat buyurtma tannarxiga qo'shiladi.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    material_id = db.Column(db.Integer, db.ForeignKey("material.id"),
+                            nullable=False, index=True)
+    kind = db.Column(db.String(10), default=STOCK_IN, nullable=False, index=True)
+    quantity = db.Column(QTY, nullable=False)
+    unit_price = db.Column(MONEY, default=0, nullable=False)
+    moved_on = db.Column(db.Date, default=today_local, nullable=False, index=True)
+    order_id = db.Column(db.Integer, db.ForeignKey("order.id"), index=True)
+    expense_id = db.Column(db.Integer, db.ForeignKey("expense.id"), index=True)
+    note = db.Column(db.String(255))
+    created_at = db.Column(db.DateTime, default=now_local)
+    created_by = db.Column(db.Integer, db.ForeignKey("user.id"))
+
+    creator = db.relationship("User", foreign_keys=[created_by])
+    order = db.relationship("Order", backref="stock_moves", foreign_keys=[order_id])
+    expense = db.relationship("Expense", backref="stock_moves", foreign_keys=[expense_id])
+
+    @property
+    def total(self):
+        return to_money(to_qty(self.quantity) * to_money(self.unit_price))
+
+    @property
+    def signed_quantity(self):
+        q = to_qty(self.quantity)
+        return q if self.kind == STOCK_IN else -q
 
 
 class CompanySettings(db.Model):

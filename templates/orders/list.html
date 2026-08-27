@@ -63,7 +63,15 @@
   </td>
   <td class="text-end num">{{ o.total_price|uzs }}</td>
   <td class="text-end num">{{ o.paid_amount_calc|uzs }}</td>
-  <td class="text-end num {% if o.remaining > 0 and o.status != 'bekor qilindi' %}text-danger{% endif %}">{{ o.remaining|uzs }}</td>
+  <td class="text-end num">
+    {% if o.overpaid > 0 %}
+      <span class="text-success" title="Ortiqcha to'lov — avans">+{{ o.overpaid|uzs }}</span>
+    {% elif o.remaining > 0 and o.status != 'bekor qilindi' %}
+      <span class="text-danger">{{ o.remaining|uzs }}</span>
+    {% else %}
+      {{ o.remaining|uzs }}
+    {% endif %}
+  </td>
   <td><span class="badge bg-{{ o.status|status_color }}"><i class="bi {{ o.status|status_icon }} me-1"></i>{{ o.status }}</span></td>
   <td><span class="badge bg-{{ o.payment_status|payment_color }}">{{ o.payment_status }}</span></td>
   <td class="num">

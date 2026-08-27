@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h3>Taminotchilar</h3>
+    <div class="subtitle">Ombor mahsuloti kimdan olinganini va qarzimizni yuritadi</div>
+  </div>
+  {% if has_perm('suppliers.manage') %}
+  <a href="{{ url_for('suppliers.new_supplier') }}" class="btn btn-primary">
+    <i class="bi bi-plus-lg"></i> Yangi taminotchi</a>
+  {% endif %}
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-sm-6 col-lg-4">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon blue"><i class="bi bi-truck"></i></div>
+      <div>
+        <div class="stat-label">Taminotchilar</div>
+        <div class="stat-value">{{ suppliers|length }} ta</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-4">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon {% if total_debt %}red{% else %}slate{% endif %}">
+        <i class="bi bi-wallet2"></i></div>
+      <div>
+        <div class="stat-label">Jami qarzimiz</div>
+        <div class="stat-value num {% if total_debt %}text-danger{% endif %}">{{ total_debt|uzs }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-4">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon green"><i class="bi bi-graph-up"></i></div>
+      <div>
+        <div class="stat-label">Eng ko'p savdo</div>
+        {% if top %}
+        <div class="stat-value" style="font-size:1.05rem">{{ top[0].supplier.name }}</div>
+        <div class="text-muted small num">{{ top[0].purchased|uzs }} so'm</div>
+        {% else %}
+        <div class="stat-value text-muted" style="font-size:1.05rem">Hali xarid yo'q</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if top|length > 1 %}
+<div class="card p-3 mb-3">
+  <div class="stat-label mb-2"><i class="bi bi-bar-chart-steps"></i> Eng faol taminotchilar</div>
+  <div class="d-flex flex-wrap gap-2">
+    {% for t in top %}
+    <a href="{{ url_for('suppliers.supplier_detail', supplier_id=t.supplier.id) }}"
+       class="pick-chip {% if loop.first %}ok{% else %}muted{% endif %}" style="text-decoration:none">
+      <i class="bi bi-truck"></i> {{ t.supplier.name }} · {{ t.purchased|uzs }} so'm · {{ t.count }} marta
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<div class="card p-3 mb-3">
+  <form method="get">
+    <div class="input-group">
+      <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+      <input type="text" name="q" value="{{ q }}" class="form-control border-start-0"
+             placeholder="Taminotchi nomi bo'yicha qidirish...">
+      {% if show_all %}<input type="hidden" name="all" value="1">{% endif %}
+      {% if q %}<a href="{{ url_for('suppliers.list_suppliers', all='1' if show_all else None) }}"
+                   class="btn btn-outline-secondary">Tozalash</a>{% endif %}
+    </div>
+  </form>
+  <div class="form-text mt-2">
+    {% if show_all %}
+      Faol va arxivdagi taminotchilar ko'rsatilmoqda —
+      <a href="{{ url_for('suppliers.list_suppliers', q=q) }}">faqat faollarini ko'rish</a>
+    {% else %}
+      Faqat faol taminotchilar —
+      <a href="{{ url_for('suppliers.list_suppliers', q=q, all='1') }}">arxivdagilarini ham ko'rsatish</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card p-3">
+{% if suppliers %}
+<div class="table-responsive">
+<table class="table table-hover">
+<thead><tr>
+  <th>Taminotchi</th><th>Telefon</th>
+  <th class="text-end">Xarid soni</th><th class="text-end">Jami xarid</th>
+  <th class="text-end">Qarzimiz</th><th></th>
+</tr></thead>
+<tbody>
+{% for s in suppliers %}
+<tr role="button" onclick="window.location='{{ url_for('suppliers.supplier_detail', supplier_id=s.id) }}'">
+  <td>
+    <div class="d-flex align-items-center gap-2">
+      <div class="avatar-circle"><i class="bi bi-truck"></i></div>
+      <span class="fw-semibold">{{ s.name }}</span>
+      {% if not s.is_active %}<span class="badge bg-secondary ms-1">arxiv</span>{% endif %}
+    </div>
+  </td>
+  <td>{{ s.phone or '-' }}</td>
+  <td class="text-end num">{{ s.purchase_count }}</td>
+  <td class="text-end num">{{ s.total_purchased|uzs }}</td>
+  <td class="text-end">
+    {% if s.debt > 0 %}
+      <span class="badge bg-danger num">{{ s.debt|uzs }}</span>
+    {% elif s.credit > 0 %}
+      <span class="badge bg-success num" title="Ortiqcha to'lov">Avans {{ s.credit|uzs }}</span>
+    {% else %}
+      <span class="badge bg-success">Qarzi yo'q</span>
+    {% endif %}
+  </td>
+  <td class="text-end no-print">
+    {% if has_perm('suppliers.manage') %}
+    <a href="{{ url_for('suppliers.edit_supplier', supplier_id=s.id) }}" class="btn btn-sm btn-outline-secondary"
+       onclick="event.stopPropagation()"><i class="bi bi-pencil"></i></a>
+    {% endif %}
+  </td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% else %}
+<div class="empty-state">
+  <i class="bi bi-truck"></i>
+  <p>Taminotchi topilmadi</p>
+  {% if has_perm('suppliers.manage') %}
+  <a href="{{ url_for('suppliers.new_supplier') }}" class="btn btn-sm btn-primary mt-2">
+    <i class="bi bi-plus-lg"></i> Birinchi taminotchini qo'shish</a>
+  {% endif %}
+</div>
+{% endif %}
+</div>
+{% endblock %}
