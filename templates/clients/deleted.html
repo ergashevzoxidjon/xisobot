@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h3>O'chirilgan mijozlar</h3>
+    <div class="subtitle">Bu yozuvlar ro'yxatlarda va qidiruvda ko'rinmaydi, lekin saqlanib turibdi</div>
+  </div>
+  <a href="{{ url_for('clients.list_clients') }}" class="btn btn-outline-secondary">
+    <i class="bi bi-arrow-left"></i> Mijozlarga qaytish</a>
+</div>
+
+<div class="card p-3">
+{% if clients %}
+<div class="table-responsive">
+<table class="table table-hover">
+<thead><tr><th>Nomi</th><th>Telefon</th><th>O'chirilgan</th><th></th></tr></thead>
+<tbody>
+{% for c in clients %}
+<tr class="text-muted">
+  <td class="fw-semibold">{{ c.name }}</td>
+  <td>{{ c.phone or "-" }}</td>
+  <td class="num small">{{ c.deleted_at|datetime_uz }}</td>
+  <td class="text-end">
+    <form method="post" action="{{ url_for('clients.restore_client', client_id=c.id) }}" class="d-inline">
+      {{ csrf() }}
+      <button class="btn btn-sm btn-outline-success"><i class="bi bi-arrow-counterclockwise"></i> Tiklash</button>
+    </form>
+  </td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% else %}
+<div class="empty-state"><i class="bi bi-trash"></i><p>O'chirilgan mijoz yo'q</p></div>
+{% endif %}
+</div>
+{% endblock %}

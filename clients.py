@@ -7,7 +7,7 @@ from extensions import db
 from models import Client, Order, log_action, STATUS_CANCELLED, ZERO
 from permissions import permission_required
 from queries import clients_with_stats, client_totals, eager_orders
-from utils import ValidationError, parse_text
+from utils import ValidationError, parse_text, now_local
 
 clients_bp = Blueprint("clients", __name__, url_prefix="/mijozlar")
 
@@ -141,3 +141,52 @@ def edit_client(client_id):
         return redirect(url_for("clients.client_detail", client_id=c.id))
 
     return render_template("clients/form.html", client=c, form=None)
+
+
+# ---------- mijozni o'chirish (yumshoq) ----------
+
+@clients_bp.route("/<int:client_id>/ochirish", methods=["POST"])
+@login_required
+@permission_required("clients.delete")
+def delete_client(client_id):
+    c = Client.query.get_or_404(client_id)
+
+    if c.total_debt > ZERO:
+        flash(
+            "Qarzdor mijozni o'chirib bo'lmaydi. Avval qarzni yopib "
+            "(to'lov qabul qilib) yoki tegishli buyurtmalarni bekor qilib qo'ying.",
+            "danger",
+        )
+        return redirect(url_for("clients.client_detail", client_id=client_id))
+
+    c.is_deleted = True
+    c.deleted_at = now_local()
+    log_action(current_user, "delete", "client", c.id, c.name)
+    db.session.commit()
+    flash(f"{c.name} o'chirildi. Kerak bo'lsa tiklash mumkin.", "success")
+    return redirect(url_for("clients.list_clients"))
+
+
+@clients_bp.route("/<int:client_id>/tiklash", methods=["POST"])
+@login_required
+@permission_required("clients.delete")
+def restore_client(client_id):
+    c = Client.query.get_or_404(client_id)
+    c.is_deleted = False
+    c.deleted_at = None
+    log_action(current_user, "restore", "client", c.id, c.name)
+    db.session.commit()
+    flash(f"{c.name} tiklandi.", "success")
+    return redirect(url_for("clients.client_detail", client_id=c.id))
+
+
+@clients_bp.route("/ochirilganlar")
+@login_required
+@permission_required("clients.delete")
+def deleted_clients():
+    clients = (
+        Client.query.filter(Client.is_deleted.is_(True))
+        .order_by(Client.deleted_at.desc())
+        .all()
+    )
+    return render_template("clients/deleted.html", clients=clients)

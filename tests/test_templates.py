@@ -151,6 +151,7 @@ user = SimpleNamespace(id=1, username="admin", full_name="Test Admin",
 client = SimpleNamespace(
     id=1, name="Test MChJ", phone="+998901234567", address="Toshkent",
     notes="Izoh matni", total_debt=Decimal("15000.00"), orders_count=3,
+    is_deleted=False, deleted_at=None,
 )
 payment = SimpleNamespace(id=1, amount=Decimal("20000.00"), paid_on=TODAY,
                           note="Naqd", creator=user)
@@ -296,6 +297,7 @@ CONTEXTS = {
                                statuses=["ishlab chiqarishda", "yetkazish uchun tayyor", "bekor qilindi"]),
     "orders/invoice.html": dict(order=order, today=TODAY, company=company),
     "orders/deleted.html": dict(orders=[order]),
+    "clients/deleted.html": dict(clients=[client]),
     "finance/expenses.html": dict(
         expenses=[expense, linked_expense, transfer_expense, debt_expense],
         pagination=FakePagination([expense], 33),
@@ -413,6 +415,7 @@ print("\n=== ORTIQCHA TO'LOV (AVANS) SHABLONLARI ===")
 prepaid_client = SimpleNamespace(
     id=2, name="Avansli MChJ", phone="+998901112233", address="Samarqand",
     notes=None, total_debt=Decimal("-30000.00"), orders_count=1,
+    is_deleted=False, deleted_at=None,
 )
 prepaid_order = SimpleNamespace(
     id=3, order_number="B-2026-0003", client=prepaid_client, client_id=2,
@@ -468,7 +471,7 @@ print("\n=== ROLLAR BO'YICHA MENYU AJRATILISHI ===")
 EXPECTED_MENU = {
     "admin": ["Bosh sahifa", "Buyurtmalar", "Mijozlar", "Ombor", "Taminotchilar", "Xarajatlar",
               "Moliyaviy hisobot", "Tahlil", "Firma ma'lumotlari",
-              "Buyurtma turlari", "Telegram", "O'chirilganlar",
+              "Buyurtma turlari", "Telegram", "O'chirilgan buyurtmalar", "O'chirilgan mijozlar",
               "Foydalanuvchilar", "Harakatlar jurnali"],
     "menejer": ["Buyurtmalar", "Mijozlar"],
     "xarajatchi": ["Bosh sahifa", "Buyurtmalar", "Ombor", "Taminotchilar", "Xarajatlar",

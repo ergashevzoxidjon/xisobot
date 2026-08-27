@@ -379,7 +379,12 @@ a{ text-decoration:none; }
       {% endif %}
       {% if has_perm('orders.delete') %}
       <a href="{{ url_for('orders.deleted_orders') }}" class="{% if request.endpoint == 'orders.deleted_orders' %}active{% endif %}">
-        <i class="bi bi-trash"></i> O'chirilganlar
+        <i class="bi bi-trash"></i> O'chirilgan buyurtmalar
+      </a>
+      {% endif %}
+      {% if has_perm('clients.delete') %}
+      <a href="{{ url_for('clients.deleted_clients') }}" class="{% if request.endpoint == 'clients.deleted_clients' %}active{% endif %}">
+        <i class="bi bi-person-x"></i> O'chirilgan mijozlar
       </a>
       {% endif %}
       {% if has_perm('users.manage') %}
