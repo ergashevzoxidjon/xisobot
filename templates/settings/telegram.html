@@ -19,12 +19,6 @@
     <form method="post">
       {{ csrf() }}
 
-      <div class="form-check form-switch mb-4">
-        <input class="form-check-input" type="checkbox" name="is_enabled" id="enabled"
-               {% if settings.is_enabled %}checked{% endif %}>
-        <label class="form-check-label fw-semibold" for="enabled">Telegram bildirishnomalarini yoqish</label>
-      </div>
-
       <div class="mb-3">
         <label class="form-label">Bot token</label>
         <input class="form-control" name="bot_token" maxlength="200"
@@ -38,6 +32,12 @@
         <input class="form-control" name="manager_chat_id" maxlength="50"
                value="{{ src.manager_chat_id or '' }}" placeholder="123456789">
         <div class="form-text">@userinfobot dan olinadi. Guruh uchun manfiy son bo'ladi.</div>
+      </div>
+
+      <div class="alert alert-light border py-2 mb-4 small">
+        <i class="bi bi-info-circle"></i> Token va Chat ID kiritib saqlasangiz — tizim
+        avtomatik ulanadi, alohida "yoqish" tugmasi kerak emas. Pastdagi katakchalar
+        orqali qaysi xabarlar kelishini tanlaysiz.
       </div>
 
       <h6 class="fw-bold mb-3 pt-2">Qaysi xabarlar yuborilsin</h6>

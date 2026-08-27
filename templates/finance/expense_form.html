@@ -108,41 +108,45 @@
       <span class="step-num">3</span>
       <div>
         <h6>Sarflangan pullar</h6>
-        <div class="hint">Soni × narxi = jami. Buyurtma xarajatida mahsulot ombordan olinadi.</div>
+        <div class="hint" id="materialHint">Soni × narxi = jami. Buyurtma xarajatida mahsulot ombordan olinadi.</div>
+        <div class="hint" id="generalHint" style="display:none">Bu turkum uchun sarflangan summani yozing — omborga aloqasi yo'q.</div>
       </div>
-      <a href="{{ url_for('stock.receive') }}" class="btn btn-sm btn-outline-secondary ms-auto no-print">
+      <a href="{{ url_for('stock.receive') }}" class="btn btn-sm btn-outline-secondary ms-auto no-print"
+         id="receiveShortcutBtn">
         <i class="bi bi-box-arrow-in-down"></i> Omborga kirim
       </a>
     </div>
 
-    {% if materials %}
-    <div class="mb-3">
-      <div class="d-flex flex-wrap gap-2" id="materialChips">
-        {% for m in materials[:12] %}
-        <button type="button" class="btn btn-outline-primary btn-sm quick-type material-chip"
-                data-id="{{ m.id }}" data-name="{{ m.name }}" data-price="{{ m.last_price }}">
-          {{ m.name }}
-          <span class="price">{{ m.quantity|qty }} {{ m.unit }} · {{ m.last_price|uzs }}</span>
-        </button>
-        {% endfor %}
+    <div id="materialChipsBlock">
+      {% if materials %}
+      <div class="mb-3">
+        <div class="d-flex flex-wrap gap-2" id="materialChips">
+          {% for m in materials[:12] %}
+          <button type="button" class="btn btn-outline-primary btn-sm quick-type material-chip"
+                  data-id="{{ m.id }}" data-name="{{ m.name }}" data-price="{{ m.last_price }}">
+            {{ m.name }}
+            <span class="price">{{ m.quantity|qty }} {{ m.unit }} · {{ m.last_price|uzs }}</span>
+          </button>
+          {% endfor %}
+        </div>
+        <div class="form-text">Ombordagi mahsulot — bosing, bo'sh qatorga nomi va narxi qo'yiladi.</div>
       </div>
-      <div class="form-text">Ombordagi mahsulot — bosing, bo'sh qatorga nomi va narxi qo'yiladi.</div>
+      {% else %}
+      <div class="alert alert-light border py-2 mb-3 small">
+        <i class="bi bi-box-seam"></i> Omborda mahsulot yo'q.
+        <a href="{{ url_for('stock.new_material') }}">Avval mahsulot qo'shing</a>, so'ng kirim qiling.
+      </div>
+      {% endif %}
     </div>
-    {% else %}
-    <div class="alert alert-light border py-2 mb-3 small">
-      <i class="bi bi-box-seam"></i> Omborda mahsulot yo'q.
-      <a href="{{ url_for('stock.new_material') }}">Avval mahsulot qo'shing</a>, so'ng kirim qiling.
-    </div>
-    {% endif %}
 
     <div style="overflow-x:auto">
       <table class="table stack-table align-middle mb-0" id="expenseTable">
         <thead>
           <tr>
             <th style="width:34px"></th>
-            <th style="min-width:230px">Mahsulot</th>
-            <th style="width:110px" class="text-end">Soni</th>
-            <th style="width:140px" class="text-end">Narxi</th>
+            <th style="min-width:230px" id="colProduct">Mahsulot</th>
+            <th style="width:110px" class="text-end qty-cell" id="colQty">Soni</th>
+            <th style="width:140px" class="text-end" id="colPrice">Narxi</th>
             <th style="width:150px" class="text-end">Jami</th>
             <th style="width:44px"></th>
           </tr>
@@ -157,7 +161,7 @@
                      placeholder="Ombordan tanlang..." autocomplete="off" value="{{ row.description }}">
               <div class="form-text exp-hint"></div>
             </td>
-            <td data-label="Soni"><input type="number" step="0.001" min="0.001" class="form-control text-end exp-qty"
+            <td data-label="Soni" class="qty-cell"><input type="number" step="0.001" min="0.001" class="form-control text-end exp-qty"
                        name="expense_quantity" value="{{ row.quantity }}"></td>
             <td data-label="Narxi"><input type="number" step="0.01" min="0.01" class="form-control text-end exp-price"
                        name="expense_unit_price" value="{{ row.price }}"></td>
@@ -246,7 +250,7 @@ const ROW_HTML = `
            placeholder="Ombordan tanlang..." autocomplete="off">
     <div class="form-text exp-hint"></div>
   </td>
-  <td data-label="Soni"><input type="number" step="0.001" min="0.001" class="form-control text-end exp-qty" name="expense_quantity" value="1"></td>
+  <td data-label="Soni" class="qty-cell"><input type="number" step="0.001" min="0.001" class="form-control text-end exp-qty" name="expense_quantity" value="1"></td>
   <td data-label="Narxi"><input type="number" step="0.01" min="0.01" class="form-control text-end exp-price" name="expense_unit_price"></td>
   <td data-label="Jami" class="text-end num fw-semibold exp-line">0.00</td>
   <td><button type="button" class="btn btn-sm btn-outline-danger row-remove" title="Qatorni o'chirish"><i class="bi bi-x-lg"></i></button></td>`;
@@ -257,6 +261,7 @@ function addRow(focus) {
   tr.innerHTML = ROW_HTML;
   body.appendChild(tr);
   setActive(tr);
+  applyExpenseMode();
   if (focus) tr.querySelector('.exp-desc').focus();
   recalc();
   return tr;
@@ -268,12 +273,48 @@ function setActive(tr) {
   if (tr) tr.classList.add('table-active');
 }
 
+/* ---------------- turkumga qarab: mahsulot jadvali yoki oddiy summa ---------------- */
+
+let generalMode = false;
+
+function computeGeneralMode() {
+  const oid = document.getElementById('orderId');
+  if (oid && oid.value) return false;   // buyurtma tanlangan — har doim ombordan
+  const cat = document.querySelector('input[name="category"]:checked');
+  return !cat || cat.value !== 'xomashyo';
+}
+
+function applyExpenseMode() {
+  generalMode = computeGeneralMode();
+  document.getElementById('materialChipsBlock').style.display = generalMode ? 'none' : '';
+  document.getElementById('receiveShortcutBtn').style.display = generalMode ? 'none' : '';
+  document.getElementById('materialHint').style.display = generalMode ? 'none' : '';
+  document.getElementById('generalHint').style.display = generalMode ? '' : 'none';
+  document.querySelectorAll('.qty-cell').forEach(el => { el.style.display = generalMode ? 'none' : ''; });
+  document.getElementById('colProduct').textContent = generalMode ? 'Izoh' : 'Mahsulot';
+  document.getElementById('colPrice').textContent = generalMode ? 'Summa' : 'Narxi';
+  body.querySelectorAll('.expense-row').forEach(tr => {
+    const desc = tr.querySelector('.exp-desc');
+    if (generalMode) {
+      desc.placeholder = 'Masalan: Avgust oyi ish haqi';
+      desc.removeAttribute('list');
+      tr.querySelector('.exp-material').value = '';
+      tr.querySelector('.exp-hint').innerHTML = '';
+    } else {
+      desc.placeholder = 'Ombordan tanlang...';
+      desc.setAttribute('list', 'materialList');
+      matchMaterial(tr);
+    }
+  });
+}
+
 /* mahsulot nomi ombordagi bilan mos kelsa — id va narx o'zi to'ladi */
 function matchMaterial(tr) {
   const desc = tr.querySelector('.exp-desc');
   const hidden = tr.querySelector('.exp-material');
   const price = tr.querySelector('.exp-price');
   const hint = tr.querySelector('.exp-hint');
+  if (generalMode) { hidden.value = ''; hint.innerHTML = ''; return; }
   const found = BY_NAME[desc.value.trim().toLowerCase()];
 
   if (found) {
@@ -375,8 +416,13 @@ document.querySelectorAll('.material-chip').forEach(btn => {
 
 if (!body.querySelector('.expense-row')) addRow(false);
 setActive(body.querySelector('.expense-row'));
-body.querySelectorAll('.expense-row').forEach(matchMaterial);
+applyExpenseMode();
 recalc();
+
+/* turkum o'zgarsa — mahsulot jadvali / oddiy summa ko'rinishi almashadi */
+document.querySelectorAll('input[name="category"]').forEach(radio => {
+  radio.addEventListener('change', () => { applyExpenseMode(); recalc(); });
+});
 
 /* ---------------- buyurtma qidiruvi ---------------- */
 
@@ -400,6 +446,8 @@ function showPicked(order) {
   results.style.display = 'none';
   orderChip.className = 'pick-chip ok ms-auto';
   orderChip.innerHTML = '<i class="bi bi-check-circle"></i> ' + order.number;
+  applyExpenseMode();
+  recalc();
 }
 
 function clearPicked() {
@@ -411,6 +459,8 @@ function clearPicked() {
   search.focus();
   orderChip.className = 'pick-chip muted ms-auto';
   orderChip.innerHTML = '<i class="bi bi-building"></i> umumiy xarajat';
+  applyExpenseMode();
+  recalc();
 }
 
 document.getElementById('clearOrder').addEventListener('click', clearPicked);

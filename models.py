@@ -40,13 +40,17 @@ PAYMENT_FULL = "to'liq"
 PAYMENT_STATUSES = [PAYMENT_UNPAID, PAYMENT_PARTIAL, PAYMENT_FULL]
 
 # "buyurtma" — aniq buyurtmaga sarflangan xarajat. Uni foydalanuvchi qo'lda
-# tanlamaydi: buyurtma tanlanganda tizim o'zi shu turkumni qo'yadi.
+# tanlamaydi: buyurtma tanlanganda tizim o'zi shu turkumni qo'yadi. Shu
+# sababli u tanlov/filtr tugmalarida ko'rsatilmaydi (pastga qarang).
 EXPENSE_ORDER_CATEGORY = "buyurtma"
 
+# 2026-08-27: "boshqa" (noaniq umumiy turkum) "ofis xarajatlari"ga
+# almashtirildi — foydalanuvchi qarori.
 EXPENSE_CATEGORIES = ["ijara", "ish haqi", "kommunal", "transport", "xomashyo",
-                      "jihoz", "soliq", EXPENSE_ORDER_CATEGORY, "boshqa"]
+                      "jihoz", "soliq", EXPENSE_ORDER_CATEGORY, "ofis xarajatlari"]
 
-# Formada qo'lda tanlanadigan turkumlar (umumiy xarajatlar uchun)
+# Formada qo'lda tanlanadigan va filtrlanadigan turkumlar — "buyurtma"
+# bundan mustasno: u avtomatik qo'yiladi, foydalanuvchi tanlamaydi/filtrlamaydi.
 GENERAL_EXPENSE_CATEGORIES = [c for c in EXPENSE_CATEGORIES if c != EXPENSE_ORDER_CATEGORY]
 
 # ---------- ombor ----------
@@ -471,7 +475,7 @@ class Payment(db.Model):
 
 class Expense(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    category = db.Column(db.String(50), default="boshqa", nullable=False, index=True)
+    category = db.Column(db.String(50), default="ofis xarajatlari", nullable=False, index=True)
     amount = db.Column(MONEY, nullable=False)
     description = db.Column(db.String(255))
     date = db.Column(db.Date, default=today_local, nullable=False, index=True)
@@ -605,7 +609,18 @@ class CompanySettings(db.Model):
 
 
 class TelegramSettings(db.Model):
-    """Telegram bot sozlamalari. Bitta yozuv (id=1)."""
+    """Telegram bot sozlamalari. Bitta yozuv (id=1).
+
+    `is_enabled` ustuni eski qatlam sifatida bazada qoladi (migratsiyasiz),
+    lekin 2026-08-27'dan boshlab HECH QAYERDA o'qilmaydi — avval alohida
+    "yoqish" katakchasi bo'lgan, u token/chat ID kiritilgan bo'lsa ham
+    belgilanmay qolib, xabarlarning jimgina yuborilmasligiga sabab bo'lardi
+    (foydalanuvchi buni sinov xabari orqali payqamasdi, chunki sinov shu
+    katakchaga bog'liq emas edi). Endi ulanganlik FAQAT token+chat ID
+    borligiga qarab aniqlanadi — qaysi xabarlar kelishi esa pastdagi uchta
+    alohida katakcha (notify_new_order/notify_payment/notify_daily) bilan
+    boshqariladi.
+    """
     id = db.Column(db.Integer, primary_key=True)
     is_enabled = db.Column(db.Boolean, default=False, nullable=False)
     bot_token = db.Column(db.String(200))
@@ -627,7 +642,7 @@ class TelegramSettings(db.Model):
 
     @property
     def is_ready(self):
-        return bool(self.is_enabled and self.bot_token and self.manager_chat_id)
+        return bool(self.bot_token and self.manager_chat_id)
 
 
 class OrderFile(db.Model):

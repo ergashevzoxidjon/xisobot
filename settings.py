@@ -31,17 +31,17 @@ def telegram():
             flash(str(e), "danger")
             return render_template("settings/telegram.html", settings=s, form=request.form)
 
-        s.is_enabled = bool(request.form.get("is_enabled"))
         s.notify_new_order = bool(request.form.get("notify_new_order"))
         s.notify_payment = bool(request.form.get("notify_payment"))
         s.notify_daily = bool(request.form.get("notify_daily"))
-
-        if s.is_enabled and not (s.bot_token and s.manager_chat_id):
-            flash("Yoqish uchun bot token va chat ID kiritilishi kerak.", "danger")
-            s.is_enabled = False
+        # Ulanganlik endi shu ikkalasi borligiga qarab avtomatik aniqlanadi
+        # (TelegramSettings.is_ready) — alohida "yoqish" katakchasi yo'q,
+        # chunki u avval token+chat ID kiritilgan holda ham belgilanmay
+        # qolib, xabarlar jimgina yuborilmay qolishiga sabab bo'lgan.
+        s.is_enabled = bool(s.bot_token and s.manager_chat_id)
 
         log_action(current_user, "update", "telegram", s.id,
-                   "yoqildi" if s.is_enabled else "o'chirildi")
+                   "ulandi" if s.is_enabled else "uzildi")
         db.session.commit()
         flash("Telegram sozlamalari saqlandi.", "success")
         return redirect(url_for("settings.telegram"))

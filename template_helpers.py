@@ -30,7 +30,8 @@ EXPENSE_CATEGORY_ICONS = {
     "xomashyo": "bi-box-seam",
     "jihoz": "bi-tools",
     "soliq": "bi-bank",
-    "boshqa": "bi-three-dots",
+    "buyurtma": "bi-receipt",
+    "ofis xarajatlari": "bi-briefcase",
 }
 
 

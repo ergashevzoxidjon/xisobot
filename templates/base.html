@@ -156,6 +156,73 @@ a{ text-decoration:none; }
 .pick-chip.new{ background:#fffaeb; color:#b54708; }
 .pick-chip.muted{ background:#f1f5f9; color:#64748b; }
 
+/* Jadval qatorida yangi (bazada topilmagan) yozuv — chap chegara bilan ajratiladi */
+.row-is-new > td:first-child{ box-shadow:inset 3px 0 0 #f79009; }
+.row-is-new{ background:#fffdf7; }
+
+/* buyurtma holatini bir bosishda almashtirish tugmalari */
+.status-switch-btn{ transition:transform .12s, box-shadow .12s; }
+.status-switch-btn:hover{ transform:translateY(-1px); box-shadow:0 2px 8px rgba(0,0,0,.08); }
+.status-switch-btn:active{ transform:translateY(0); }
+
+/* ---- ombor katalogi: mahsulot plitkalari (list.html va receive.html) ---- */
+.tile-grid{
+  display:grid; grid-template-columns:repeat(auto-fill, minmax(158px, 1fr)); gap:.6rem;
+}
+.stock-tile{
+  position:relative; border:1px solid #e5e9f0; border-radius:12px; padding:.8rem .85rem;
+  background:#fff; cursor:pointer; transition:border-color .12s, box-shadow .12s, transform .12s;
+  display:flex; flex-direction:column; gap:.35rem; text-align:left;
+}
+.stock-tile:hover{ border-color:var(--primary); box-shadow:0 2px 10px rgba(37,99,235,.1); }
+.stock-tile:active{ transform:scale(.98); }
+.stock-tile-icon{
+  width:34px; height:34px; border-radius:9px; background:var(--primary-soft); color:var(--primary);
+  display:flex; align-items:center; justify-content:center; font-size:1rem; flex-shrink:0;
+}
+.stock-tile-name{ font-weight:700; font-size:.86rem; line-height:1.25; color:#1e293b; }
+.stock-tile-meta{ font-size:.74rem; color:#64748b; font-weight:600; }
+.stock-tile-meta.low{ color:#dc2626; }
+.stock-tile-meta.zero{ color:#dc2626; font-weight:700; }
+.stock-tile-price{ display:flex; flex-direction:column; gap:.15rem; }
+.stock-tile-badge{
+  position:absolute; top:.6rem; right:.6rem; width:22px; height:22px; border-radius:50%;
+  background:var(--primary); color:#fff; display:flex; align-items:center; justify-content:center;
+  font-size:.8rem; opacity:0; transform:scale(.6); transition:opacity .12s, transform .12s;
+}
+.stock-tile.in-cart{ border-color:var(--primary); background:var(--primary-soft); }
+.stock-tile.in-cart .stock-tile-badge{ opacity:1; transform:scale(1); }
+.stock-tile.in-cart .stock-tile-icon{ background:var(--primary); color:#fff; }
+.stock-tile-new{
+  grid-column:1 / -1; flex-direction:row; align-items:center; justify-content:flex-start;
+  text-align:left; gap:.65rem; border-style:dashed; border-color:#cbd5e1; color:#64748b;
+}
+.stock-tile-new:hover{ border-color:var(--primary); color:var(--primary); }
+.stock-tile-new .stock-tile-icon{ background:#f1f5f9; color:#64748b; }
+.stock-tile-new:hover .stock-tile-icon{ background:var(--primary-soft); color:var(--primary); }
+.stock-tile-new-label{ display:flex; flex-direction:column; gap:.1rem; }
+.stock-tile-new-form{
+  display:flex; flex-direction:row; flex-wrap:wrap; align-items:center; gap:.5rem;
+  width:100%; cursor:default;
+}
+.stock-tile-new-form input{ flex:1 1 220px; }
+.stock-tile-new-form select{ flex:0 0 120px; }
+.stock-tile-new-form .d-flex{ flex:0 0 auto; }
+.stock-tile-new-form input, .stock-tile-new-form select{ font-size:.8rem; }
+.stock-tile-new-form .form-text{ flex-basis:100%; }
+
+.cart-panel{
+  border:1px solid #e5e9f0; border-radius:12px; padding:.9rem 1rem; background:#f8fafc; margin-top:1rem;
+}
+.cart-row{
+  display:flex; align-items:center; gap:.6rem; padding:.4rem 0; border-bottom:1px dashed #e2e8f0;
+}
+.cart-row:last-child{ border-bottom:none; }
+.cart-row-name{ font-weight:600; font-size:.85rem; flex:1 1 auto; min-width:0; }
+.cart-row-name small{ display:block; color:#94a3b8; font-weight:500; font-size:.72rem; }
+.cart-row input[type="number"]{ width:88px; text-align:right; }
+.cart-row-line{ width:110px; text-align:right; font-weight:700; font-variant-numeric:tabular-nums; }
+
 .sticky-actions{
   position:sticky; bottom:0; background:#fff; border-top:1px solid #e5e9f0;
   padding:.8rem 0 .2rem; margin-top:.75rem; display:flex; gap:.6rem; align-items:center;

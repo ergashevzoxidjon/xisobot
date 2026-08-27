@@ -1,6 +1,11 @@
 {% extends "base.html" %}
+{% set unit_icons = {
+  'dona': 'bi-box', 'list': 'bi-file-earmark', 'kg': 'bi-basket',
+  'metr': 'bi-rulers', 'kv.metr': 'bi-bounding-box', 'litr': 'bi-droplet',
+  'rulon': 'bi-record-circle', 'quti': 'bi-box-seam',
+} %}
 
-{# xato bo'lganda kiritilgan qatorlarni tiklaymiz #}
+{# xato bo'lganda kiritilgan qatorlarni tiklaymiz — katalog-savat ko'rinishida qayta quriladi #}
 {% set posted_material_ids = form.getlist('row_material_id') if form and form.getlist is defined else [] %}
 {% set posted_material_names = form.getlist('row_material_name') if form and form.getlist is defined else [] %}
 {% set posted_units = form.getlist('row_unit') if form and form.getlist is defined else [] %}
@@ -24,127 +29,86 @@
   {% endfor %}
 {% elif preselected_id %}
   {% set _preselected = materials|selectattr('id', 'equalto', preselected_id)|list %}
-  {% set _ = rows.append({
-    'material_id': preselected_id,
-    'material_name': _preselected[0].name if _preselected else '',
-    'unit': '', 'quantity': '', 'price': '',
-  }) %}
-{% endif %}
-{% if not rows %}
-  {% set _ = rows.append({'material_id': '', 'material_name': '', 'unit': '', 'quantity': '', 'price': ''}) %}
+  {% if _preselected %}
+    {% set _ = rows.append({
+      'material_id': preselected_id,
+      'material_name': _preselected[0].name,
+      'unit': _preselected[0].unit, 'quantity': '', 'price': '',
+    }) %}
+  {% endif %}
 {% endif %}
 
 {% block content %}
 <div class="page-header">
   <div>
     <h3>Omborga kirim</h3>
-    <div class="subtitle">Sotib olingan mahsulot omborga qo'shiladi va shu kuni xarajat sifatida yoziladi</div>
+    <div class="subtitle">Mahsulotni bosib savatga qo'shing, so'ng soni va narxini kiriting</div>
   </div>
-  {% if has_perm('stock.manage') %}
-  <a href="{{ url_for('stock.new_material') }}" class="btn btn-outline-primary">
-    <i class="bi bi-card-checklist"></i> Mahsulot kartochkasi</a>
-  {% endif %}
 </div>
 
 <div class="card p-4" style="max-width:1000px">
 <form method="post" id="receiveForm">
   {{ csrf() }}
 
-  {# ---------------- 1. QABUL QILINGAN MAHSULOTLAR ---------------- #}
+  {# ---------------- 1. QABUL QILINGAN MAHSULOTLAR — KATALOG + SAVAT ---------------- #}
   <div class="form-step">
     <div class="form-step-head">
       <span class="step-num">1</span>
       <div>
         <h6>Nima qabul qilindi</h6>
-        <div class="hint">Nomini yozing — bazadagilar chiqadi. Topilmasa, birligini tanlang: yangisi shu yerning o'zida ochiladi.</div>
+        <div class="hint">Mahsulotni bosing — savatga tushadi. Kerakli mahsulot yo'q bo'lsa, "Yangi mahsulot"ni bosib shu yerning o'zida oching.</div>
       </div>
     </div>
 
-    {% if materials %}
-    <div class="mb-3">
-      <div class="d-flex flex-wrap gap-2">
-        {% for m in materials[:12] %}
-        <button type="button" class="btn btn-outline-primary btn-sm quick-type material-chip"
-                data-id="{{ m.id }}" data-name="{{ m.name }}" data-price="{{ m.last_price }}">
-          {{ m.name }}
-          <span class="price">qoldiq {{ m.quantity|qty }} {{ m.unit }}</span>
-        </button>
-        {% endfor %}
+    <div class="tile-grid" id="catalogGrid">
+      <div class="stock-tile stock-tile-new" id="newMaterialTile" tabindex="0">
+        <div class="stock-tile-icon"><i class="bi bi-plus-lg"></i></div>
+        <div class="stock-tile-new-label">
+          <div class="stock-tile-name">Yangi mahsulot</div>
+          <div class="stock-tile-meta">Nomi va birligini kiriting</div>
+        </div>
       </div>
-      <div class="form-text">Bosing — bo'sh qatorga mahsulot va oxirgi narxi qo'yiladi.</div>
-    </div>
-    {% else %}
-    <div class="alert alert-light border py-2 mb-3 small">
-      <i class="bi bi-lightbulb"></i> Ombor hali bo'sh — pastdagi qatorga mahsulot nomini yozib, birligini
-      tanlang: birinchi mahsulot shu kirim bilan birga ochiladi.
-    </div>
-    {% endif %}
-
-    <div style="overflow-x:auto">
-      <table class="table stack-table align-middle mb-0">
-        <thead>
-          <tr>
-            <th style="width:34px"></th>
-            <th style="min-width:260px">Mahsulot</th>
-            <th style="width:120px" class="text-end">Soni</th>
-            <th style="width:150px" class="text-end">Narxi</th>
-            <th style="width:150px" class="text-end">Jami</th>
-            <th style="width:44px"></th>
-          </tr>
-        </thead>
-        <tbody id="receiveBody">
-          {% for row in rows %}
-          <tr class="receive-row">
-            <td class="row-num">{{ loop.index }}</td>
-            <td data-label="Mahsulot">
-              <input type="hidden" class="row-material-id" name="row_material_id" value="{{ row.material_id }}">
-              <div class="input-group input-group-sm">
-                <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
-                <input class="form-control row-material-name border-start-0" name="row_material_name"
-                       list="materialList" autocomplete="off" placeholder="Mahsulot nomini yozing..."
-                       value="{{ row.material_name }}">
-              </div>
-              <div class="form-text row-hint"></div>
-              <div class="row-new-unit mt-1" style="display:none">
-                <div class="d-flex align-items-center flex-wrap gap-2">
-                  <span class="pick-chip new"><i class="bi bi-plus-circle"></i> yangi mahsulot</span>
-                  <select class="form-select form-select-sm row-unit" name="row_unit" style="width:auto">
-                    {% for u in units %}
-                    <option value="{{ u }}" {% if row.unit == u %}selected{% endif %}>{{ u }}</option>
-                    {% endfor %}
-                  </select>
-                </div>
-              </div>
-            </td>
-            <td data-label="Soni"><input type="number" step="0.001" min="0.001" class="form-control text-end row-qty"
-                       name="row_quantity" value="{{ row.quantity }}"></td>
-            <td data-label="Narxi"><input type="number" step="0.01" min="0.01" class="form-control text-end row-price"
-                       name="row_price" value="{{ row.price }}"></td>
-            <td data-label="Jami" class="text-end num fw-semibold row-line">0.00</td>
-            <td><button type="button" class="btn btn-sm btn-outline-danger row-remove"
-                        title="Qatorni o'chirish"><i class="bi bi-x-lg"></i></button></td>
-          </tr>
-          {% endfor %}
-        </tbody>
-        <tfoot>
-          <tr>
-            <td colspan="4" class="text-end fw-bold">Jami xarajat</td>
-            <td class="text-end fw-bold num" id="receiveTotalCell">0.00</td>
-            <td></td>
-          </tr>
-        </tfoot>
-      </table>
-    </div>
-
-    <datalist id="materialList">
       {% for m in materials %}
-      <option value="{{ m.name }}">{{ m.quantity|qty }} {{ m.unit }} · {{ m.last_price|uzs }}</option>
+      <div class="stock-tile" data-id="{{ m.id }}" data-name="{{ m.name }}" data-unit="{{ m.unit }}"
+           data-price="{{ m.last_price|string }}" tabindex="0">
+        <div class="stock-tile-badge"><i class="bi bi-check-lg"></i></div>
+        <div class="stock-tile-icon"><i class="bi {{ unit_icons.get(m.unit, 'bi-tag') }}"></i></div>
+        <div class="stock-tile-name">{{ m.name }}</div>
+        <div class="stock-tile-meta">qoldiq {{ m.quantity|qty }} {{ m.unit }}</div>
+      </div>
       {% endfor %}
-    </datalist>
+    </div>
 
-    <button type="button" class="btn btn-outline-primary btn-sm mt-3" id="addReceiveRow">
-      <i class="bi bi-plus-lg"></i> Qator qo'shish
-    </button>
+    <div class="cart-panel" id="cartPanel" style="display:none">
+      <div class="d-flex justify-content-between align-items-center mb-1">
+        <h6 class="fw-bold mb-0"><i class="bi bi-cart-check me-1 text-muted"></i> Tanlangan mahsulotlar</h6>
+        <span class="text-muted small" id="cartCount"></span>
+      </div>
+      <div id="cartBody"></div>
+      <div class="d-flex justify-content-between align-items-center mt-2 pt-2" style="border-top:1px solid #e2e8f0">
+        <span class="fw-bold">Jami xarajat</span>
+        <span class="fw-bold num" id="receiveTotalCell">0.00</span>
+      </div>
+    </div>
+
+    <template id="cartRowTemplate">
+      <div class="cart-row">
+        <input type="hidden" class="row-material-id" name="row_material_id" value="">
+        <input type="hidden" class="row-material-name" name="row_material_name" value="">
+        <input type="hidden" class="row-unit" name="row_unit" value="">
+        <div class="cart-row-name">
+          <span class="cart-name-text"></span>
+          <small class="cart-unit-text"></small>
+        </div>
+        <input type="number" step="0.001" min="0.001" class="form-control form-control-sm row-qty"
+               name="row_quantity" placeholder="Soni">
+        <input type="number" step="0.01" min="0.01" class="form-control form-control-sm row-price"
+               name="row_price" placeholder="Narxi">
+        <div class="cart-row-line">0.00</div>
+        <button type="button" class="btn btn-sm btn-outline-danger row-remove"
+                title="Savatdan olib tashlash"><i class="bi bi-x-lg"></i></button>
+      </div>
+    </template>
   </div>
 
   {# ---------------- 2. TAMINOTCHI VA TO'LOV ---------------- #}
@@ -248,155 +212,186 @@
 
 {% block scripts %}
 <script>
-{% set material_json = [] %}
-{% for m in materials %}
-  {% set _ = material_json.append({'id': m.id, 'name': m.name, 'unit': m.unit,
-                                   'qty': m.quantity|qty, 'price': m.last_price|string}) %}
-{% endfor %}
-const MATERIALS = {{ material_json|tojson }};
-const MATERIALS_BY_NAME = {};
-MATERIALS.forEach(m => { MATERIALS_BY_NAME[m.name.toLowerCase()] = m; });
-
-const body = document.getElementById('receiveBody');
+const catalogGrid = document.getElementById('catalogGrid');
+const cartPanel = document.getElementById('cartPanel');
+const cartBody = document.getElementById('cartBody');
+const cartCount = document.getElementById('cartCount');
+const cartTemplate = document.getElementById('cartRowTemplate');
 const totalPill = document.getElementById('receiveTotal');
 const totalCell = document.getElementById('receiveTotalCell');
-const templateRow = body.querySelector('.receive-row');
-let activeRow = null;
+const newTile = document.getElementById('newMaterialTile');
+let newItemSeq = 0;
 
 function money(v) {
   return (v || 0).toLocaleString('ru-RU', {minimumFractionDigits: 2, maximumFractionDigits: 2});
 }
 
-function setActive(tr) {
-  if (activeRow) activeRow.classList.remove('table-active');
-  activeRow = tr;
-  if (tr) tr.classList.add('table-active');
-}
-
-function renumber() {
-  body.querySelectorAll('.receive-row').forEach((tr, i) => {
-    tr.querySelector('.row-num').textContent = i + 1;
-  });
-}
-
-/* mahsulot nomi ombordagi bilan mos kelsa — id/narx o'zi to'ladi;
-   aks holda "yangi mahsulot" ko'rsatilib, birligi so'raladi */
-function matchMaterial(tr) {
-  const nameInput = tr.querySelector('.row-material-name');
-  const hidden = tr.querySelector('.row-material-id');
-  const price = tr.querySelector('.row-price');
-  const hint = tr.querySelector('.row-hint');
-  const newUnitBox = tr.querySelector('.row-new-unit');
-  const name = nameInput.value.trim();
-  const found = MATERIALS_BY_NAME[name.toLowerCase()];
-
-  if (found) {
-    hidden.value = found.id;
-    if (!price.value && parseFloat(found.price) > 0) price.value = found.price;
-    hint.className = 'form-text row-hint text-success';
-    hint.innerHTML = '<i class="bi bi-check-circle"></i> Omborda: ' + found.qty + ' ' + found.unit;
-    newUnitBox.style.display = 'none';
-  } else {
-    hidden.value = '';
-    hint.className = 'form-text row-hint';
-    hint.innerHTML = '';
-    newUnitBox.style.display = name ? '' : 'none';
-  }
-}
-
-function recalc() {
+function recalcCart() {
   let sum = 0;
-  body.querySelectorAll('.receive-row').forEach(tr => {
-    const qty = parseFloat(tr.querySelector('.row-qty').value) || 0;
-    const price = parseFloat(tr.querySelector('.row-price').value) || 0;
+  cartBody.querySelectorAll('.cart-row').forEach(row => {
+    const qty = parseFloat(row.querySelector('.row-qty').value) || 0;
+    const price = parseFloat(row.querySelector('.row-price').value) || 0;
     const line = qty * price;
-    tr.querySelector('.row-line').textContent = money(line);
+    row.querySelector('.cart-row-line').textContent = money(line);
     sum += line;
   });
   const text = money(sum);
   totalPill.textContent = text;
   totalCell.textContent = text;
-  renumber();
+  const count = cartBody.querySelectorAll('.cart-row').length;
+  cartCount.textContent = count ? count + ' ta mahsulot' : '';
+  cartPanel.style.display = count ? '' : 'none';
 }
 
-function addRow(focus) {
-  const tr = templateRow.cloneNode(true);
-  tr.querySelector('.row-material-id').value = '';
-  tr.querySelector('.row-material-name').value = '';
-  tr.querySelector('.row-unit').selectedIndex = 0;
-  tr.querySelector('.row-qty').value = '';
-  tr.querySelector('.row-price').value = '';
-  tr.querySelector('.row-line').textContent = '0.00';
-  tr.querySelector('.row-hint').innerHTML = '';
-  tr.querySelector('.row-new-unit').style.display = 'none';
-  body.appendChild(tr);
-  setActive(tr);
-  if (focus) tr.querySelector('.row-material-name').focus();
-  recalc();
-  return tr;
+function addCartRow(opts) {
+  const row = cartTemplate.content.firstElementChild.cloneNode(true);
+  row.dataset.clientId = opts.clientId;
+  row.querySelector('.row-material-id').value = opts.materialId || '';
+  row.querySelector('.row-material-name').value = opts.name;
+  row.querySelector('.row-unit').value = opts.unit || '';
+  row.querySelector('.cart-name-text').textContent = opts.name;
+  row.querySelector('.cart-unit-text').textContent = opts.unit || '';
+  if (opts.qty) row.querySelector('.row-qty').value = opts.qty;
+  if (opts.price && parseFloat(opts.price) > 0) row.querySelector('.row-price').value = opts.price;
+  cartBody.appendChild(row);
+  recalcCart();
+  return row;
 }
 
-body.addEventListener('input', e => {
-  const tr = e.target.closest('.receive-row');
-  if (!tr) return;
-  if (e.target.matches('.row-material-name')) matchMaterial(tr);
-  recalc();
+function removeCartRow(clientId) {
+  const row = cartBody.querySelector('.cart-row[data-client-id="' + clientId + '"]');
+  if (row) row.remove();
+  recalcCart();
+}
+
+cartBody.addEventListener('input', e => {
+  if (e.target.matches('.row-qty, .row-price')) recalcCart();
 });
 
-body.addEventListener('focusin', e => {
-  const tr = e.target.closest('.receive-row');
-  if (tr) setActive(tr);
-});
-
-body.addEventListener('click', e => {
+cartBody.addEventListener('click', e => {
   const btn = e.target.closest('.row-remove');
   if (!btn) return;
-  const rows = body.querySelectorAll('.receive-row');
-  if (rows.length <= 1) {
-    rows[0].querySelector('.row-material-id').value = '';
-    rows[0].querySelector('.row-material-name').value = '';
-    rows[0].querySelector('.row-unit').selectedIndex = 0;
-    rows[0].querySelector('.row-qty').value = '';
-    rows[0].querySelector('.row-price').value = '';
-    rows[0].querySelector('.row-hint').innerHTML = '';
-    rows[0].querySelector('.row-new-unit').style.display = 'none';
-    recalc();
-    return;
-  }
-  const tr = btn.closest('.receive-row');
-  if (tr === activeRow) setActive(null);
-  tr.remove();
-  recalc();
+  const row = btn.closest('.cart-row');
+  const clientId = row.dataset.clientId;
+  const tile = catalogGrid.querySelector('.stock-tile[data-client-id="' + clientId + '"]');
+  if (tile) tile.classList.remove('in-cart');
+  row.remove();
+  recalcCart();
 });
 
-document.getElementById('addReceiveRow').addEventListener('click', () => addRow(true));
+/* ---------------- mavjud mahsulot plitkalari ---------------- */
 
-/* mahsulot tugmalari — bo'sh qatorga qo'yadi */
-document.querySelectorAll('.material-chip').forEach(btn => {
-  btn.addEventListener('click', () => {
-    let tr = activeRow && activeRow.isConnected ? activeRow : null;
-    if (!tr) {
-      const rows = body.querySelectorAll('.receive-row');
-      tr = rows.length ? rows[rows.length - 1] : addRow(false);
-    }
-    if (tr.querySelector('.row-material-name').value.trim()) tr = addRow(false);
+const MATERIALS_BY_NAME = {};
+catalogGrid.querySelectorAll('.stock-tile[data-id]').forEach(tile => {
+  const clientId = 'm' + tile.dataset.id;
+  tile.dataset.clientId = clientId;
+  MATERIALS_BY_NAME[tile.dataset.name.toLowerCase()] = tile;
 
-    tr.querySelector('.row-material-name').value = btn.dataset.name;
-    tr.querySelector('.row-material-id').value = btn.dataset.id;
-    const price = parseFloat(btn.dataset.price);
-    if (!isNaN(price) && price > 0 && !tr.querySelector('.row-price').value) {
-      tr.querySelector('.row-price').value = price;
-    }
-    matchMaterial(tr);
-    setActive(tr);
-    tr.querySelector('.row-qty').focus();
-    recalc();
+  tile.addEventListener('click', () => selectTile(tile));
+  tile.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectTile(tile); }
   });
 });
 
-setActive(body.querySelector('.receive-row'));
-body.querySelectorAll('.receive-row').forEach(matchMaterial);
-recalc();
+function selectTile(tile, opts) {
+  opts = opts || {};
+  const clientId = tile.dataset.clientId;
+  if (tile.classList.contains('in-cart') && !opts.forceAdd) {
+    tile.classList.remove('in-cart');
+    removeCartRow(clientId);
+    return;
+  }
+  tile.classList.add('in-cart');
+  const row = addCartRow({
+    clientId, materialId: tile.dataset.id, name: tile.dataset.name,
+    unit: tile.dataset.unit, qty: opts.qty, price: opts.price || tile.dataset.price,
+  });
+  row.querySelector('.row-qty').focus();
+}
+
+/* ---------------- "+ Yangi mahsulot" plitkasi ---------------- */
+
+function resetNewTile() {
+  newTile.innerHTML =
+    '<div class="stock-tile-icon"><i class="bi bi-plus-lg"></i></div>' +
+    '<div class="stock-tile-new-label">' +
+      '<div class="stock-tile-name">Yangi mahsulot</div>' +
+      '<div class="stock-tile-meta">Nomi va birligini kiriting</div>' +
+    '</div>';
+}
+
+function openNewMaterialForm() {
+  newTile.innerHTML =
+    '<div class="stock-tile-new-form">' +
+      '<input type="text" class="form-control form-control-sm" id="newMatName" placeholder="Mahsulot nomi" autocomplete="off">' +
+      '<select class="form-select form-select-sm" id="newMatUnit">' +
+      {% for u in units %}'<option value="{{ u }}">{{ u }}</option>' + {% endfor %}
+      '</select>' +
+      '<div class="d-flex gap-1">' +
+        '<button type="button" class="btn btn-primary btn-sm flex-fill" id="newMatConfirm"><i class="bi bi-plus-lg"></i> Qo\'shish</button>' +
+        '<button type="button" class="btn btn-outline-secondary btn-sm" id="newMatCancel"><i class="bi bi-x"></i></button>' +
+      '</div>' +
+      '<div class="form-text text-danger" id="newMatHint" style="display:none"></div>' +
+    '</div>';
+  newTile.querySelector('.stock-tile-new-form').addEventListener('click', e => e.stopPropagation());
+  const nameInput = document.getElementById('newMatName');
+  nameInput.focus();
+  document.getElementById('newMatCancel').addEventListener('click', resetNewTile);
+  document.getElementById('newMatConfirm').addEventListener('click', confirmNewMaterial);
+  nameInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); confirmNewMaterial(); }
+  });
+}
+
+function confirmNewMaterial() {
+  const nameInput = document.getElementById('newMatName');
+  const unitSelect = document.getElementById('newMatUnit');
+  const hint = document.getElementById('newMatHint');
+  const name = nameInput.value.trim();
+  if (!name) {
+    hint.textContent = 'Nomini kiriting';
+    hint.style.display = '';
+    return;
+  }
+
+  const existing = MATERIALS_BY_NAME[name.toLowerCase()];
+  if (existing) {
+    resetNewTile();
+    selectTile(existing, {forceAdd: true});
+    return;
+  }
+
+  newItemSeq += 1;
+  addCartRow({clientId: 'new' + newItemSeq, materialId: '', name: name, unit: unitSelect.value});
+  resetNewTile();
+}
+
+newTile.addEventListener('click', openNewMaterialForm);
+newTile.addEventListener('keydown', e => {
+  if ((e.key === 'Enter' || e.key === ' ') && newTile.classList.contains('stock-tile-new')) {
+    e.preventDefault();
+    openNewMaterialForm();
+  }
+});
+
+/* ---------------- sahifa yuklanganda: posted/preselected qatorlarni tiklash ---------------- */
+
+const INITIAL_ROWS = {{ rows|tojson }};
+INITIAL_ROWS.forEach(r => {
+  if (!r.material_name) return;
+  const idStr = r.material_id != null && r.material_id !== '' ? String(r.material_id) : '';
+  const tile = idStr ? catalogGrid.querySelector('.stock-tile[data-id="' + idStr + '"]') : null;
+  if (tile) {
+    selectTile(tile, {qty: r.quantity, price: r.price});
+  } else {
+    newItemSeq += 1;
+    addCartRow({
+      clientId: 'restore' + newItemSeq, materialId: r.material_id || '',
+      name: r.material_name, unit: r.unit, qty: r.quantity, price: r.price,
+    });
+  }
+});
+recalcCart();
 
 /* ---------------- taminotchi ---------------- */
 

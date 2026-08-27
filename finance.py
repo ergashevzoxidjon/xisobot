@@ -233,7 +233,9 @@ def expenses_list():
         "finance/expenses.html",
         expenses=pagination.items,
         pagination=pagination,
-        categories=EXPENSE_CATEGORIES,
+        # Filtr tugmalarida "buyurtma" ko'rsatilmaydi — u avtomatik qo'yiladigan
+        # ichki turkum, foydalanuvchi tanlamaydi (2026-08-27, foydalanuvchi qarori).
+        categories=GENERAL_EXPENSE_CATEGORIES,
         category=category,
         total_all=total_all,
         transfer_totals=transfer_totals,
@@ -493,7 +495,7 @@ def expense_breakdown(start, end):
         "linked": linked,
         "general": general,
         "stock_used": stock_used,
-        "order_rows": order_rows[:20],
+        "order_rows": order_rows,
         "product_rows": product_rows,
     }
 

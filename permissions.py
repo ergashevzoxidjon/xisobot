@@ -26,7 +26,7 @@ ROLE_LABELS = {
 ROLE_DESCRIPTIONS = {
     "admin": "Barcha bo'limlar va foydalanuvchilar boshqaruvi",
     "menejer": "Buyurtma va mijozlar bilan ishlaydi",
-    "xarajatchi": "Xarajatlarni kiritadi",
+    "xarajatchi": "Ombor, xarajat va taminotchilarni yuritadi, hisobotlarni ko'radi",
     "boss": "Rahbar — barcha hisobot va tahlillarni ko'radi (o'zgartirmaydi)",
 }
 
@@ -50,10 +50,13 @@ ROLE_PERMISSIONS = {
         "clients.view", "clients.create",
     },
     # Ish boshqaruvchi omborni yuritadi: mahsulot qabul qiladi va sarflaydi,
-    # taminotchilar bilan ishlaydi (qarz-to'lov)
+    # taminotchilar bilan ishlaydi (qarz-to'lov). Moliyaviy hisobot va
+    # tahlilni ham ko'radi (2026-08-27, foydalanuvchi qarori) — buyurtmalar
+    # rentabelligi va boshqa hisobotlarni kuzatishi kerak.
     "xarajatchi": {"expenses.view", "expenses.create", "orders.view",
                    "stock.view", "stock.manage",
-                   "suppliers.view", "suppliers.manage"},
+                   "suppliers.view", "suppliers.manage",
+                   "reports.view"},
     # Boss — korxona rahbari. Hamma narsani KO'RADI, hech narsani
     # o'zgartirmaydi: buyurtma, mijoz, ombor va sozlamalarga tegmaydi.
     "boss": {

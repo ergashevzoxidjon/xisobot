@@ -473,7 +473,7 @@ def add_payment(order_id):
 
 @orders_bp.route("/tolov/<int:payment_id>/ochirish", methods=["POST"])
 @login_required
-@permission_required("orders.manage")
+@permission_required("orders.delete")
 def delete_payment(payment_id):
     p = Payment.query.get_or_404(payment_id)
     order_id = p.order_id
@@ -589,7 +589,7 @@ def download_file(file_id):
 
 @orders_bp.route("/fayl/<int:file_id>/ochirish", methods=["POST"])
 @login_required
-@permission_required("orders.edit")
+@permission_required("orders.delete")
 def delete_file(file_id):
     f = OrderFile.query.get_or_404(file_id)
     order_id = f.order_id

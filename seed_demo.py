@@ -55,7 +55,7 @@ DEMO_EXPENSES = [
     ("kommunal", 800000, "Svet, suv, internet", 8),
     ("xomashyo", 6500000, "Qog'oz va bo'yoq xaridi", 12),
     ("transport", 500000, "Yetkazib berish xarajati", 15),
-    ("boshqa", 350000, "Kanselyariya buyumlari", 18),
+    ("ofis xarajatlari", 350000, "Kanselyariya buyumlari", 18),
     ("ijara", 3000000, "O'tgan oy ijarasi", 34),
     ("ish haqi", 14500000, "O'tgan oy maoshi", 36),
     ("xomashyo", 5800000, "O'tgan oy qog'oz xaridi", 40),

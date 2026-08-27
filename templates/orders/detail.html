@@ -120,13 +120,27 @@
     {% if has_perm('orders.manage') %}
     <div class="card p-4 mt-3 no-print">
       <h6 class="fw-bold mb-3"><i class="bi bi-arrow-repeat me-1 text-muted"></i> Holatni o'zgartirish</h6>
-      <form method="post" action="{{ url_for('orders.update_status', order_id=order.id) }}" class="d-flex gap-2">
-        {{ csrf() }}
-        <select name="status" class="form-select">
-          {% for s in statuses %}<option value="{{ s }}" {% if s == order.status %}selected{% endif %}>{{ s }}</option>{% endfor %}
-        </select>
-        <button class="btn btn-outline-primary text-nowrap"><i class="bi bi-check-lg"></i> Yangilash</button>
-      </form>
+      <div class="d-flex flex-wrap gap-2 align-items-center">
+        <span class="badge rounded-pill bg-{{ order.status|status_color }} fs-6 py-2 px-3">
+          <i class="bi {{ order.status|status_icon }} me-1"></i>{{ order.status }}
+        </span>
+        {% if statuses|length > 1 %}
+        <span class="text-muted small mx-1">→</span>
+        {% for s in statuses %}
+        {% if s != order.status %}
+        <form method="post" action="{{ url_for('orders.update_status', order_id=order.id) }}" class="d-inline"
+              {% if s == 'bekor qilindi' %}onsubmit="return confirm('Buyurtma bekor qilinsinmi?')"{% endif %}>
+          {{ csrf() }}
+          <input type="hidden" name="status" value="{{ s }}">
+          <button class="btn btn-outline-{{ s|status_color }} rounded-pill btn-sm status-switch-btn">
+            <i class="bi {{ s|status_icon }} me-1"></i>{{ s }}
+          </button>
+        </form>
+        {% endif %}
+        {% endfor %}
+        {% endif %}
+      </div>
+      <div class="form-text mt-2">Kerakli holatni bosing — darhol yangilanadi.</div>
     </div>
     {% endif %}
 
@@ -250,7 +264,7 @@
             {% if p.creator %}<br><span class="text-muted" style="font-size:.75rem">{{ p.creator.display_name }}</span>{% endif %}
           </td>
           <td class="text-end no-print">
-            {% if has_perm('orders.manage') %}
+            {% if has_perm('orders.delete') %}
             <form method="post" action="{{ url_for('orders.delete_payment', payment_id=p.id) }}"
                   onsubmit="return confirm('To\'lov yozuvi o\'chirilsinmi?')">
               {{ csrf() }}
@@ -293,7 +307,7 @@
             </div>
           </td>
           <td class="text-end no-print" style="width:1%">
-            {% if has_perm('orders.edit') %}
+            {% if has_perm('orders.delete') %}
             <form method="post" action="{{ url_for('orders.delete_file', file_id=f.id) }}"
                   onsubmit="return confirm('Fayl o\'chirilsinmi?')">
               {{ csrf() }}
