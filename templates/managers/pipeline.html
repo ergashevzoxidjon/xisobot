@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h3>Mijozlar bilan ishlash</h3>
+    <div class="subtitle">Kartani sudrab yoki har bir kartadagi "..." menyusi orqali bosqichdan bosqichga o'tkazing</div>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <form method="get" class="d-flex gap-2">
+      {% if show_manager_column %}
+      <select name="manager_id" class="form-select" onchange="this.form.submit()">
+        <option value="">Barcha menejerlar</option>
+        {% for m in all_managers %}
+        <option value="{{ m.id }}" {% if manager_filter_id == m.id %}selected{% endif %}>{{ m.display_name }}</option>
+        {% endfor %}
+      </select>
+      {% endif %}
+      <input type="text" name="q" value="{{ q }}" class="form-control" placeholder="Mijoz qidirish..." style="width:190px">
+      <button class="btn btn-outline-primary"><i class="bi bi-search"></i></button>
+    </form>
+    {% if can_add %}
+    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newCardModal">
+      <i class="bi bi-plus-lg"></i> Yangi karta
+    </button>
+    {% endif %}
+  </div>
+</div>
+
+<div class="pipeline-board">
+  {% for stage in stages %}
+  <div class="pipeline-column">
+    <div class="pipeline-column-head">
+      <span class="pipeline-dot bg-{{ stage_colors[stage] }}"></span>
+      <span class="pipeline-column-title">{{ stage_labels[stage] }}</span>
+      <span class="badge bg-white text-dark border ms-auto">{{ columns[stage]|length }}</span>
+    </div>
+    <div class="pipeline-cards" data-stage="{{ stage }}">
+      {% for card in columns[stage] %}
+      <div class="pipeline-card" {% if can_add %}draggable="true"{% endif %} data-card-id="{{ card.id }}"
+           data-href="{{ url_for('managers.pipeline_card_detail', card_id=card.id) }}"
+           onclick="window.location.href=this.dataset.href">
+        <div class="pipeline-card-top">
+          <div class="pipeline-card-name">{{ card.display_name }}</div>
+          {% if can_add %}
+          <div class="dropdown pipeline-card-menu" onclick="event.stopPropagation()">
+            <button class="btn btn-sm py-0 px-1" type="button" data-bs-toggle="dropdown">
+              <i class="bi bi-three-dots"></i>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+              {% for s in stages %}
+              {% if s != card.stage %}
+                {% if s == 'otkaz' %}
+                <li>
+                  <a class="dropdown-item" href="{{ url_for('managers.pipeline_card_detail', card_id=card.id) }}#stageForm">
+                    <span class="pipeline-dot bg-{{ stage_colors[s] }}"></span> {{ stage_labels[s] }} (sababi bilan)
+                  </a>
+                </li>
+                {% else %}
+                <li>
+                  <form method="post" action="{{ url_for('managers.set_card_stage', card_id=card.id) }}">
+                    {{ csrf() }}
+                    <input type="hidden" name="stage" value="{{ s }}">
+                    <input type="hidden" name="redirect_to" value="board">
+                    <button class="dropdown-item" type="submit">
+                      <span class="pipeline-dot bg-{{ stage_colors[s] }}"></span> {{ stage_labels[s] }}
+                    </button>
+                  </form>
+                </li>
+                {% endif %}
+              {% endif %}
+              {% endfor %}
+            </ul>
+          </div>
+          {% endif %}
+        </div>
+        {% if card.client.company %}<div class="pipeline-card-sub"><i class="bi bi-building"></i> {{ card.client.company }}</div>{% endif %}
+        {% if show_manager_column %}<div class="pipeline-card-sub"><i class="bi bi-person"></i> {{ card.manager.display_name }}</div>{% endif %}
+        <div class="pipeline-card-foot">
+          <span class="text-muted small">{{ card.updated_at|date_uz }}</span>
+          {% if card.has_proposal %}<i class="bi bi-paperclip text-muted"></i>{% endif %}
+        </div>
+      </div>
+      {% else %}
+      <div class="pipeline-empty">Karta yo'q</div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{% if can_add %}
+<div class="modal fade" id="newCardModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="post" action="{{ url_for('managers.add_pipeline_card') }}" id="newCardForm">
+        {{ csrf() }}
+        <div class="modal-header">
+          <h5 class="modal-title">Yangi karta</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          {% if current_user.role == 'admin' %}
+          <div class="mb-3">
+            <label class="form-label mb-1">Menejer</label>
+            <select name="manager_id" class="form-select" required>
+              <option value="">— tanlang —</option>
+              {% for m in all_managers %}
+              <option value="{{ m.id }}" {% if manager_filter_id == m.id %}selected{% endif %}>{{ m.display_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          {% endif %}
+          <div class="mb-3">
+            <label class="form-label mb-1 d-block">Mijoz</label>
+            <div class="position-relative">
+              <input type="hidden" name="client_id" id="newCardClientId">
+              <div class="input-group">
+                <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+                <input class="form-control border-start-0" id="newCardClientName" name="client_name" autocomplete="off" required
+                       placeholder="Mijoz nomini yozing...">
+              </div>
+              <div id="newCardClientResults" class="list-group position-absolute w-100 shadow"
+                   style="z-index:2000; display:none; max-height:220px; overflow-y:auto"></div>
+            </div>
+            <div class="row g-2 mt-1" id="newCardNewClientBox" style="display:none">
+              <div class="hint mb-1" style="flex-basis:100%">Yangi mijoz — barcha maydonlar majburiy</div>
+              <div class="col-sm-6"><input class="form-control form-control-sm" id="newCardClientPhone" name="client_phone" placeholder="Telefon"></div>
+              <div class="col-sm-6"><input class="form-control form-control-sm" id="newCardClientCompany" name="client_company" placeholder="Korxona"></div>
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label mb-1">Izoh <span class="text-muted fw-normal">(ixtiyoriy)</span></label>
+            <input class="form-control" name="note" maxlength="255" placeholder="Masalan: birinchi qo'ng'iroq qilindi">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Bekor qilish</button>
+          <button class="btn btn-primary"><i class="bi bi-plus-lg"></i> Karta ochish</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const form = document.getElementById('newCardForm');
+  if (form) {
+    const SEARCH_URL = "{{ url_for('clients.search_clients') }}";
+    const clientName = document.getElementById('newCardClientName');
+    const clientId = document.getElementById('newCardClientId');
+    const results = document.getElementById('newCardClientResults');
+    const newClientBox = document.getElementById('newCardNewClientBox');
+    const newClientPhone = document.getElementById('newCardClientPhone');
+    const newClientCompany = document.getElementById('newCardClientCompany');
+    let searchTimer = null;
+
+    function hideResults() { results.style.display = 'none'; }
+
+    // Yangi mijoz qutisi ko'ringanda Telefon/Korxona majburiy bo'ladi;
+    // mavjud mijoz tanlansa (quti yashiringanda) majburiylik olib
+    // tashlanadi — aks holda yashirin maydon formani yubormay qo'yadi
+    // (2026-08-30, foydalanuvchi qarori).
+    function setNewClientBoxVisible(visible) {
+      newClientBox.style.display = visible ? '' : 'none';
+      newClientPhone.required = visible;
+      newClientCompany.required = visible;
+      if (!visible) { newClientPhone.value = ''; newClientCompany.value = ''; }
+    }
+
+    function renderResults(items) {
+      results.innerHTML = '';
+      if (!items.length) { hideResults(); return; }
+      items.forEach(c => {
+        const a = document.createElement('button');
+        a.type = 'button';
+        a.className = 'list-group-item list-group-item-action py-2';
+        a.innerHTML = `<span class="fw-semibold">${c.name}</span>` +
+                      (c.phone ? `<span class="text-muted small ms-2">${c.phone}</span>` : '');
+        a.addEventListener('click', () => {
+          clientName.value = c.name;
+          clientId.value = c.id;
+          hideResults();
+          setNewClientBoxVisible(false);
+        });
+        results.appendChild(a);
+      });
+      results.style.display = '';
+    }
+
+    clientName.addEventListener('input', () => {
+      clientId.value = '';
+      const q = clientName.value.trim();
+      clearTimeout(searchTimer);
+      if (q.length < 2) { hideResults(); setNewClientBoxVisible(false); return; }
+      searchTimer = setTimeout(() => {
+        fetch(SEARCH_URL + '?q=' + encodeURIComponent(q))
+          .then(r => r.ok ? r.json() : [])
+          .then(items => {
+            renderResults(items);
+            const exact = items.find(c => c.name.toLowerCase() === q.toLowerCase());
+            if (exact) { clientId.value = exact.id; setNewClientBoxVisible(false); }
+            else { setNewClientBoxVisible(true); }
+          })
+          .catch(() => hideResults());
+      }, 250);
+    });
+
+    document.addEventListener('click', event => {
+      if (!results.contains(event.target) && event.target !== clientName) hideResults();
+    });
+  }
+
+  /* Drag-and-drop: kartani boshqa ustunga tashlash bosqichni o'zgartiradi */
+  const CSRF = "{{ csrf_token() }}";
+  let draggedId = null;
+
+  document.querySelectorAll('.pipeline-card[draggable="true"]').forEach(card => {
+    card.addEventListener('dragstart', () => {
+      draggedId = card.dataset.cardId;
+      card.classList.add('dragging');
+    });
+    card.addEventListener('dragend', () => card.classList.remove('dragging'));
+  });
+
+  document.querySelectorAll('.pipeline-cards').forEach(col => {
+    col.addEventListener('dragover', e => {
+      e.preventDefault();
+      col.closest('.pipeline-column').classList.add('drag-over');
+    });
+    col.addEventListener('dragleave', () => col.closest('.pipeline-column').classList.remove('drag-over'));
+    col.addEventListener('drop', e => {
+      e.preventDefault();
+      col.closest('.pipeline-column').classList.remove('drag-over');
+      if (!draggedId) return;
+      const targetStage = col.dataset.stage;
+      const id = draggedId;
+      draggedId = null;
+
+      let note = '';
+      if (targetStage === 'otkaz') {
+        note = prompt("Otkaz berish sababi (majburiy):") || '';
+        if (!note.trim()) return;
+      }
+
+      fetch(`/menejerlar/pipeline/${id}/holat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRFToken': CSRF },
+        body: new URLSearchParams({ stage: targetStage, note: note, redirect_to: 'board' }),
+      }).then(resp => {
+        if (resp.ok) window.location.reload();
+        else alert('Xatolik yuz berdi.');
+      }).catch(() => alert('Xatolik yuz berdi.'));
+    });
+  });
+})();
+</script>
+{% endblock %}

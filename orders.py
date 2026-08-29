@@ -15,8 +15,9 @@ from werkzeug.utils import secure_filename
 from extensions import db
 from models import (
     Order, OrderItem, Client, Payment, OrderType, OrderFile, CompanySettings,
-    ManagerClientLog, log_action, can_transition,
+    ClientPipelineCard, log_action, can_transition,
     ORDER_STATUSES, ALLOWED_TRANSITIONS, STATUS_CANCELLED, ZERO,
+    ORDER_PAYMENT_METHODS,
 )
 from notifications import notify_new_order, notify_payment
 from permissions import permission_required, has_perm
@@ -239,8 +240,9 @@ def new_order():
             prefill = src
 
     # Mijoz oldindan tanlangan holda kelish (masalan, Manager xisobotidagi
-    # "kunlik mijozlar" jurnalidan "Muvaffaqiyatli" deb belgilangach —
-    # 2026-08-29, foydalanuvchi qarori).
+    # "Mijozlar bilan ishlash" pipeline kartasi "Muvaffaqiyatli" bosqichiga
+    # o'tkazilgach, "Buyurtma yaratish" havolasi orqali — 2026-08-29,
+    # to'rtinchi so'rov).
     prefill_client_id = ""
     prefill_client_name = ""
     if request.method == "GET" and not prefill:
@@ -256,9 +258,9 @@ def new_order():
             # forma o'zi mavjud mijozni topadi yoki yangisini yaratadi.
             prefill_client_name = request.args.get("client_name")
 
-    # Manager kunlik jurnalidagi yozuv shu buyurtma orqali "yopiladi" —
-    # buyurtma saqlangach shu yozuvga order_id yoziladi (2026-08-29).
-    manager_log_id = request.args.get("manager_log_id", type=int) if request.method == "GET" else None
+    # Pipeline kartasi shu buyurtma orqali "yopiladi" — buyurtma saqlangach
+    # shu kartaga order_id yoziladi (2026-08-29, to'rtinchi so'rov).
+    pipeline_card_id = request.args.get("pipeline_card_id", type=int) if request.method == "GET" else None
 
     def back_to_form():
         return render_template(
@@ -310,15 +312,13 @@ def new_order():
         log_action(current_user, "create", "order", o.id,
                    f"{o.order_number} yaratildi ({len(items)} qator)")
 
-        # Manager kunlik jurnalidan kelgan bo'lsa — shu yozuv shu buyurtma
-        # bilan "yopiladi" (2026-08-29, foydalanuvchi qarori).
-        posted_log_id = request.form.get("manager_log_id", type=int)
-        if posted_log_id:
-            log_entry = db.session.get(ManagerClientLog, posted_log_id)
-            if log_entry:
-                log_entry.order_id = o.id
-                if not log_entry.client_id:
-                    log_entry.client_id = client.id
+        # Pipeline kartasidan kelgan bo'lsa — shu karta shu buyurtma bilan
+        # "yopiladi" (2026-08-29, to'rtinchi so'rov).
+        posted_card_id = request.form.get("pipeline_card_id", type=int)
+        if posted_card_id:
+            card = db.session.get(ClientPipelineCard, posted_card_id)
+            if card:
+                card.order_id = o.id
 
         db.session.commit()
         notify_new_order(o)
@@ -331,7 +331,7 @@ def new_order():
         "orders/form.html", order_types=order_types,
         order=None, prefill=prefill, form=None,
         prefill_client_id=prefill_client_id, prefill_client_name=prefill_client_name,
-        manager_log_id=manager_log_id,
+        pipeline_card_id=pipeline_card_id,
     )
 
 
@@ -418,6 +418,7 @@ def order_detail(order_id):
     allowed = [o.status] + [s for s in ALLOWED_TRANSITIONS.get(o.status, []) if s != o.status]
     return render_template(
         "orders/detail.html", order=o, payments=payments, statuses=allowed,
+        order_payment_methods=ORDER_PAYMENT_METHODS,
     )
 
 
@@ -480,6 +481,9 @@ def add_payment(order_id):
         amount = parse_money(request.form.get("amount"), "Summa", min_value=Decimal("0.01"))
         paid_on = parse_date(request.form.get("paid_on"), "To'lov sanasi", required=False) or today_local()
         note = parse_text(request.form.get("note"), "Izoh", required=False, max_length=255)
+        payment_method = parse_choice(
+            request.form.get("payment_method"), "To'lov usuli", ORDER_PAYMENT_METHODS
+        )
     except ValidationError as e:
         flash(str(e), "danger")
         return redirect(url_for("orders.order_detail", order_id=order_id))
@@ -492,7 +496,7 @@ def add_payment(order_id):
     # bo'lib qoladi. Faqat ogohlantiramiz, bloklamaymiz.
     p = Payment(
         order_id=o.id, amount=amount, paid_on=paid_on, note=note,
-        created_by=current_user.id,
+        payment_method=payment_method, created_by=current_user.id,
     )
     db.session.add(p)
     log_action(current_user, "payment", "order", o.id, f"{amount} so'm to'lov")

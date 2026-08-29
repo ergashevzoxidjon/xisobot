@@ -45,10 +45,13 @@ PASSPORT_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png", ".tif", ".tiff"}
 
 
 def _employee_form_data(form):
+    birth_date = parse_date(form.get("birth_date"), "Tug'ilgan sana", required=True)
+    if birth_date > today_local():
+        raise ValidationError("Tug'ilgan sana: kelajakda bo'lishi mumkin emas.")
     return {
         "full_name": parse_text(form.get("full_name"), "Ism familiya", required=True, max_length=150),
-        "phone": parse_text(form.get("phone"), "Telefon", required=False, max_length=50),
-        "address": parse_text(form.get("address"), "Manzil", required=False, max_length=255),
+        "phone": parse_text(form.get("phone"), "Telefon", required=True, max_length=50),
+        "birth_date": birth_date,
         "note": parse_text(form.get("note"), "Izoh", required=False, max_length=255),
     }
 

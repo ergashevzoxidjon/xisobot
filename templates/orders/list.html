@@ -46,7 +46,7 @@
 <div class="table-responsive">
 <table class="table table-hover">
 <thead><tr>
-  <th>№</th><th>Mijoz</th><th>Turi</th>
+  <th>№</th><th>Mijoz</th><th>Turi</th><th>Kim yaratdi</th>
   <th class="text-end">Summa</th><th class="text-end">To'langan</th><th class="text-end">Qolgan</th>
   <th>Holat</th><th>To'lov</th><th>Muddat</th>
 </tr></thead>
@@ -61,6 +61,7 @@
     <div class="text-muted" style="font-size:.75rem">{{ o.items|length }} ta mahsulot</div>
     {% endif %}
   </td>
+  <td class="text-muted small">{{ o.creator.display_name if o.creator else '-' }}</td>
   <td class="text-end num">{{ o.total_price|uzs }}</td>
   <td class="text-end num">{{ o.paid_amount_calc|uzs }}</td>
   <td class="text-end num">

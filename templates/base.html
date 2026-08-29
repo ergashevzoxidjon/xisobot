@@ -213,6 +213,7 @@ a{ text-decoration:none; }
 
 .cart-panel{
   border:1px solid #e5e9f0; border-radius:12px; padding:.9rem 1rem; background:#f8fafc; margin-top:1rem;
+  overflow-x:auto;
 }
 .cart-row{
   display:flex; align-items:center; gap:.6rem; padding:.4rem 0; border-bottom:1px dashed #e2e8f0;
@@ -221,8 +222,22 @@ a{ text-decoration:none; }
 .cart-row-name{ font-weight:600; font-size:.85rem; flex:1 1 auto; min-width:0; }
 .cart-row-name small{ display:block; color:#94a3b8; font-weight:500; font-size:.72rem; }
 .cart-row input[type="number"]{ width:88px; text-align:right; }
-.cart-row input.row-location{ width:130px; }
+.cart-row .row-location-wrap{ width:170px; }
+.cart-row .row-location-wrap .input-group-text{
+  padding:.25rem .45rem; background:#fff; color:#94a3b8; border-right:none;
+}
+.cart-row .row-location-wrap input.row-location{ border-left:none; padding-left:0; }
+.cart-row .row-location-wrap input.row-location::placeholder{ color:#c3cbd6; }
 .cart-row-line{ width:110px; text-align:right; font-weight:700; font-variant-numeric:tabular-nums; }
+.cart-row-head{
+  font-size:.68rem; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:.03em;
+  padding-bottom:.4rem; border-bottom:1px solid #e2e8f0; margin-bottom:.1rem;
+}
+.cart-row-head > div{ text-align:right; }
+.cart-row-head .cart-row-name{ font-size:.68rem; text-transform:uppercase; letter-spacing:.03em; }
+.cart-row-head .cart-col-location{ text-align:left; }
+.cart-row-head .cart-col-location .text-normal{ text-transform:none; letter-spacing:0; font-weight:500; color:#b6bec9; }
+.cart-row-head .cart-col-remove{ width:34px; flex:0 0 auto; }
 
 .sticky-actions{
   position:sticky; bottom:0; background:#fff; border-top:1px solid #e5e9f0;
@@ -262,6 +277,45 @@ a{ text-decoration:none; }
 .alert-tile.danger{ border-left-color:#f04438; }
 .alert-tile.warning{ border-left-color:#f79009; }
 .alert-tile.info{ border-left-color:var(--primary); }
+
+/* ---- "Mijozlar bilan ishlash" Kanban pipeline taxtasi (2026-08-29, to'rtinchi so'rov) ---- */
+.pipeline-board{ display:flex; gap:.55rem; padding-bottom:.6rem; align-items:flex-start; }
+.pipeline-column{
+  flex:1 1 0; min-width:0; background:#eef1f6; border-radius:10px; padding:.55rem;
+  max-height:calc(100vh - 240px); min-height:220px; display:flex; flex-direction:column;
+}
+.pipeline-column.drag-over{ background:var(--primary-soft); outline:2px dashed var(--primary); outline-offset:-2px; }
+.pipeline-column-head{ display:flex; align-items:center; gap:.4rem; padding:.2rem .2rem .55rem; }
+.pipeline-column-title{ font-weight:700; font-size:.76rem; color:#334155; line-height:1.2; }
+.pipeline-dot{ width:7px; height:7px; border-radius:50%; flex-shrink:0; display:inline-block; }
+.pipeline-cards{ display:flex; flex-direction:column; gap:.5rem; overflow-y:auto; flex:1; padding-bottom:.3rem; }
+.pipeline-card{
+  background:#fff; border-radius:9px; padding:.6rem .65rem; box-shadow:var(--card-shadow); cursor:grab;
+  border:1px solid transparent; transition:box-shadow .12s, border-color .12s; display:block; min-width:0;
+}
+.pipeline-card:hover{ border-color:var(--primary); }
+.pipeline-card.dragging{ opacity:.4; }
+.pipeline-card-top{ display:flex; align-items:flex-start; justify-content:space-between; gap:.35rem; }
+.pipeline-card-name{ font-weight:700; font-size:.83rem; color:#1e293b; overflow-wrap:break-word; }
+.pipeline-card-sub{ font-size:.72rem; color:#64748b; margin-top:.2rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pipeline-card-foot{ display:flex; align-items:center; justify-content:space-between; margin-top:.5rem; }
+.pipeline-card-menu .btn{ line-height:1; color:#94a3b8; box-shadow:none; }
+.pipeline-empty{ text-align:center; color:#94a3b8; font-size:.74rem; padding:.85rem .4rem; border:1px dashed #cbd5e1; border-radius:10px; }
+@media (max-width: 860px){
+  .pipeline-board{ overflow-x:auto; }
+  .pipeline-column{ flex:0 0 220px; min-width:220px; }
+}
+
+.pipeline-timeline{ position:relative; padding-left:1.35rem; }
+.pipeline-timeline::before{ content:''; position:absolute; left:.3rem; top:.3rem; bottom:.3rem; width:2px; background:#e5e9f0; }
+.pipeline-timeline-item{ position:relative; padding-bottom:1.15rem; }
+.pipeline-timeline-item::before{
+  content:''; position:absolute; left:-1.35rem; top:.18rem; width:10px; height:10px; border-radius:50%;
+  background:var(--primary); border:2px solid #fff; box-shadow:0 0 0 2px #e5e9f0;
+}
+.pipeline-timeline-item:last-child{ padding-bottom:0; }
+.pipeline-timeline-date{ font-size:.74rem; color:#94a3b8; font-weight:600; }
+.pipeline-timeline-text{ font-size:.87rem; color:#1e293b; margin-top:.15rem; }
 
 @media print{
   .sidebar, .topbar, .no-print{ display:none !important; }
@@ -345,11 +399,11 @@ a{ text-decoration:none; }
       </a>
       {% endif %}
       {% if has_perm('managers.view') %}
-      <a href="{{ url_for('managers.list_managers') }}" class="{% if request.endpoint and request.endpoint.startswith('managers.') and request.endpoint != 'managers.client_log_board' %}active{% endif %}">
+      <a href="{{ url_for('managers.list_managers') }}" class="{% if request.endpoint and request.endpoint.startswith('managers.') and not request.endpoint.startswith('managers.pipeline') %}active{% endif %}">
         <i class="bi bi-person-badge"></i> Manager xisoboti
       </a>
-      <a href="{{ url_for('managers.client_log_board') }}" class="{% if request.endpoint == 'managers.client_log_board' %}active{% endif %}">
-        <i class="bi bi-people"></i> Kunlik mijozlar bilan ishlash
+      <a href="{{ url_for('managers.pipeline_board') }}" class="{% if request.endpoint and request.endpoint.startswith('managers.pipeline') %}active{% endif %}">
+        <i class="bi bi-kanban"></i> Mijozlar bilan ishlash
       </a>
       {% endif %}
 
@@ -382,15 +436,19 @@ a{ text-decoration:none; }
       </a>
       {% endif %}
       {% if has_perm('settings.manage') %}
+      {# Vaqtincha yashirilgan (2026-08-29): Firma ma'lumotlari va Telegram
       <a href="{{ url_for('settings.company') }}" class="{% if request.endpoint == 'settings.company' %}active{% endif %}">
         <i class="bi bi-building"></i> Firma ma'lumotlari
       </a>
+      #}
       <a href="{{ url_for('settings.order_types') }}" class="{% if request.endpoint and request.endpoint.startswith('settings.order_type') %}active{% endif %}">
         <i class="bi bi-tags"></i> Buyurtma turlari
       </a>
+      {#
       <a href="{{ url_for('settings.telegram') }}" class="{% if request.endpoint and request.endpoint.startswith('settings.telegram') %}active{% endif %}">
         <i class="bi bi-send"></i> Telegram
       </a>
+      #}
       {% endif %}
       {% if has_perm('orders.delete') %}
       <a href="{{ url_for('orders.deleted_orders') }}" class="{% if request.endpoint == 'orders.deleted_orders' %}active{% endif %}">

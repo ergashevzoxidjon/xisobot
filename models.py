@@ -85,21 +85,37 @@ PAYMENT_KIND_LABELS = {
     PAYMENT_KIND_KPI: "KPI",
 }
 
-# Manager kunlik mijozlar bilan ishlash jurnali — holatlar
-# (2026-08-29, foydalanuvchi qarori).
-LOG_STATUS_SUCCESS = "muvaffaqiyatli"
-LOG_STATUS_PENDING = "tasdiqlash_jarayonida"
-LOG_STATUS_DECLINED = "otkaz"
-LOG_STATUSES = [LOG_STATUS_SUCCESS, LOG_STATUS_PENDING, LOG_STATUS_DECLINED]
-LOG_STATUS_LABELS = {
-    LOG_STATUS_SUCCESS: "Muvaffaqiyatli",
-    LOG_STATUS_PENDING: "Tasdiqlash jarayonida",
-    LOG_STATUS_DECLINED: "Otkaz berdi",
+# Menejerlarning "Mijozlar bilan ishlash" pipeline (Kanban) taxtasi —
+# bosqichlar. 2026-08-29 (to'rtinchi so'rov, foydalanuvchi qarori): eski
+# "kunlik jurnal" (har kun uchun alohida yozuv, 3 holat) butunlay yangi
+# yondashuvga almashtirildi — har mijoz uchun BITTA doimiy karta ochiladi,
+# u kunlar osha bosqichdan bosqichga suriladi, ichida esa har bir aloqa
+# (qo'ng'iroq/uchrashuv/izoh) xronologik "voqealar" sifatida saqlanadi.
+# Oxirgi ikki bosqich nomi ("muvaffaqiyatli"/"otkaz") eski tizim bilan bir
+# xil qoldirildi — shu qiymatlar bo'yicha eski ma'lumot ko'chiriladi
+# (migrate_db.py -> migrate_client_pipeline()).
+PIPELINE_STAGE_NEW = "yangi"
+PIPELINE_STAGE_CONTACTED = "aloqada"
+PIPELINE_STAGE_PROPOSAL = "taklif_yuborildi"
+PIPELINE_STAGE_WON = "muvaffaqiyatli"
+PIPELINE_STAGE_LOST = "otkaz"
+PIPELINE_STAGES = [
+    PIPELINE_STAGE_NEW, PIPELINE_STAGE_CONTACTED, PIPELINE_STAGE_PROPOSAL,
+    PIPELINE_STAGE_WON, PIPELINE_STAGE_LOST,
+]
+PIPELINE_STAGE_LABELS = {
+    PIPELINE_STAGE_NEW: "Yangi",
+    PIPELINE_STAGE_CONTACTED: "Taklif yuborish kutilmoqda",
+    PIPELINE_STAGE_PROPOSAL: "Taklifni qabul qilish kutilmoqda",
+    PIPELINE_STAGE_WON: "Muvaffaqiyatli",
+    PIPELINE_STAGE_LOST: "Bekor qilindi",
 }
-LOG_STATUS_COLORS = {
-    LOG_STATUS_SUCCESS: "success",
-    LOG_STATUS_PENDING: "warning",
-    LOG_STATUS_DECLINED: "danger",
+PIPELINE_STAGE_COLORS = {
+    PIPELINE_STAGE_NEW: "secondary",
+    PIPELINE_STAGE_CONTACTED: "info",
+    PIPELINE_STAGE_PROPOSAL: "primary",
+    PIPELINE_STAGE_WON: "success",
+    PIPELINE_STAGE_LOST: "danger",
 }
 
 # ---------- ombor ----------
@@ -511,6 +527,25 @@ class OrderItem(db.Model):
     position = db.Column(db.Integer, default=0, nullable=False)
 
 
+# ---------- buyurtma to'lovida to'lov usuli (2026-08-30, foydalanuvchi qarori) ----------
+# Mijoz to'lovni qaysi yo'l bilan amalga oshirgani — har bir to'lov yozuvida
+# majburiy tanlanadi. "Dogovor ..." variantlari — shartnoma orqali shu
+# tashkilot hisobiga tushgan tushum; moliyaviy hisobotda korxonalar
+# kesimida (qaysi korxonaga qancha tushum) alohida ko'rsatiladi.
+ORDER_PAYMENT_METHODS = [
+    "Naqd", "Karta", "Terminal",
+    "Dogovor Marvel", "Dogovor MyPrint", "Dogovor YaTT Nazarova", "Dogovor Yatt Ergashev",
+    "Birja",
+]
+# Shu ro'yxatdagi qaysi qiymatlar aynan bir korxona/shartnoma hisobiga
+# tushumni bildiradi — hisobotdagi "Korxonalar bo'yicha tushum" bloki
+# faqat shularni jamlaydi (Naqd/Karta/Terminal/Birja umumiy usul, muayyan
+# korxonaga bog'lanmagan).
+ORDER_PAYMENT_COMPANY_METHODS = [
+    "Dogovor Marvel", "Dogovor MyPrint", "Dogovor YaTT Nazarova", "Dogovor Yatt Ergashev",
+]
+
+
 class Payment(db.Model):
     """Har bir to'lov alohida yoziladi — tushum aynan to'lov sanasi bo'yicha
     hisoblanishi va to'lovlar tarixi ko'rinishi uchun."""
@@ -521,6 +556,9 @@ class Payment(db.Model):
     note = db.Column(db.String(255))
     created_at = db.Column(db.DateTime, default=now_local)
     created_by = db.Column(db.Integer, db.ForeignKey("user.id"))
+    # Mijoz qaysi usul bilan to'lagani — majburiy (ORDER_PAYMENT_METHODS dan
+    # biri). Eski yozuvlarda bo'sh bo'lishi mumkin (migratsiyadan oldin).
+    payment_method = db.Column(db.String(40))
 
     creator = db.relationship("User", foreign_keys=[created_by])
 
@@ -764,35 +802,33 @@ class ManagerPlan(db.Model):
     )
 
 
-class ManagerClientLog(db.Model):
-    """Manager kunlik mijozlar bilan ishlash jurnali (2026-08-29, foydalanuvchi qarori).
+class ClientPipelineCard(db.Model):
+    """Menejerning "Mijozlar bilan ishlash" Kanban taxtasidagi karta.
 
-    Manager kun davomida ishlagan har bir mijoz uchun bitta yozuv ochadi:
-      - MUVAFFAQIYATLI — mavjud mijoz tanlanadi (`client_id`), keyin oddiy
-        buyurtma yaratish jarayoniga o'tiladi (`order_id` shu yerga yoziladi,
-        ish odatdagi tusda davom etaveradi).
-      - TASDIQLASH_JARAYONIDA yoki OTKAZ — mijoz hali rasmiylashmagan yoki
-        voz kechgan: mijoz ismi, korxona nomi, telefoni va unga berilgan
-        tijoriy taklif fayli shu yerda saqlanadi.
+    2026-08-29 (to'rtinchi so'rov, foydalanuvchi qarori — tubdan yangi
+    yondashuv): eski "kunlik jurnal" (har kun uchun alohida, sana bilan
+    bog'langan yozuv) o'rniga — har bir (menejer, mijoz) juftligi uchun
+    BITTA doimiy karta ochiladi. Karta kunlar osha davom etadi, faqat
+    bosqichi (`stage`) o'zgaradi: YANGI -> ALOQADA -> TAKLIF_YUBORILDI ->
+    MUVAFFAQIYATLI / OTKAZ. Har bir aloqa (qo'ng'iroq, uchrashuv, izoh,
+    bosqich o'zgarishi) `ClientPipelineEvent` sifatida xronologik tartibda
+    saqlanadi — karta shu "voqealar" tarixini o'zida jamlaydi.
 
-    Manager — o'z yozuvlarini kiritadi/tahrirlaydi. Boss va Ish boshqaruvchi
-    (xarajatchi) — faqat kuzatib boradi (managers.view orqali ko'radi).
+    Manager — o'z kartalarini boshqaradi (admin ham har bir menejer nomidan
+    qo'sha oladi). Boss va Ish boshqaruvchi (xarajatchi) — faqat kuzatib
+    boradi (managers.view orqali ko'radi).
     """
+    __tablename__ = "client_pipeline_card"
+
     id = db.Column(db.Integer, primary_key=True)
     manager_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
-    log_date = db.Column(db.Date, default=today_local, nullable=False, index=True)
-    status = db.Column(db.String(30), default=LOG_STATUS_PENDING, nullable=False, index=True)
-
-    client_id = db.Column(db.Integer, db.ForeignKey("client.id"), index=True)
-    client_name = db.Column(db.String(150))
-    company_name = db.Column(db.String(150))
-    phone = db.Column(db.String(50))
+    client_id = db.Column(db.Integer, db.ForeignKey("client.id"), nullable=False, index=True)
+    stage = db.Column(db.String(30), default=PIPELINE_STAGE_NEW, nullable=False, index=True)
 
     proposal_filename = db.Column(db.String(255))
     proposal_original_name = db.Column(db.String(255))
 
     order_id = db.Column(db.Integer, db.ForeignKey("order.id"), index=True)
-    note = db.Column(db.String(255))
 
     created_at = db.Column(db.DateTime, default=now_local)
     updated_at = db.Column(db.DateTime, default=now_local, onupdate=now_local)
@@ -802,25 +838,52 @@ class ManagerClientLog(db.Model):
     client = db.relationship("Client", foreign_keys=[client_id])
     order = db.relationship("Order", foreign_keys=[order_id])
     creator = db.relationship("User", foreign_keys=[created_by])
+    events = db.relationship(
+        "ClientPipelineEvent", backref="card", cascade="all, delete-orphan",
+        order_by="ClientPipelineEvent.created_at",
+    )
 
     @property
-    def status_label(self):
-        return LOG_STATUS_LABELS.get(self.status, self.status)
+    def stage_label(self):
+        return PIPELINE_STAGE_LABELS.get(self.stage, self.stage)
 
     @property
-    def status_color(self):
-        return LOG_STATUS_COLORS.get(self.status, "secondary")
+    def stage_color(self):
+        return PIPELINE_STAGE_COLORS.get(self.stage, "secondary")
 
     @property
     def display_name(self):
-        """Ko'rsatiladigan mijoz nomi — bog'langan bo'lsa Client, aks holda qo'lda kiritilgan."""
-        if self.client:
-            return self.client.name
-        return self.client_name or "—"
+        return self.client.name if self.client else "—"
 
     @property
     def has_proposal(self):
         return bool(self.proposal_filename)
+
+    @property
+    def is_closed(self):
+        return self.stage in (PIPELINE_STAGE_WON, PIPELINE_STAGE_LOST)
+
+
+class ClientPipelineEvent(db.Model):
+    """Bitta karta ichidagi bitta "voqea" — qo'ng'iroq, uchrashuv, izoh yoki
+    bosqich o'zgarishi. `from_stage`/`to_stage` faqat bosqich o'zgarganda
+    to'ldiriladi (oddiy izoh qo'shilganda ikkalasi ham joriy bosqichga teng).
+    """
+    __tablename__ = "client_pipeline_event"
+
+    id = db.Column(db.Integer, primary_key=True)
+    card_id = db.Column(db.Integer, db.ForeignKey("client_pipeline_card.id"), nullable=False, index=True)
+    note = db.Column(db.String(255))
+    from_stage = db.Column(db.String(30))
+    to_stage = db.Column(db.String(30))
+    created_at = db.Column(db.DateTime, default=now_local, index=True)
+    created_by = db.Column(db.Integer, db.ForeignKey("user.id"))
+
+    creator = db.relationship("User", foreign_keys=[created_by])
+
+    @property
+    def is_stage_change(self):
+        return self.from_stage is not None and self.from_stage != self.to_stage
 
 
 class Employee(db.Model):
@@ -834,7 +897,11 @@ class Employee(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     full_name = db.Column(db.String(150), nullable=False, index=True)
     phone = db.Column(db.String(50))
+    # "Manzil" o'rniga "Tug'ilgan sana" kiritiladi (2026-08-30, foydalanuvchi
+    # qarori). Eski `address` ustuni bazada saqlanib qoladi (eski yozuvlar
+    # uchun), lekin forma va kartochkada endi ko'rsatilmaydi/so'ralmaydi.
     address = db.Column(db.String(255))
+    birth_date = db.Column(db.Date)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), index=True)
     # pasport nusxasi — faqat admin yuklaydi (hr.manage), qolganlari ko'radi
     passport_filename = db.Column(db.String(255))        # diskdagi nomi

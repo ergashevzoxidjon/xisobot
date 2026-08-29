@@ -161,7 +161,12 @@ client = SimpleNamespace(
     is_deleted=False, deleted_at=None, company="Test Poligrafiya MChJ",
 )
 payment = SimpleNamespace(id=1, amount=Decimal("20000.00"), paid_on=TODAY,
-                          note="Naqd", creator=user)
+                          note="Naqd", payment_method="Naqd", creator=user)
+ORDER_PAYMENT_METHODS_TEST = [
+    "Naqd", "Karta", "Terminal",
+    "Dogovor Marvel", "Dogovor MyPrint", "Dogovor YaTT Nazarova", "Dogovor Yatt Ergashev",
+    "Birja",
+]
 order_file = SimpleNamespace(id=1, original_name="maket.pdf", size_human="1.2 MB",
                              created_at=datetime.now(), creator=user)
 tg_settings = SimpleNamespace(id=1, is_enabled=True, bot_token="123:ABC",
@@ -280,12 +285,12 @@ audit = SimpleNamespace(id=1, created_at=datetime.now(), user=user, action="crea
 manager_user = SimpleNamespace(id=5, username="komila", full_name="Komila Ahmedova",
                                display_name="Komila Ahmedova", role="menejer", is_active_user=True)
 employee = SimpleNamespace(
-    id=1, full_name="Sardor Aliyev", phone="+998901234567", address="Toshkent",
+    id=1, full_name="Sardor Aliyev", phone="+998901234567", birth_date=date(1995, 3, 14),
     user_id=None, user=None, passport_filename=None, passport_original_name=None,
     has_passport=False, is_active=True, note="Dizayner",
 )
 employee_linked = SimpleNamespace(
-    id=2, full_name="Komila Ahmedova", phone="+998901112233", address="Toshkent",
+    id=2, full_name="Komila Ahmedova", phone="+998901112233", birth_date=date(1990, 11, 2),
     user_id=5, user=manager_user, passport_filename="passport_x.pdf",
     passport_original_name="pasport.pdf", has_passport=True, is_active=True, note="",
 )
@@ -310,23 +315,45 @@ hr_months = [
 manager_client = SimpleNamespace(id=1, name="Test MChJ", company="Test Poligrafiya MChJ",
                                  phone="+998901234567")
 manager_order = SimpleNamespace(id=1, order_number="B-2026-0001")
-log_success = SimpleNamespace(
-    id=1, status="muvaffaqiyatli", status_label="Muvaffaqiyatli", status_color="success",
-    client=manager_client, client_id=1, client_name=None, company_name=None, phone=None,
-    display_name="Test MChJ", has_proposal=False, order=manager_order, note=None,
-    manager=manager_user,
+
+# ---- "Mijozlar bilan ishlash" Kanban pipeline mocklari (2026-08-29, to'rtinchi so'rov) ----
+PIPELINE_STAGES_TEST = ["yangi", "aloqada", "taklif_yuborildi", "muvaffaqiyatli", "otkaz"]
+PIPELINE_STAGE_LABELS_TEST = {
+    "yangi": "Yangi", "aloqada": "Taklif yuborish kutilmoqda",
+    "taklif_yuborildi": "Taklifni qabul qilish kutilmoqda",
+    "muvaffaqiyatli": "Muvaffaqiyatli", "otkaz": "Bekor qilindi",
+}
+PIPELINE_STAGE_COLORS_TEST = {
+    "yangi": "secondary", "aloqada": "info", "taklif_yuborildi": "primary",
+    "muvaffaqiyatli": "success", "otkaz": "danger",
+}
+pipeline_client_new = SimpleNamespace(id=2, name="Aziz Karimov", company="Aziz Trade",
+                                      phone="+998901112233")
+pipeline_card_won = SimpleNamespace(
+    id=1, stage="muvaffaqiyatli", stage_label="Muvaffaqiyatli", stage_color="success",
+    client=manager_client, client_id=1, display_name="Test MChJ", has_proposal=False,
+    proposal_original_name=None, order=manager_order, manager=manager_user,
+    updated_at=datetime.now(),
 )
-log_pending = SimpleNamespace(
-    id=2, status="tasdiqlash_jarayonida", status_label="Tasdiqlash jarayonida", status_color="warning",
-    client=None, client_id=None, client_name="Aziz Karimov", company_name="Aziz Trade",
-    phone="+998901112233", display_name="Aziz Karimov", has_proposal=True, order=None, note=None,
-    manager=manager_user,
+pipeline_card_new = SimpleNamespace(
+    id=2, stage="yangi", stage_label="Yangi", stage_color="secondary",
+    client=pipeline_client_new, client_id=2, display_name="Aziz Karimov", has_proposal=True,
+    proposal_original_name="taklif.pdf", order=None, manager=manager_user,
+    updated_at=datetime.now(),
 )
-log_declined = SimpleNamespace(
-    id=3, status="otkaz", status_label="Otkaz berdi", status_color="danger",
-    client=manager_client, client_id=1, client_name=None, company_name=None, phone=None,
-    display_name="Test MChJ", has_proposal=False, order=None, note="Narx mos kelmadi",
-    manager=manager_user,
+pipeline_card_lost = SimpleNamespace(
+    id=3, stage="otkaz", stage_label="Bekor qilindi", stage_color="danger",
+    client=manager_client, client_id=1, display_name="Test MChJ", has_proposal=False,
+    proposal_original_name=None, order=None, manager=manager_user,
+    updated_at=datetime.now(),
+)
+pipeline_event_open = SimpleNamespace(
+    id=1, created_at=datetime.now(), creator=manager_user,
+    from_stage=None, to_stage="yangi", is_stage_change=False, note="Birinchi aloqa",
+)
+pipeline_event_move = SimpleNamespace(
+    id=2, created_at=datetime.now(), creator=manager_user,
+    from_stage="yangi", to_stage="aloqada", is_stage_change=True, note=None,
 )
 
 CONTEXTS = {
@@ -339,6 +366,8 @@ CONTEXTS = {
         overdue_orders=[overdue_order], soon_orders=[order], old_debts=[overdue_order],
         alerts_count=3, recent_orders=[order], overdue_debt_days=30,
         supplier_debt=Decimal("2500000.00"),
+        # Xodimlar tug'ilgan kuni eslatmasi — faqat Boss ko'radi (2026-08-30).
+        birthday_today=[employee], birthday_tomorrow=[employee_linked],
     ),
     "clients/list.html": dict(clients=[client], pagination=FakePagination([client], 42), q=""),
     "clients/detail.html": dict(
@@ -356,7 +385,8 @@ CONTEXTS = {
     "orders/form.html": dict(order_types=[order_type], order=None,
                              prefill=None, form=None),
     "orders/detail.html": dict(order=order, payments=[payment],
-                               statuses=["ishlab chiqarishda", "yetkazish uchun tayyor", "bekor qilindi"]),
+                               statuses=["ishlab chiqarishda", "yetkazish uchun tayyor", "bekor qilindi"],
+                               order_payment_methods=ORDER_PAYMENT_METHODS_TEST),
     "orders/invoice.html": dict(order=order, today=TODAY, company=company),
     "orders/deleted.html": dict(orders=[order]),
     "clients/deleted.html": dict(clients=[client]),
@@ -393,6 +423,13 @@ CONTEXTS = {
         year=2026, months=months_rows,
         total_income=Decimal("48000000.00"), total_expense=Decimal("31000000.00"),
         total_profit=Decimal("17000000.00"),
+        income_totals=[
+            {"method": "Naqd", "total": Decimal("18000000.00"), "is_company": False},
+            {"method": "Dogovor Marvel", "total": Decimal("20000000.00"), "is_company": True},
+            {"method": "Dogovor MyPrint", "total": Decimal("10000000.00"), "is_company": True},
+        ],
+        income_total_all=Decimal("48000000.00"),
+        income_company_total=Decimal("30000000.00"),
         category_rows=[{"name": "ijara", "amount": Decimal("12000000.00"), "count": 12},
                        {"name": "ish haqi", "amount": Decimal("19000000.00"), "count": 24}],
         linked=Decimal("800000.00"), general=Decimal("30200000.00"),
@@ -461,14 +498,24 @@ CONTEXTS = {
         kpi_amount=Decimal("979515.00"), employee_salary=Decimal("2500000.00"),
         trend=[{"label": m, "total": Decimal("5000000.00")} for m in UZ_MONTHS[2:8]],
         orders=[order], can_manage=True, today=TODAY,
-        today_log_count=3,
+        active_card_count=2, today_event_count=1,
     ),
-    "managers/jurnal.html": dict(
-        log_date=TODAY, logs=[log_success, log_pending, log_declined], today=TODAY,
-        all_managers=[manager_user], manager_filter_id=None,
-        can_add=True, log_statuses=["muvaffaqiyatli", "tasdiqlash_jarayonida", "otkaz"],
-        show_manager_column=True,
+    "managers/pipeline.html": dict(
+        columns={
+            "yangi": [pipeline_card_new], "aloqada": [], "taklif_yuborildi": [],
+            "muvaffaqiyatli": [pipeline_card_won], "otkaz": [pipeline_card_lost],
+        },
+        stages=PIPELINE_STAGES_TEST, stage_labels=PIPELINE_STAGE_LABELS_TEST,
+        stage_colors=PIPELINE_STAGE_COLORS_TEST,
+        all_managers=[manager_user], manager_filter_id=None, q="",
+        can_add=True, show_manager_column=True,
     ),
+    "managers/pipeline_card.html": dict(
+        card=pipeline_card_new, events=[pipeline_event_open, pipeline_event_move],
+        stages=PIPELINE_STAGES_TEST, stage_labels=PIPELINE_STAGE_LABELS_TEST,
+        stage_colors=PIPELINE_STAGE_COLORS_TEST, can_manage=True,
+    ),
+    "managers/jurnal.html": dict(),
     "errors/error.html": dict(code=404, title="Topilmadi", message="Sahifa yo'q"),
 }
 
@@ -548,7 +595,8 @@ prepaid_order = SimpleNamespace(
 PREPAID_CONTEXTS = {
     "orders/detail.html": dict(order=prepaid_order, payments=[payment],
                                statuses=["buyurtma yaratildi", "to'lov qilish jarayonida",
-                                         "bekor qilindi"]),
+                                         "bekor qilindi"],
+                               order_payment_methods=ORDER_PAYMENT_METHODS_TEST),
     "orders/list.html": dict(orders=[prepaid_order],
                              pagination=FakePagination([prepaid_order], 1),
                              statuses=["buyurtma yaratildi", "to'lov qilish jarayonida",
@@ -585,19 +633,21 @@ EXPECTED_MENU = {
     # "Bosh sahifa" endi barcha rollarga ko'rinadi (2026-08-29, uchinchi
     # so'rov) — reports.view bilan bog'liq emas. "Manager xisoboti"dan keyin
     # barcha rollarga (managers.view bo'lgani uchun) yangi alohida
-    # "Kunlik mijozlar bilan ishlash" havolasi qo'shildi.
+    # "Mijozlar bilan ishlash" havolasi qo'shildi.
+    # "Firma ma'lumotlari" va "Telegram" vaqtincha yashirilgan (2026-08-29,
+    # foydalanuvchi so'rovi bilan) — base.html'da Jinja izohiga olingan.
     "admin": ["Bosh sahifa", "Buyurtmalar", "Mijozlar", "Ombor", "Taminotchilar", "Manager xisoboti",
-              "Kunlik mijozlar bilan ishlash",
+              "Mijozlar bilan ishlash",
               "Xarajatlar", "Moliyaviy hisobot", "Tahlil", "Taminotchi qarzlari", "HR",
-              "Firma ma'lumotlari", "Buyurtma turlari", "Telegram",
+              "Buyurtma turlari",
               "O'chirilgan buyurtmalar", "O'chirilgan mijozlar",
               "Foydalanuvchilar", "Harakatlar jurnali"],
     "menejer": ["Bosh sahifa", "Buyurtmalar", "Mijozlar", "Manager xisoboti",
-                "Kunlik mijozlar bilan ishlash"],
+                "Mijozlar bilan ishlash"],
     "xarajatchi": ["Bosh sahifa", "Buyurtmalar", "Ombor", "Taminotchilar", "Manager xisoboti",
-                   "Kunlik mijozlar bilan ishlash",
+                   "Mijozlar bilan ishlash",
                    "Xarajatlar", "Moliyaviy hisobot", "Tahlil", "Taminotchi qarzlari", "HR"],
-    "boss": ["Bosh sahifa", "Manager xisoboti", "Kunlik mijozlar bilan ishlash", "Xarajatlar",
+    "boss": ["Bosh sahifa", "Manager xisoboti", "Mijozlar bilan ishlash", "Xarajatlar",
              "Moliyaviy hisobot", "Tahlil", "Taminotchi qarzlari", "HR"],
 }
 for role, perms in ROLE_PERMISSIONS.items():

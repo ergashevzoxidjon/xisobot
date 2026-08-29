@@ -39,7 +39,7 @@
 <form method="post" id="orderForm">
   {{ csrf() }}
   {% if order %}<input type="hidden" name="version" value="{{ order.version }}">{% endif %}
-  {% if manager_log_id is defined and manager_log_id %}<input type="hidden" name="manager_log_id" value="{{ manager_log_id }}">{% endif %}
+  {% if pipeline_card_id is defined and pipeline_card_id %}<input type="hidden" name="pipeline_card_id" value="{{ pipeline_card_id }}">{% endif %}
 
   {# ---------------- 1. MIJOZ ---------------- #}
   <div class="form-step" id="stepClient">

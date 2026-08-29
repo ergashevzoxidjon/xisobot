@@ -231,6 +231,131 @@ def migrate_order_status_rename():
         print("  · eski nomdagi buyurtma holati topilmadi — ko'chirish shart emas")
 
 
+def migrate_client_pipeline():
+    """Eski "kunlik jurnal" (manager_client_log) ma'lumotlarini yangi
+    Kanban pipeline (client_pipeline_card + client_pipeline_event) ga
+    ko'chiradi (2026-08-29, to'rtinchi so'rov — foydalanuvchi qarori bilan
+    tubdan yangi yondashuv: har mijoz uchun bitta doimiy karta, sana bilan
+    bog'langan alohida yozuvlar emas).
+
+    Har (menejer, mijoz) juftligi uchun BITTA karta ochiladi — eng so'nggi
+    eski yozuvning holati kartaning joriy bosqichiga aylanadi. Eski
+    "tasdiqlash_jarayonida" holati "aloqada" bosqichiga tushadi (chunki
+    yozuv borligi aloqa allaqachon bo'lganini bildiradi — "yangi" unga mos
+    kelmaydi). Har bir eski yozuv kartaning tarixida bitta voqea bo'lib
+    qoladi. Eski `manager_client_log` jadvali TEGILMAYDI — faqat o'qiladi,
+    zaxira sifatida bazada qoladi.
+    """
+    if "manager_client_log" not in existing_tables():
+        return
+    if "client_pipeline_card" not in existing_tables():
+        print("  · client_pipeline_card jadvali hali yaratilmagan — o'tkazib yuborildi")
+        return
+
+    from models import (
+        ClientPipelineCard, ClientPipelineEvent,
+        PIPELINE_STAGE_WON, PIPELINE_STAGE_CONTACTED, PIPELINE_STAGE_LOST,
+    )
+
+    def _to_datetime(value):
+        """Raw SQL orqali o'qilgan sana/vaqt qiymatini datetime obyektiga
+        aylantiradi. SQLite matn (str) qaytaradi, MySQL/PostgreSQL esa
+        odatda datetime obyektining o'zini beradi — ikkalasini ham qo'llab
+        quvvatlaydi."""
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value
+        text_value = str(value)
+        try:
+            return datetime.fromisoformat(text_value)
+        except ValueError:
+            try:
+                return datetime.strptime(text_value[:10], "%Y-%m-%d")
+            except ValueError:
+                return datetime.now()
+
+    already = ClientPipelineCard.query.count()
+    if already:
+        print(f"  · client_pipeline_card jadvalida allaqachon {already} ta karta bor — ko'chirish o'tkazib yuborildi")
+        return
+
+    rows = db.session.execute(text(
+        """SELECT id, manager_id, log_date, status, client_id, client_name,
+                  proposal_filename, proposal_original_name, order_id, note,
+                  created_at, created_by
+           FROM manager_client_log
+           ORDER BY manager_id, client_id, created_at"""
+    )).fetchall()
+
+    if not rows:
+        print("  · manager_client_log bo'sh — ko'chirish shart emas")
+        return
+
+    STAGE_MAP = {
+        "muvaffaqiyatli": PIPELINE_STAGE_WON,
+        "tasdiqlash_jarayonida": PIPELINE_STAGE_CONTACTED,
+        "otkaz": PIPELINE_STAGE_LOST,
+    }
+
+    cards = {}
+    created_cards = 0
+    created_events = 0
+    skipped_no_client = 0
+
+    for row in rows:
+        (_id, manager_id, _log_date, status, client_id, _client_name,
+         proposal_filename, proposal_original_name, order_id, note,
+         created_at, created_by) = row
+        created_at = _to_datetime(created_at)
+
+        if not client_id:
+            # Eski tizimda nazariy jihatdan mijozsiz yozuv mumkin edi (amalda
+            # add_client_log doim mijoz yaratardi/topardi) — qoldiq bo'lsa
+            # xavfsiz tashlab ketiladi.
+            skipped_no_client += 1
+            continue
+
+        key = (manager_id, client_id)
+        stage = STAGE_MAP.get(status, PIPELINE_STAGE_CONTACTED)
+
+        card = cards.get(key)
+        if card is None:
+            card = ClientPipelineCard(
+                manager_id=manager_id, client_id=client_id, stage=stage,
+                proposal_filename=proposal_filename,
+                proposal_original_name=proposal_original_name,
+                order_id=order_id, created_at=created_at,
+                updated_at=created_at, created_by=created_by,
+            )
+            db.session.add(card)
+            db.session.flush()
+            cards[key] = card
+            created_cards += 1
+        else:
+            # Yozuvlar sana bo'yicha tartiblangan — oxirgisi eng yangisi,
+            # kartaning joriy bosqichini shu belgilaydi.
+            card.stage = stage
+            card.updated_at = created_at
+            if proposal_filename:
+                card.proposal_filename = proposal_filename
+                card.proposal_original_name = proposal_original_name
+            if order_id:
+                card.order_id = order_id
+
+        db.session.add(ClientPipelineEvent(
+            card_id=card.id, note=note, from_stage=None, to_stage=stage,
+            created_at=created_at, created_by=created_by,
+        ))
+        created_events += 1
+
+    db.session.commit()
+    print(f"✓ {created_cards} ta pipeline karta, {created_events} ta voqea "
+          f"eski jurnaldan ko'chirildi (manager_client_log jadvali tegilmadi)")
+    if skipped_no_client:
+        print(f"  · {skipped_no_client} ta mijozsiz eski yozuv o'tkazib yuborildi")
+
+
 def ensure_upload_folder(app):
     folder = app.config.get("UPLOAD_FOLDER")
     if folder and not os.path.isdir(folder):
@@ -302,6 +427,27 @@ def main():
         # (manager_client_log jadvali create_all bilan yaratiladi) —
         # 2026-08-29, foydalanuvchi qarori. ---
         add_column("employee_advance", "kind VARCHAR(20) DEFAULT 'avans' NOT NULL", "kind")
+
+        # --- v12: "Mijozlar bilan ishlash" endi Kanban pipeline (doimiy
+        # karta + voqealar tarixi) — eski kunlik jurnal shu tuzilmaga
+        # ko'chiriladi (client_pipeline_card/client_pipeline_event
+        # jadvallari create_all bilan yaratiladi). 2026-08-29, to'rtinchi
+        # so'rov, foydalanuvchi qarori. ---
+        migrate_client_pipeline()
+
+        # --- v13: buyurtma to'lovida to'lov usuli majburiy bo'ldi (Naqd,
+        # Karta, Terminal, Dogovor Marvel/MyPrint/YaTT Nazarova/Yatt
+        # Ergashev, Birja) — korxonalar bo'yicha tushumni hisobotda
+        # ko'rsatish uchun. Eski to'lovlarda bo'sh qoladi.
+        # 2026-08-30, foydalanuvchi qarori. ---
+        add_column("payment", "payment_method VARCHAR(40)", "payment_method")
+
+        # --- v14: HR kartochkasida "Manzil" o'rniga "Tug'ilgan sana"
+        # kiritiladi, Shaxsiy ma'lumotlar bo'limi (ism, telefon, tug'ilgan
+        # sana) endi majburiy. Eski 'address' ustuni bazada qoladi (eski
+        # yozuvlar uchun), faqat forma/kartochkada ko'rsatilmaydi.
+        # 2026-08-30, foydalanuvchi qarori. ---
+        add_column("employee", "birth_date DATE", "birth_date")
 
         migrate_paid_amount()
         ensure_upload_folder(app)

@@ -77,6 +77,54 @@
 </div>
 {% endif %}
 
+{% if current_user.role == 'boss' and (birthday_today or birthday_tomorrow) %}
+<div class="card p-3 mb-4" style="border-left:4px solid #ec4899">
+  <h6 class="fw-bold mb-3"><i class="bi bi-gift-fill me-1" style="color:#ec4899"></i>
+    Xodimlar tug'ilgan kuni</h6>
+  <div class="row g-3">
+    {% if birthday_today %}
+    <div class="col-lg-6">
+      <div class="alert-tile danger h-100">
+        <div class="fw-bold small text-danger mb-2">
+          <i class="bi bi-star-fill"></i> Bugun ({{ birthday_today|length }})
+        </div>
+        {% for e in birthday_today %}
+        <div class="small mb-1">
+          {% if has_perm('hr.view') %}
+          <a href="{{ url_for('hr.employee_detail', employee_id=e.id) }}">{{ e.full_name }}</a>
+          {% else %}
+          {{ e.full_name }}
+          {% endif %}
+          ning bugun tug'ilgan kuni — tabriklashni unutmang!
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if birthday_tomorrow %}
+    <div class="col-lg-6">
+      <div class="alert-tile warning h-100">
+        <div class="fw-bold small text-warning-emphasis mb-2">
+          <i class="bi bi-alarm"></i> Ertaga ({{ birthday_tomorrow|length }})
+        </div>
+        {% for e in birthday_tomorrow %}
+        <div class="small mb-1">
+          {% if has_perm('hr.view') %}
+          <a href="{{ url_for('hr.employee_detail', employee_id=e.id) }}">{{ e.full_name }}</a>
+          {% else %}
+          {{ e.full_name }}
+          {% endif %}
+          ning ertaga tug'ilgan kuni — tabriklashni unutmang!
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
 <div class="row g-3 mb-3">
   <div class="col-sm-6 col-lg-4">
     <div class="card p-3 stat-card">

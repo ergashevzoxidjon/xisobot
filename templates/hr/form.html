@@ -31,13 +31,14 @@
     <div class="row g-3">
       <div class="col-sm-6">
         <label class="form-label">Telefon</label>
-        <input class="form-control" name="phone" maxlength="50" placeholder="+998 90 123 45 67"
+        <input class="form-control" name="phone" required maxlength="50" placeholder="+998 90 123 45 67"
                value="{{ src.phone|default('', true) if src else '' }}">
       </div>
       <div class="col-sm-6">
-        <label class="form-label">Manzil</label>
-        <input class="form-control" name="address" maxlength="255" placeholder="Shahar, mahalla..."
-               value="{{ src.address|default('', true) if src else '' }}">
+        <label class="form-label">Tug'ilgan sana</label>
+        <input type="date" class="form-control" name="birth_date" required
+               max="{{ today().isoformat() }}"
+               value="{{ (employee.birth_date.isoformat() if employee and employee.birth_date else (form.birth_date|default('', true) if form else '')) }}">
       </div>
     </div>
   </div>

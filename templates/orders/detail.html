@@ -241,7 +241,15 @@
           <div class="col-sm-3">
             <button class="btn btn-success w-100"><i class="bi bi-plus-lg"></i> Qo'shish</button>
           </div>
-          <div class="col-12">
+          <div class="col-sm-7">
+            <select name="payment_method" class="form-select" required>
+              <option value="" disabled selected>To'lov usuli — tanlang</option>
+              {% for pm in order_payment_methods %}
+              <option value="{{ pm }}">{{ pm }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-sm-5">
             <input type="text" name="note" class="form-control" placeholder="Izoh (ixtiyoriy)">
           </div>
         </div>
@@ -263,12 +271,13 @@
       <h6 class="fw-bold mb-3"><i class="bi bi-list-check me-1 text-muted"></i> To'lovlar tarixi</h6>
       {% if payments %}
       <table class="table table-sm">
-        <thead><tr><th>Sana</th><th class="text-end">Summa</th><th>Izoh</th><th></th></tr></thead>
+        <thead><tr><th>Sana</th><th class="text-end">Summa</th><th>To'lov usuli</th><th>Izoh</th><th></th></tr></thead>
         <tbody>
         {% for p in payments %}
         <tr>
           <td class="num">{{ p.paid_on|date_uz }}</td>
           <td class="text-end num fw-semibold text-success">{{ p.amount|uzs }}</td>
+          <td>{% if p.payment_method %}<span class="badge bg-light text-dark border">{{ p.payment_method }}</span>{% else %}<span class="text-muted">-</span>{% endif %}</td>
           <td class="small text-muted">
             {{ p.note or '-' }}
             {% if p.creator %}<br><span class="text-muted" style="font-size:.75rem">{{ p.creator.display_name }}</span>{% endif %}

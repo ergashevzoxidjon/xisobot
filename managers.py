@@ -1,17 +1,19 @@
 """
 Menejerlar bo'limi: har bir menejer uchun oylik savdo plani, shaxsiy
-hisobot (mijozlar soni, summasi, planga nisbatan foizi), kunlik mijozlar
-bilan ishlash jurnali va admin uchun barcha menejerlarning umumiy ko'rinishi.
+hisobot (mijozlar soni, summasi, planga nisbatan foizi), "Mijozlar bilan
+ishlash" Kanban pipeline taxtasi va admin uchun barcha menejerlarning
+umumiy ko'rinishi.
 
 Ruxsatlar:
 - managers.view   — o'z hisobotini ko'radi (menejer), yoki barchasini
                      ko'radi (admin, boss, xarajatchi/ish boshqaruvchi —
-                     2026-08-29, foydalanuvchi qarori: kunlik jurnalni
+                     2026-08-29, foydalanuvchi qarori: pipeline taxtasini
                      kuzatib borishi kerak).
 - managers.manage — plan qo'yadi/o'zgartiradi (faqat admin).
 
-Kunlik mijozlar jurnali (ManagerClientLog) — yozuvni faqat shu menejerning
-o'zi yoki admin qo'sha/tahrirlay oladi; boss va xarajatchi faqat ko'radi.
+Mijozlar pipeline (ClientPipelineCard/ClientPipelineEvent) — kartani
+faqat shu menejerning o'zi yoki admin qo'sha/tahrirlay oladi; boss va
+xarajatchi faqat ko'radi.
 """
 
 import os
@@ -28,9 +30,11 @@ from werkzeug.utils import secure_filename
 
 from extensions import db
 from models import (
-    User, ManagerPlan, Order, Employee, EmployeeSalary, Client, ManagerClientLog,
+    User, ManagerPlan, Order, Employee, EmployeeSalary, Client,
+    ClientPipelineCard, ClientPipelineEvent,
     log_action, ZERO, STATUS_CANCELLED,
-    LOG_STATUSES, LOG_STATUS_SUCCESS, LOG_STATUS_PENDING, LOG_STATUS_DECLINED,
+    PIPELINE_STAGES, PIPELINE_STAGE_NEW, PIPELINE_STAGE_WON, PIPELINE_STAGE_LOST,
+    PIPELINE_STAGE_LABELS, PIPELINE_STAGE_COLORS,
 )
 from permissions import permission_required, has_perm
 from queries import (
@@ -39,7 +43,7 @@ from queries import (
 )
 from utils import (
     ValidationError, parse_int, parse_money, parse_text, parse_date,
-    today_local, month_bounds, to_money,
+    today_local, now_local, month_bounds, to_money,
 )
 
 managers_bp = Blueprint("managers", __name__, url_prefix="/menejerlar")
@@ -183,12 +187,17 @@ def manager_detail(user_id):
         ).order_by(Order.created_at.desc())
     ).all()
 
-    # Kunlik mijozlar bilan ishlash jurnali endi alohida sahifada
-    # (managers.client_log_board) — bu yerda faqat bugungi soni ko'rsatiladi,
-    # takrorlanmasin deb to'liq jurnal shu sahifadan olib tashlandi
-    # (2026-08-29, uchinchi so'rov).
-    today_log_count = ManagerClientLog.query.filter_by(
-        manager_id=manager.id, log_date=today
+    # "Mijozlar bilan ishlash" pipeline taxtasi endi alohida sahifada
+    # (managers.pipeline_board) — bu yerda faqat qisqacha ko'rsatkich
+    # ko'rinadi (2026-08-29, to'rtinchi so'rov: kunlik jurnal o'rniga
+    # doimiy Kanban karta tizimiga o'tildi).
+    active_card_count = ClientPipelineCard.query.filter(
+        ClientPipelineCard.manager_id == manager.id,
+        ClientPipelineCard.stage.notin_([PIPELINE_STAGE_WON, PIPELINE_STAGE_LOST]),
+    ).count()
+    today_event_count = ClientPipelineEvent.query.join(ClientPipelineCard).filter(
+        ClientPipelineCard.manager_id == manager.id,
+        db.func.date(ClientPipelineEvent.created_at) == today,
     ).count()
 
     return render_template(
@@ -199,7 +208,8 @@ def manager_detail(user_id):
         trend=trend, orders=orders,
         can_manage=has_perm("managers.manage"),
         today=today,
-        today_log_count=today_log_count,
+        active_card_count=active_card_count,
+        today_event_count=today_event_count,
     )
 
 
@@ -233,17 +243,27 @@ def set_plan(user_id):
     return redirect(url_for("managers.manager_detail", user_id=user_id, year=year, month=month))
 
 
-# ---------- kunlik mijozlar bilan ishlash jurnali ----------
+# ---------- "Mijozlar bilan ishlash" Kanban pipeline ----------
 #
-# 2026-08-29 (uchinchi so'rov): jurnal endi alohida sahifa (/menejerlar/jurnal)
-# — Boss va ish boshqaruvchi BARCHA menejerlarning yozuvlarini bitta joyda
-# kuzatadi, menejer esa shu yerdan o'zining yozuvlarini boshqaradi. Mijoz
-# HAR QANDAY holatda ham avval kiritiladi/bazadan topiladi (orders.py'dagi
-# _client_from_form bilan bir xil naqsh), keyin holat tanlanadi — status
-# bo'yicha alohida forma tarmoqlanishi yo'q. "Otkaz berdi" tanlansa sabab
-# (note) majburiy.
+# 2026-08-29 (to'rtinchi so'rov, foydalanuvchi qarori — tubdan yangi
+# yondashuv): eski "kunlik jurnal" (har kun uchun alohida, sana bilan
+# bog'langan yozuv, 3 holat) butunlay almashtirildi. Endi har (menejer,
+# mijoz) juftligi uchun BITTA doimiy karta ochiladi — u kunlar osha davom
+# etadi, faqat bosqichi o'zgaradi: Yangi -> Taklif yuborish kutilmoqda ->
+# Taklifni qabul qilish kutilmoqda -> Muvaffaqiyatli / Bekor qilindi.
+# (2026-08-30, beshinchi so'rov: bosqich nomlari aniqroq qilindi — DB
+# kalitlari o'zgarmadi, faqat PIPELINE_STAGE_LABELS matnlari yangilandi.)
+# Har bir aloqa (qo'ng'iroq, uchrashuv, izoh,
+# bosqich o'zgarishi) kartaning ichida xronologik "voqea" sifatida
+# saqlanadi — bitta holat bayrog'i emas, faoliyat tarixi.
+#
+# "Muvaffaqiyatli" bosqichiga o'tkazish avtomatik buyurtma sahifasiga
+# OTKAZMAYDI (bu eski, kutilmagan xatti-harakat edi) — buyurtma karta
+# detalidagi "Buyurtma yaratish" havolasi orqali qo'lda ochiladi. "Otkaz
+# berdi" bosqichiga o'tishda sabab (note) majburiy, boshqa har qanday
+# bosqichdan istalgan bosqichga erkin o'tish mumkin.
 
-def _can_manage_log(manager):
+def _can_manage_card(manager):
     return current_user.role == "admin" or (
         current_user.role == "menejer" and current_user.id == manager.id
     )
@@ -276,10 +296,14 @@ def _resolve_client_from_form(form):
             f"Mijoz: '{name}' bazada topilmadi, yangi mijoz qo'shish huquqingiz esa yo'q."
         )
 
+    # Yangi mijoz shu yerning o'zida ochilayotganda barcha maydonlar
+    # majburiy — to'ldirilmasa karta ham ochilmaydi (2026-08-30,
+    # foydalanuvchi qarori). Mavjud mijoz tanlangan bo'lsa, bu yerga
+    # umuman kelinmaydi (yuqorida allaqachon return bo'ladi).
     client = Client(
         name=name,
-        phone=parse_text(form.get("client_phone"), "Telefon", required=False, max_length=50),
-        company=parse_text(form.get("client_company"), "Korxona", required=False, max_length=150),
+        phone=parse_text(form.get("client_phone"), "Telefon", required=True, max_length=50),
+        company=parse_text(form.get("client_company"), "Korxona", required=True, max_length=150),
     )
     db.session.add(client)
     db.session.flush()
@@ -309,25 +333,25 @@ def _save_proposal_file(entry, uploaded):
     entry.proposal_original_name = secure_filename(uploaded.filename)[:255] or f"taklif{ext}"
 
 
-@managers_bp.route("/jurnal")
+def _pipeline_redirect(card, board_manager_id, to="detail"):
+    """Amaldan keyin qayerga qaytish — karta detali (odatiy) yoki taxta
+    (board'dagi tezkor "Holat" menyusi shu yerga qaytaradi)."""
+    if to == "board":
+        return redirect(url_for("managers.pipeline_board", manager_id=board_manager_id))
+    return redirect(url_for("managers.pipeline_card_detail", card_id=card.id))
+
+
+@managers_bp.route("/pipeline")
 @login_required
 @permission_required("managers.view")
-def client_log_board():
-    """Kunlik mijozlar bilan ishlash — alohida sahifa (2026-08-29).
+def pipeline_board():
+    """"Mijozlar bilan ishlash" Kanban taxtasi (2026-08-29, to'rtinchi so'rov).
 
-    Menejer — faqat o'zining yozuvlarini ko'radi/boshqaradi. Admin, Boss va
-    ish boshqaruvchi — tanlangan kundagi BARCHA menejerlarning yozuvlarini
-    bitta jadvalda (menejer nomi ustuni bilan) ko'radi, kerak bo'lsa bitta
-    menejer bo'yicha filtrlaydi. Admin xohlagan menejer nomidan yozuv ham
-    qo'sha oladi.
+    Menejer — faqat o'zining kartalarini ko'radi/boshqaradi. Admin, Boss va
+    ish boshqaruvchi — BARCHA menejerlarning kartalarini bitta taxtada
+    ko'radi, kerak bo'lsa bitta menejer bo'yicha filtrlaydi. Admin xohlagan
+    menejer nomidan karta ham ocha oladi. Har bir ustun — bitta bosqich.
     """
-    today = today_local()
-    log_date_raw = (request.args.get("log_date") or "").strip()
-    try:
-        log_date = date.fromisoformat(log_date_raw) if log_date_raw else today
-    except ValueError:
-        log_date = today
-
     all_managers = User.query.filter_by(role="menejer").order_by(User.username).all()
 
     if current_user.role == "menejer":
@@ -335,30 +359,38 @@ def client_log_board():
     else:
         manager_filter_id = request.args.get("manager_id", type=int)
 
-    query = ManagerClientLog.query.filter_by(log_date=log_date)
+    q = (request.args.get("q") or "").strip()
+
+    query = ClientPipelineCard.query.join(Client)
     if manager_filter_id:
-        query = query.filter_by(manager_id=manager_filter_id)
-    logs = query.order_by(ManagerClientLog.created_at.desc()).all()
+        query = query.filter(ClientPipelineCard.manager_id == manager_filter_id)
+    if q:
+        query = query.filter(Client.name.ilike(f"%{q}%"))
+    cards = query.order_by(ClientPipelineCard.updated_at.desc()).all()
+
+    columns = {stage: [] for stage in PIPELINE_STAGES}
+    for card in cards:
+        columns[card.stage].append(card)
 
     can_add = current_user.role in ("menejer", "admin")
 
     return render_template(
-        "managers/jurnal.html",
-        log_date=log_date, logs=logs, today=today,
-        all_managers=all_managers, manager_filter_id=manager_filter_id,
-        can_add=can_add, log_statuses=LOG_STATUSES,
-        show_manager_column=current_user.role != "menejer",
+        "managers/pipeline.html",
+        columns=columns, stages=PIPELINE_STAGES,
+        stage_labels=PIPELINE_STAGE_LABELS, stage_colors=PIPELINE_STAGE_COLORS,
+        all_managers=all_managers, manager_filter_id=manager_filter_id, q=q,
+        can_add=can_add, show_manager_column=current_user.role != "menejer",
     )
 
 
-@managers_bp.route("/jurnal/qoshish", methods=["POST"])
+@managers_bp.route("/pipeline/yangi", methods=["POST"])
 @login_required
 @permission_required("managers.view")
-def add_client_log():
-    """Jurnalga yangi yozuv. Menejer — faqat o'zi uchun; admin — tanlagan
-    menejeri uchun. Boss va ish boshqaruvchi qo'sha olmaydi (faqat ko'radi)."""
-    log_date_raw = request.form.get("log_date") or ""
-
+def add_pipeline_card():
+    """Yangi karta ochish. Menejer — faqat o'zi uchun; admin — tanlagan
+    menejeri uchun. Boss va ish boshqaruvchi ocha olmaydi (faqat ko'radi).
+    Bir xil (menejer, mijoz) juftligi uchun ikkinchi karta ochilmaydi —
+    mavjud karta bo'lsa o'shanga yo'naltiriladi."""
     if current_user.role == "menejer":
         manager = current_user
     elif current_user.role == "admin":
@@ -369,151 +401,192 @@ def add_client_log():
         )
         if not manager:
             flash("Menejer tanlanmagan yoki topilmadi.", "danger")
-            return redirect(url_for("managers.client_log_board", log_date=log_date_raw))
+            return redirect(url_for("managers.pipeline_board"))
     else:
-        flash("Faqat menejerning o'zi yoki admin jurnalga yozuv qo'sha oladi.", "danger")
-        return redirect(url_for("managers.client_log_board", log_date=log_date_raw))
+        flash("Faqat menejerning o'zi yoki admin karta ocha oladi.", "danger")
+        return redirect(url_for("managers.pipeline_board"))
 
     try:
-        status = request.form.get("status") or LOG_STATUS_PENDING
-        if status not in LOG_STATUSES:
-            raise ValidationError("Holat noto'g'ri tanlandi.")
-        log_date = parse_date(request.form.get("log_date"), "Sana", required=False) or today_local()
-        if log_date > today_local():
-            raise ValidationError("Sana kelajakda bo'lishi mumkin emas.")
-
         note = parse_text(request.form.get("note"), "Izoh", required=False, max_length=255)
-        if status == LOG_STATUS_DECLINED and not note:
-            raise ValidationError("Rad etish sababini kiriting.")
-
-        # Mijoz HAR QANDAY holatda ham avval kiritiladi/topiladi (2026-08-29,
-        # foydalanuvchi qarori) — status bo'yicha alohida tarmoqlanish yo'q.
         client, client_created = _resolve_client_from_form(request.form)
     except ValidationError as e:
         db.session.rollback()
         flash(str(e), "danger")
-        return redirect(url_for("managers.client_log_board",
-                                 log_date=log_date_raw, manager_id=manager.id))
+        return redirect(url_for("managers.pipeline_board", manager_id=manager.id))
+
+    existing = ClientPipelineCard.query.filter_by(
+        manager_id=manager.id, client_id=client.id
+    ).first()
+    if existing:
+        flash(f"{client.name} uchun karta allaqachon ochilgan — shu yerga qo'shildingiz.", "info")
+        return redirect(url_for("managers.pipeline_card_detail", card_id=existing.id))
 
     if client_created:
         log_action(current_user, "create", "client", client.id,
-                   f"{client.name} (kunlik jurnal orqali)")
+                   f"{client.name} (pipeline orqali)")
 
-    entry = ManagerClientLog(
-        manager_id=manager.id, log_date=log_date, status=status,
-        client_id=client.id, note=note, created_by=current_user.id,
+    card = ClientPipelineCard(
+        manager_id=manager.id, client_id=client.id, stage=PIPELINE_STAGE_NEW,
+        created_by=current_user.id,
     )
 
     uploaded = request.files.get("proposal")
     if uploaded and uploaded.filename:
         try:
-            _save_proposal_file(entry, uploaded)
+            _save_proposal_file(card, uploaded)
         except ValidationError as e:
             db.session.rollback()
             flash(str(e), "danger")
-            return redirect(url_for("managers.client_log_board",
-                                     log_date=log_date.isoformat(), manager_id=manager.id))
+            return redirect(url_for("managers.pipeline_board", manager_id=manager.id))
 
-    db.session.add(entry)
+    db.session.add(card)
     db.session.flush()
-    log_action(current_user, "create", "manager_client_log", entry.id,
-               f"{manager.display_name}: {entry.display_name} ({entry.status_label})")
+    db.session.add(ClientPipelineEvent(
+        card_id=card.id, note=note, from_stage=None, to_stage=PIPELINE_STAGE_NEW,
+        created_by=current_user.id,
+    ))
+    log_action(current_user, "create", "client_pipeline_card", card.id,
+               f"{manager.display_name}: {card.display_name} kartasi ochildi")
     db.session.commit()
 
-    if status == LOG_STATUS_SUCCESS:
-        flash(f"{entry.display_name} — muvaffaqiyatli belgilandi. Endi buyurtma yarating.", "success")
-        return redirect(url_for("orders.new_order", client_id=client.id, manager_log_id=entry.id))
-
-    flash(f"{entry.display_name} — jurnalga yozildi ({entry.status_label}).", "success")
-    return redirect(url_for("managers.client_log_board",
-                             log_date=log_date.isoformat(), manager_id=manager.id))
+    flash(f"{card.display_name} uchun karta ochildi.", "success")
+    return redirect(url_for("managers.pipeline_card_detail", card_id=card.id))
 
 
-@managers_bp.route("/jurnal/<int:log_id>/holat", methods=["POST"])
+@managers_bp.route("/pipeline/<int:card_id>")
 @login_required
 @permission_required("managers.view")
-def set_log_status(log_id):
-    """Kutilayotgan (tasdiqlash jarayonida) yozuvni Muvaffaqiyatli yoki
-    Otkaz berdi holatiga o'tkazish. Otkaz uchun sabab majburiy."""
-    entry = ManagerClientLog.query.get_or_404(log_id)
-    manager = entry.manager
-
-    if not _can_manage_log(manager):
+def pipeline_card_detail(card_id):
+    """Bitta kartaning tafsiloti — voqealar tarixi (xronologik) va uni
+    boshqarish (izoh qo'shish, bosqich o'zgartirish, o'chirish)."""
+    card = ClientPipelineCard.query.get_or_404(card_id)
+    if current_user.role == "menejer" and card.manager_id != current_user.id:
         flash("Ruxsat yo'q.", "danger")
-        return redirect(url_for("managers.client_log_board"))
+        return redirect(url_for("managers.pipeline_board"))
 
-    new_status = request.form.get("status")
-    if entry.status != LOG_STATUS_PENDING or new_status not in (LOG_STATUS_SUCCESS, LOG_STATUS_DECLINED):
-        flash("Holatni o'zgartirib bo'lmadi.", "danger")
-        return redirect(url_for("managers.client_log_board",
-                                 log_date=entry.log_date.isoformat(), manager_id=manager.id))
+    return render_template(
+        "managers/pipeline_card.html",
+        card=card, events=card.events, stages=PIPELINE_STAGES,
+        stage_labels=PIPELINE_STAGE_LABELS, stage_colors=PIPELINE_STAGE_COLORS,
+        can_manage=_can_manage_card(card.manager),
+    )
 
-    if new_status == LOG_STATUS_DECLINED:
+
+@managers_bp.route("/pipeline/<int:card_id>/izoh", methods=["POST"])
+@login_required
+@permission_required("managers.view")
+def add_pipeline_event(card_id):
+    """Bosqichni o'zgartirmasdan, faqat faoliyat qayd etish (qo'ng'iroq,
+    uchrashuv, izoh) — kartaning tarixiga xronologik qo'shiladi."""
+    card = ClientPipelineCard.query.get_or_404(card_id)
+    if not _can_manage_card(card.manager):
+        flash("Ruxsat yo'q.", "danger")
+        return redirect(url_for("managers.pipeline_board"))
+
+    try:
+        note = parse_text(request.form.get("note"), "Izoh", required=True, max_length=255)
+    except ValidationError as e:
+        flash(str(e), "danger")
+        return _pipeline_redirect(card, card.manager_id, request.form.get("redirect_to"))
+
+    uploaded = request.files.get("proposal")
+    if uploaded and uploaded.filename:
         try:
-            reason = parse_text(request.form.get("note"), "Rad etish sababi",
-                                required=True, max_length=255)
+            _save_proposal_file(card, uploaded)
         except ValidationError as e:
             flash(str(e), "danger")
-            return redirect(url_for("managers.client_log_board",
-                                     log_date=entry.log_date.isoformat(), manager_id=manager.id))
-        entry.note = reason
+            return _pipeline_redirect(card, card.manager_id, request.form.get("redirect_to"))
 
-    entry.status = new_status
-    log_action(current_user, "update", "manager_client_log", entry.id,
-               f"{manager.display_name}: {entry.display_name} -> {entry.status_label}")
+    db.session.add(ClientPipelineEvent(
+        card_id=card.id, note=note, from_stage=card.stage, to_stage=card.stage,
+        created_by=current_user.id,
+    ))
+    card.updated_at = now_local()
+    log_action(current_user, "update", "client_pipeline_card", card.id,
+               f"{card.manager.display_name}: {card.display_name} — izoh qo'shildi")
     db.session.commit()
 
-    if new_status == LOG_STATUS_SUCCESS:
-        flash(f"{entry.display_name} — muvaffaqiyatli belgilandi. Endi buyurtma yarating.", "success")
-        if entry.client_id:
-            return redirect(url_for("orders.new_order", client_id=entry.client_id, manager_log_id=entry.id))
-        return redirect(url_for("orders.new_order", client_name=entry.client_name or "", manager_log_id=entry.id))
-
-    flash(f"{entry.display_name} — Otkaz berdi deb belgilandi.", "info")
-    return redirect(url_for("managers.client_log_board",
-                             log_date=entry.log_date.isoformat(), manager_id=manager.id))
+    flash("Izoh qo'shildi.", "success")
+    return _pipeline_redirect(card, card.manager_id, request.form.get("redirect_to"))
 
 
-@managers_bp.route("/jurnal/<int:log_id>/ochirish", methods=["POST"])
+@managers_bp.route("/pipeline/<int:card_id>/holat", methods=["POST"])
 @login_required
 @permission_required("managers.view")
-def delete_client_log(log_id):
-    entry = ManagerClientLog.query.get_or_404(log_id)
-    manager = entry.manager
-    if not _can_manage_log(manager):
+def set_card_stage(card_id):
+    """Karta bosqichini o'zgartirish — istalgan bosqichdan istalgan
+    bosqichga erkin o'tish mumkin. "Bekor qilindi" uchun sabab majburiy.
+    "Muvaffaqiyatli"ga o'tish avtomatik buyurtma sahifasiga OTKAZMAYDI —
+    buni karta detalidagi "Buyurtma yaratish" havolasi orqali o'zi qiladi.
+    """
+    card = ClientPipelineCard.query.get_or_404(card_id)
+    if not _can_manage_card(card.manager):
         flash("Ruxsat yo'q.", "danger")
-        return redirect(url_for("managers.client_log_board"))
+        return redirect(url_for("managers.pipeline_board"))
 
-    log_date = entry.log_date
-    if entry.proposal_filename:
+    new_stage = request.form.get("stage")
+    if new_stage not in PIPELINE_STAGES or new_stage == card.stage:
+        flash("Bosqichni o'zgartirib bo'lmadi.", "danger")
+        return _pipeline_redirect(card, card.manager_id, request.form.get("redirect_to"))
+
+    note = parse_text(request.form.get("note"), "Izoh", required=False, max_length=255)
+    if new_stage == PIPELINE_STAGE_LOST and not note:
+        flash("Otkaz berish sababini kiriting.", "danger")
+        return _pipeline_redirect(card, card.manager_id, request.form.get("redirect_to"))
+
+    old_stage = card.stage
+    card.stage = new_stage
+    db.session.add(ClientPipelineEvent(
+        card_id=card.id, note=note, from_stage=old_stage, to_stage=new_stage,
+        created_by=current_user.id,
+    ))
+    log_action(current_user, "update", "client_pipeline_card", card.id,
+               f"{card.manager.display_name}: {card.display_name} -> {card.stage_label}")
+    db.session.commit()
+
+    flash(f"{card.display_name} — {card.stage_label} deb belgilandi.",
+          "info" if new_stage == PIPELINE_STAGE_LOST else "success")
+    return _pipeline_redirect(card, card.manager_id, request.form.get("redirect_to"))
+
+
+@managers_bp.route("/pipeline/<int:card_id>/ochirish", methods=["POST"])
+@login_required
+@permission_required("managers.view")
+def delete_pipeline_card(card_id):
+    card = ClientPipelineCard.query.get_or_404(card_id)
+    if not _can_manage_card(card.manager):
+        flash("Ruxsat yo'q.", "danger")
+        return redirect(url_for("managers.pipeline_board"))
+
+    manager_id = card.manager_id
+    if card.proposal_filename:
         upload_dir = current_app.config["UPLOAD_FOLDER"]
-        old_path = os.path.join(upload_dir, entry.proposal_filename)
+        old_path = os.path.join(upload_dir, card.proposal_filename)
         if os.path.exists(old_path):
             try:
                 os.remove(old_path)
             except OSError:
                 pass
 
-    log_action(current_user, "delete", "manager_client_log", entry.id,
-               f"{manager.display_name}: {entry.display_name} yozuvi o'chirildi")
-    db.session.delete(entry)
+    log_action(current_user, "delete", "client_pipeline_card", card.id,
+               f"{card.manager.display_name}: {card.display_name} kartasi o'chirildi")
+    db.session.delete(card)
     db.session.commit()
-    flash("Yozuv o'chirildi.", "success")
-    return redirect(url_for("managers.client_log_board",
-                             log_date=log_date.isoformat(), manager_id=manager.id))
+    flash("Karta o'chirildi.", "success")
+    return redirect(url_for("managers.pipeline_board", manager_id=manager_id))
 
 
-@managers_bp.route("/jurnal/<int:log_id>/fayl")
+@managers_bp.route("/pipeline/<int:card_id>/fayl")
 @login_required
 @permission_required("managers.view")
-def download_proposal(log_id):
-    entry = ManagerClientLog.query.get_or_404(log_id)
-    if not entry.proposal_filename:
+def download_pipeline_proposal(card_id):
+    card = ClientPipelineCard.query.get_or_404(card_id)
+    if not card.proposal_filename:
         flash("Fayl yuklanmagan.", "warning")
-        return redirect(url_for("managers.client_log_board"))
+        return redirect(url_for("managers.pipeline_card_detail", card_id=card.id))
     return send_from_directory(
         current_app.config["UPLOAD_FOLDER"],
-        entry.proposal_filename,
+        card.proposal_filename,
         as_attachment=True,
-        download_name=entry.proposal_original_name or entry.proposal_filename,
+        download_name=card.proposal_original_name or card.proposal_filename,
     )

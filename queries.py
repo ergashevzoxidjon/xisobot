@@ -35,9 +35,12 @@ def eager_orders(query):
 
     51 ta so'rov o'rniga 3 ta (buyurtmalar + mijozlar + to'lovlar).
     Shablondagi `o.client.name`, `o.paid_amount_calc` o'zgarishsiz ishlaydi.
+    `o.creator` ham shu yerda — ro'yxatda kim yaratganini ko'rsatish uchun
+    (2026-08-30, foydalanuvchi qarori).
     """
     return query.options(
         joinedload(Order.client),
+        joinedload(Order.creator),
         selectinload(Order.payments),
         selectinload(Order.items),
     )

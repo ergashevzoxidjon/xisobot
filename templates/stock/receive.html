@@ -90,6 +90,14 @@
         <h6 class="fw-bold mb-0"><i class="bi bi-cart-check me-1 text-muted"></i> Tanlangan mahsulotlar</h6>
         <span class="text-muted small" id="cartCount"></span>
       </div>
+      <div class="cart-row cart-row-head">
+        <div class="cart-row-name">Mahsulot</div>
+        <div style="width:88px">Soni</div>
+        <div style="width:88px">Narxi</div>
+        <div class="cart-col-location" style="width:170px">Joylashuvi <span class="text-normal">(ixtiyoriy)</span></div>
+        <div style="width:110px">Summa</div>
+        <div class="cart-col-remove"></div>
+      </div>
       <div id="cartBody"></div>
       <div class="d-flex justify-content-between align-items-center mt-2 pt-2" style="border-top:1px solid #e2e8f0">
         <span class="fw-bold">Jami xarajat</span>
@@ -110,8 +118,12 @@
                name="row_quantity" placeholder="Soni">
         <input type="number" step="0.01" min="0.01" class="form-control form-control-sm row-price"
                name="row_price" placeholder="Narxi">
-        <input type="text" maxlength="120" class="form-control form-control-sm row-location"
-               name="row_location" placeholder="Joylashuvi (masalan: A-2 raf)">
+        <div class="input-group input-group-sm row-location-wrap">
+          <span class="input-group-text"><i class="bi bi-geo-alt"></i></span>
+          <input type="text" maxlength="120" class="form-control form-control-sm row-location"
+                 name="row_location" placeholder="Masalan: A-2 raf"
+                 title="Mahsulot ombordagi qayerda turishi (ixtiyoriy)">
+        </div>
         <div class="cart-row-line">0.00</div>
         <button type="button" class="btn btn-sm btn-outline-danger row-remove"
                 title="Savatdan olib tashlash"><i class="bi bi-x-lg"></i></button>

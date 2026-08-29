@@ -15,6 +15,7 @@ from models import (
     Expense, Order, OrderItem, Payment, Client, Material, StockMove, log_action,
     EXPENSE_CATEGORIES, GENERAL_EXPENSE_CATEGORIES, EXPENSE_ORDER_CATEGORY,
     STATUS_CANCELLED, STOCK_OUT, ZERO, PAYMENT_TRANSFER,
+    ORDER_PAYMENT_COMPANY_METHODS,
 )
 from permissions import permission_required, has_perm
 from queries import (
@@ -52,6 +53,34 @@ def income_between(start, end):
         .scalar()
     )
     return to_money(total)
+
+
+def income_by_method(start, end):
+    """Tushum — to'lov usuli bo'yicha taqsimlangan (Naqd/Karta/Terminal/Birja
+    va "Dogovor ..." — korxonalar). Moliyaviy hisobotdagi "Korxonalar
+    bo'yicha tushum" bloki uchun (2026-08-30, foydalanuvchi qarori).
+    Bekor qilingan/o'chirilgan buyurtmalar hisobga olinmaydi."""
+    rows = (
+        db.session.query(Payment.payment_method, func.coalesce(func.sum(Payment.amount), 0))
+        .join(Order, Payment.order_id == Order.id)
+        .filter(
+            Payment.paid_on >= start,
+            Payment.paid_on < end,
+            Order.status != STATUS_CANCELLED,
+            Order.is_deleted.is_(False),
+        )
+        .group_by(Payment.payment_method)
+        .order_by(func.sum(Payment.amount).desc())
+        .all()
+    )
+    return [
+        {
+            "method": m or "Ko'rsatilmagan",
+            "total": to_money(t),
+            "is_company": m in ORDER_PAYMENT_COMPANY_METHODS,
+        }
+        for m, t in rows
+    ]
 
 
 def expenses_between(start, end):
@@ -409,12 +438,23 @@ def report():
         for s in suppliers_with_stats(only_active=True):
             supplier_debt_total += s.debt
 
+    # To'lov usuli / korxonalar bo'yicha tushum — alohida blok
+    # (2026-08-30, foydalanuvchi qarori).
+    income_totals = income_by_method(start, end)
+    income_total_all = sum((row["total"] for row in income_totals), ZERO)
+    income_company_total = sum(
+        (row["total"] for row in income_totals if row["is_company"]), ZERO
+    )
+
     return render_template(
         "finance/report.html",
         months=months, year=year,
         total_income=total_income, total_expense=total_expense, total_profit=total_profit,
         manager_rows=manager_rows,
         supplier_debt_total=supplier_debt_total,
+        income_totals=income_totals,
+        income_total_all=income_total_all,
+        income_company_total=income_company_total,
         **expense_breakdown(start, end),
     )
 

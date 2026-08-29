@@ -102,6 +102,43 @@
 </div>
 {% endif %}
 
+{# ---------------- 1c. TO'LOV USULLARI / KORXONALAR BO'YICHA TUSHUM (2026-08-30) ---------------- #}
+{% if income_totals %}
+<div class="card p-4 mb-3">
+  <div class="d-flex justify-content-between align-items-start flex-wrap gap-1 mb-1">
+    <h6 class="fw-bold mb-0"><i class="bi bi-bank me-1 text-muted"></i> Korxonalar bo'yicha tushum</h6>
+    <span class="text-muted small">shartnoma (korxona) orqali: <span class="fw-semibold">{{ income_company_total|uzs }}</span> so'm</span>
+  </div>
+  <div class="chart-note mb-3">To'lov qaysi usul yoki shartnoma (korxona) orqali qilingani — {{ year }}-yil, to'lov sanasi bo'yicha.</div>
+  <div style="overflow-x:auto">
+    <table class="table table-sm mb-0">
+      <thead><tr><th>To'lov usuli</th><th class="text-end">Summa</th><th class="text-end">Ulush</th></tr></thead>
+      <tbody>
+      {% for row in income_totals %}
+      <tr>
+        <td>
+          {% if row.is_company %}<i class="bi bi-building text-primary me-1"></i>{% else %}<i class="bi bi-cash text-muted me-1"></i>{% endif %}
+          {{ row.method }}
+        </td>
+        <td class="text-end num fw-semibold">{{ row.total|uzs }}</td>
+        <td class="text-end num text-muted">
+          {% if income_total_all > 0 %}{{ ((row.total / income_total_all) * 100)|round(1) }}%{% else %}—{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr style="border-top:2px solid #e1e0d9">
+          <td class="fw-bold">JAMI</td>
+          <td class="text-end fw-bold num">{{ income_total_all|uzs }}</td>
+          <td></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+</div>
+{% endif %}
+
 {# ---------------- 2. OYLIK GRAFIK ---------------- #}
 <div class="card p-4 mb-3">
   <h6 class="fw-bold mb-1">Oylar kesimida — tushum, xarajat va foyda</h6>

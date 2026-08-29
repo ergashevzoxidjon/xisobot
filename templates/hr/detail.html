@@ -5,7 +5,7 @@
     <h3>{{ employee.full_name }}</h3>
     <div class="subtitle">
       {% if employee.phone %}<i class="bi bi-telephone"></i> {{ employee.phone }}{% endif %}
-      {% if employee.address %} · <i class="bi bi-geo-alt"></i> {{ employee.address }}{% endif %}
+      {% if employee.birth_date %} · <i class="bi bi-cake2"></i> {{ employee.birth_date|date_uz }}{% endif %}
       {% if employee.user %} · <span class="badge bg-light text-dark border">menejer hisobi: {{ employee.user.display_name }}</span>{% endif %}
       {% if not employee.is_active %} · <span class="badge bg-secondary">nofaol</span>{% endif %}
     </div>

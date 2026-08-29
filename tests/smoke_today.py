@@ -1,10 +1,11 @@
 """
-Bugungi (2026-08-29, ikkinchi bosqich) o'zgarishlar uchun maxsus tekshiruv:
-  1. Migratsiya (v11) ikki marta ishga tushirilsa ham xatosiz.
+Bugungi (2026-08-29, to'rtinchi bosqich) o'zgarishlar uchun maxsus tekshiruv:
+  1. Migratsiya (v12) ikki marta ishga tushirilsa ham xatosiz.
   2. HR: Oylik/Avans/KPI turkumlari to'g'ri yoziladi, Boss ham to'lov kirita oladi.
   3. Ombor: kirimda joylashuv kiritilsa, mahsulot kartochkasiga yoziladi.
-  4. Manager kunlik mijozlar jurnali: muvaffaqiyatli/tasdiqlash/otkaz oqimlari,
-     holat o'zgartirish, buyurtma bilan bog'lanish, o'chirish.
+  4. Mijozlar bilan ishlash — Kanban pipeline: karta ochish, erkin bosqich
+     almashtirish, "Otkaz berdi" uchun sabab majburiyligi, buyurtma bilan
+     bog'lanish, izoh qo'shish, o'chirish.
   5. Bosh sahifa (dashboard): "Diqqat talab qiladi" faqat adminda, moliyaviy
      kartalar reports.view bo'lganlarda (uchinchi so'rov, 2026-08-29).
 
@@ -31,7 +32,7 @@ def check(label, cond):
 
 
 # ---------------------------------------------------------------- 1. migratsiya
-print("=== MIGRATSIYA (v11) IDEMPOTENTLIGI ===")
+print("=== MIGRATSIYA (v12) IDEMPOTENTLIGI ===")
 db_fd, db_path = tempfile.mkstemp(suffix=".sqlite")
 os.close(db_fd)
 os.environ["DATABASE_URL"] = f"sqlite:///{db_path}"
@@ -46,9 +47,11 @@ from app import create_app
 from extensions import db
 from models import (
     User, Client, Employee, EmployeeSalary, EmployeeAdvance, Material,
-    ManagerClientLog, Order, Expense,
+    ClientPipelineCard, ClientPipelineEvent, Order, Expense, Payment,
     PAYMENT_KIND_OYLIK, PAYMENT_KIND_AVANS, PAYMENT_KIND_KPI,
-    LOG_STATUS_SUCCESS, LOG_STATUS_PENDING, LOG_STATUS_DECLINED,
+    PIPELINE_STAGE_NEW, PIPELINE_STAGE_CONTACTED, PIPELINE_STAGE_PROPOSAL,
+    PIPELINE_STAGE_WON, PIPELINE_STAGE_LOST,
+    ORDER_PAYMENT_METHODS,
 )
 from utils import today_local
 
@@ -93,9 +96,22 @@ print("\n=== HR: OYLIK / AVANS / KPI TURKUMLARI ===")
 with app.test_client() as c:
     login(c, "admin_t")
 
-    r = c.post("/hr/yangi", data={"full_name": "Smoke Xodim", "phone": "", "address": "",
+    # Telefon/tug'ilgan sanasiz xodim yaratilmasligi kerak (2026-08-30,
+    # foydalanuvchi qarori — "Manzil" o'rniga "Tug'ilgan sana", barcha
+    # shaxsiy ma'lumotlar majburiy).
+    r0 = c.post("/hr/yangi", data={"full_name": "Toliqsiz Xodim", "phone": "",
+                                    "birth_date": "", "user_id": "", "note": ""},
+                follow_redirects=True)
+    check("HR: telefon/tug'ilgan sanasiz xodim rad etiladi (200, flash)", r0.status_code == 200)
+
+    r = c.post("/hr/yangi", data={"full_name": "Smoke Xodim", "phone": "+998901112233",
+                                   "birth_date": "1995-05-20",
                                    "user_id": "", "note": ""}, follow_redirects=True)
     check("HR: yangi xodim yaratildi (200)", r.status_code == 200)
+
+with app.app_context():
+    check("HR: telefon/sanasiz xodim bazada yo'q",
+          Employee.query.filter_by(full_name="Toliqsiz Xodim").first() is None)
 
 with app.app_context():
     emp = Employee.query.filter_by(full_name="Smoke Xodim").first()
@@ -166,132 +182,240 @@ with app.app_context():
     m = db.session.get(Material, material_id)
     check("Ombor: material.location='B-3 raf' bo'lib yozildi", m.location == "B-3 raf")
 
-# ---------------------------------------------------------------- 4. Manager kunlik jurnal
-print("\n=== MANAGER KUNLIK MIJOZLAR JURNALI (alohida sahifa, mijoz-avval oqimi) ===")
+# ---------------------------------------------------------------- 4. Mijozlar bilan ishlash (Kanban pipeline)
+print("\n=== MIJOZLAR BILAN ISHLASH — KANBAN PIPELINE (2026-08-29, to'rtinchi bosqich) ===")
 with app.test_client() as c:
     login(c, "mgr_t")
 
-    # Muvaffaqiyatli — mavjud mijoz client_id orqali tanlanadi
-    r = c.post("/menejerlar/jurnal/qoshish", data={
-        "status": "muvaffaqiyatli", "client_id": str(client_id),
-        "client_name": "Smoke MChJ",
-        "log_date": today_local().isoformat(), "note": "",
+    # Karta ochish — mavjud mijoz client_id orqali tanlanadi. Har doim
+    # "yangi" bosqichida boshlanadi, avtomatik hech qayerga otkazmaydi.
+    r = c.post("/menejerlar/pipeline/yangi", data={
+        "client_id": str(client_id), "client_name": "Smoke MChJ", "note": "birinchi aloqa",
     })
-    check("Jurnal: muvaffaqiyatli yozuv -> orders.new_order ga redirect (302)", r.status_code == 302)
-    check("Jurnal: redirect manzilida client_id va manager_log_id bor",
-          "client_id=" in r.location and "manager_log_id=" in r.location)
+    check("Pipeline: karta ochilgach karta detaliga redirect (302)", r.status_code == 302)
+    check("Pipeline: redirect orders.new_order'ga EMAS, karta detaliga",
+          "/menejerlar/pipeline/" in r.location and "buyurtmalar/yangi" not in r.location)
 
-    # Tasdiqlash jarayonida — mijoz bazada yo'q, shu yerning o'zida ochiladi
-    r2 = c.post("/menejerlar/jurnal/qoshish", data={
-        "status": "tasdiqlash_jarayonida", "client_name": "Yangi Prospekt",
-        "client_company": "Prospekt MChJ", "client_phone": "+998907778899",
-        "log_date": today_local().isoformat(), "note": "",
+    # Ikkinchi karta — mijoz bazada yo'q, shu yerning o'zida ochiladi
+    r2 = c.post("/menejerlar/pipeline/yangi", data={
+        "client_name": "Yangi Prospekt", "client_company": "Prospekt MChJ",
+        "client_phone": "+998907778899", "note": "",
     }, follow_redirects=True)
-    check("Jurnal: tasdiqlash jarayonida yozuv yaratildi (200)", r2.status_code == 200)
-
-    # Otkaz — sababsiz rad etilishi kerak (mijoz ham ochilmaydi)
-    r3_no_reason = c.post("/menejerlar/jurnal/qoshish", data={
-        "status": "otkaz", "client_name": "Sababsiz Otkaz",
-        "log_date": today_local().isoformat(), "note": "",
-    }, follow_redirects=True)
-    check("Jurnal: otkaz sababisiz -> rad etiladi (200, yozuv yaratilmaydi)",
-          r3_no_reason.status_code == 200)
-
-    # Otkaz — sabab bilan (majburiy maydon to'ldirilgan)
-    r3 = c.post("/menejerlar/jurnal/qoshish", data={
-        "status": "otkaz", "client_name": "Voz Kechgan",
-        "log_date": today_local().isoformat(), "note": "Narx mos kelmadi",
-    }, follow_redirects=True)
-    check("Jurnal: otkaz yozuvi sabab bilan yaratildi (200)", r3.status_code == 200)
+    check("Pipeline: ikkinchi karta (yangi mijoz bilan) ochildi (200)", r2.status_code == 200)
 
 with app.app_context():
-    logs = ManagerClientLog.query.filter_by(manager_id=mgr_id).all()
-    check("Jurnal: bugun 3 ta yozuv bor (sababsiz otkaz urinishi hisobga kirmagan)", len(logs) == 3)
-    statuses = sorted(l.status for l in logs)
-    check("Jurnal: statuslar to'g'ri (muvaffaqiyatli/otkaz/tasdiqlash_jarayonida)",
-          statuses == sorted([LOG_STATUS_SUCCESS, LOG_STATUS_DECLINED, LOG_STATUS_PENDING]))
-    pending_entry = next(l for l in logs if l.status == LOG_STATUS_PENDING)
-    pending_id = pending_entry.id
-    success_entry = next(l for l in logs if l.status == LOG_STATUS_SUCCESS)
-    declined_entry = next(l for l in logs if l.status == LOG_STATUS_DECLINED)
-    check("Jurnal: muvaffaqiyatli yozuv client_id ga bog'langan", success_entry.client_id == client_id)
-    check("Jurnal: otkaz yozuvida sabab saqlangan", declined_entry.note == "Narx mos kelmadi")
-    check("Jurnal: tasdiqlash jarayonidagi yozuv uchun yangi mijoz avtomatik ochilgan",
-          pending_entry.client is not None and pending_entry.client.name == "Yangi Prospekt")
+    cards = ClientPipelineCard.query.filter_by(manager_id=mgr_id).all()
+    check("Pipeline: menejerda 2 ta karta bor", len(cards) == 2)
+    check("Pipeline: barcha kartalar 'yangi' bosqichida boshlangan",
+          all(cd.stage == PIPELINE_STAGE_NEW for cd in cards))
+    card1 = next(cd for cd in cards if cd.client_id == client_id)
+    card2 = next(cd for cd in cards if cd.client and cd.client.name == "Yangi Prospekt")
+    check("Pipeline: 1-karta client_id ga bog'langan", card1.client_id == client_id)
+    check("Pipeline: 2-karta uchun yangi mijoz avtomatik ochilgan",
+          card2.client is not None and card2.client.name == "Yangi Prospekt")
+    check("Pipeline: karta ochilganda 1 ta voqea yozildi", len(card1.events) == 1)
 
-# Boss va xarajatchi — umumiy (barcha menejerlar) jurnal sahifasini ko'ra
-# olishi kerak, lekin qo'sha olmasligi kerak
+# Yangi mijoz telefon/korxonasiz kiritilsa karta ochilmasligi kerak
+# (2026-08-30, foydalanuvchi qarori — "yangi mijoz yaratishda ham barcha
+# bo'limlarni to'ldirish shart").
+with app.test_client() as c:
+    login(c, "mgr_t")
+    r = c.post("/menejerlar/pipeline/yangi", data={
+        "client_name": "Toliqsiz Mijoz", "client_company": "", "client_phone": "", "note": "",
+    }, follow_redirects=True)
+    check("Pipeline: telefon/korxonasiz yangi mijoz bilan karta rad etiladi (200, flash)",
+          r.status_code == 200)
+
+with app.app_context():
+    check("Pipeline: 'Toliqsiz Mijoz' bazada yaratilmadi",
+          Client.query.filter_by(name="Toliqsiz Mijoz").first() is None)
+
+# Bir xil (menejer, mijoz) uchun ikkinchi karta ochilmasligi kerak —
+# mavjud kartaga yo'naltiriladi.
+with app.test_client() as c:
+    login(c, "mgr_t")
+    r = c.post("/menejerlar/pipeline/yangi", data={
+        "client_id": str(client_id), "client_name": "Smoke MChJ", "note": "qayta urinish",
+    }, follow_redirects=True)
+    check("Pipeline: bir xil mijoz uchun ikkinchi urinish ham 200 qaytardi", r.status_code == 200)
+
+with app.app_context():
+    dup_count = ClientPipelineCard.query.filter_by(manager_id=mgr_id, client_id=client_id).count()
+    check("Pipeline: takroriy urinishdan keyin ham faqat 1 ta karta bor (dublikat yo'q)", dup_count == 1)
+
+# Boss va xarajatchi — umumiy (barcha menejerlar) taxtani ko'ra olishi
+# kerak, lekin karta ocha olmasligi kerak
 with app.test_client() as c:
     login(c, "boss_t")
-    r = c.get("/menejerlar/jurnal")
-    check("Jurnal: Boss umumiy jurnal sahifasini (barcha menejerlar) ko'ra oladi", r.status_code == 200)
-    check("Jurnal: Boss sahifada menejer ustunini ko'radi", b"Menejer" in r.data)
-    r2 = c.post("/menejerlar/jurnal/qoshish", data={
-        "status": "otkaz", "client_name": "Boss urinishi", "note": "sabab",
-        "log_date": today_local().isoformat(),
+    r = c.get("/menejerlar/pipeline")
+    check("Pipeline: Boss umumiy taxtani (barcha menejerlar) ko'ra oladi", r.status_code == 200)
+    check("Pipeline: Boss 'Yangi karta' tugmasini ko'rmaydi", b"Yangi karta" not in r.data)
+    r2 = c.post("/menejerlar/pipeline/yangi", data={
+        "client_name": "Boss urinishi",
     }, follow_redirects=True)
-    check("Jurnal: Boss o'zi yozuv QO'SHA OLMAYDI (ruxsat yo'q)", r2.status_code == 200)
+    check("Pipeline: Boss o'zi karta OCHA OLMAYDI (ruxsat yo'q)", r2.status_code == 200)
 
 with app.app_context():
-    logs_after = ManagerClientLog.query.filter_by(manager_id=mgr_id).count()
-    check("Jurnal: Boss urinishidan keyin ham yozuvlar soni 3 (o'zgarmagan)", logs_after == 3)
+    check("Pipeline: Boss urinishidan keyin ham kartalar soni 2 (o'zgarmagan)",
+          ClientPipelineCard.query.filter_by(manager_id=mgr_id).count() == 2)
 
 with app.test_client() as c:
     login(c, "xar_t")
-    r = c.get("/menejerlar/jurnal")
-    check("Jurnal: Xarajatchi (ish boshqaruvchi) umumiy jurnal sahifasini ko'ra oladi", r.status_code == 200)
+    r = c.get("/menejerlar/pipeline")
+    check("Pipeline: Xarajatchi (ish boshqaruvchi) umumiy taxtani ko'ra oladi", r.status_code == 200)
     r2 = c.get(f"/menejerlar/{mgr_id}")
-    check("Jurnal: Xarajatchi menejer sahifasini ko'ra oladi", r2.status_code == 200)
-    check("Jurnal: Menejer sahifasida jurnalga qisqa havola bor",
-          b"Kunlik mijozlar bilan ishlash" in r2.data)
+    check("Pipeline: Xarajatchi menejer sahifasini ko'ra oladi", r2.status_code == 200)
+    check("Pipeline: Menejer sahifasida pipeline'ga qisqa havola bor",
+          b"Mijozlar bilan ishlash" in r2.data)
 
-# Holatni o'zgartirish: tasdiqlash_jarayonida -> otkaz, sababsiz rad etiladi
+# Izoh qo'shish — bosqichni o'zgartirmasdan faoliyat qayd etiladi
 with app.test_client() as c:
     login(c, "mgr_t")
-    r_no_reason = c.post(f"/menejerlar/jurnal/{pending_id}/holat", data={"status": "otkaz"},
+    r = c.post(f"/menejerlar/pipeline/{card1.id}/izoh", data={"note": "qo'ng'iroq qildim"},
+               follow_redirects=True)
+    check("Pipeline: izoh qo'shildi (200)", r.status_code == 200)
+
+with app.app_context():
+    refreshed1 = db.session.get(ClientPipelineCard, card1.id)
+    check("Pipeline: izohdan keyin bosqich o'zgarmadi", refreshed1.stage == PIPELINE_STAGE_NEW)
+    check("Pipeline: voqealar soni 2 ga yetdi", len(refreshed1.events) == 2)
+
+# Erkin bosqich almashtirish: yangi -> aloqada -> taklif_yuborildi -> muvaffaqiyatli
+with app.test_client() as c:
+    login(c, "mgr_t")
+    for target in [PIPELINE_STAGE_CONTACTED, PIPELINE_STAGE_PROPOSAL, PIPELINE_STAGE_WON]:
+        r = c.post(f"/menejerlar/pipeline/{card1.id}/holat", data={"stage": target})
+        check(f"Pipeline: bosqich '{target}'ga o'zgartirildi (302)", r.status_code == 302)
+        check(f"Pipeline: '{target}'ga o'tish orders.new_order'ga OTKAZMAYDI",
+              "buyurtmalar/yangi" not in r.location)
+        with app.app_context():
+            cd = db.session.get(ClientPipelineCard, card1.id)
+            check(f"Pipeline: karta bazada '{target}' bosqichida", cd.stage == target)
+
+# "Otkaz berdi" — sababsiz rad etilishi kerak (holat o'zgarmaydi)
+with app.test_client() as c:
+    login(c, "mgr_t")
+    r_no_reason = c.post(f"/menejerlar/pipeline/{card1.id}/holat", data={"stage": "otkaz"},
                           follow_redirects=True)
-    check("Jurnal: sababsiz otkazga o'tkazish rad etiladi (200, flash)", r_no_reason.status_code == 200)
+    check("Pipeline: sababsiz otkazga o'tkazish rad etiladi (200, flash)", r_no_reason.status_code == 200)
 
 with app.app_context():
-    still_pending = db.session.get(ManagerClientLog, pending_id)
-    check("Jurnal: sabab kiritilmagansa holat o'zgarmaydi",
-          still_pending.status == LOG_STATUS_PENDING)
+    still_won = db.session.get(ClientPipelineCard, card1.id)
+    check("Pipeline: sabab kiritilmagansa bosqich o'zgarmaydi (hali muvaffaqiyatli)",
+          still_won.stage == PIPELINE_STAGE_WON)
 
-# Holatni o'zgartirish: tasdiqlash_jarayonida -> muvaffaqiyatli
+# 2026-08-29 (to'rtinchi so'rov): "muvaffaqiyatli" bosqichidan ham istalgan
+# bosqichga (shu jumladan otkazga) erkin o'tish mumkinligini tekshiramiz —
+# eski tizimda bu mumkin emas edi.
 with app.test_client() as c:
     login(c, "mgr_t")
-    r = c.post(f"/menejerlar/jurnal/{pending_id}/holat", data={"status": "muvaffaqiyatli"})
-    check("Jurnal: holat o'zgartirish -> orders.new_order ga redirect", r.status_code == 302)
+    r = c.post(f"/menejerlar/pipeline/{card1.id}/holat",
+               data={"stage": "otkaz", "note": "Xato bosilgan edi"})
+    check("Pipeline: muvaffaqiyatlidan ham otkazga o'tkazish mumkin (302)", r.status_code == 302)
 
 with app.app_context():
-    updated = db.session.get(ManagerClientLog, pending_id)
-    check("Jurnal: holat 'muvaffaqiyatli' ga o'zgardi", updated.status == LOG_STATUS_SUCCESS)
+    reverted = db.session.get(ClientPipelineCard, card1.id)
+    check("Pipeline: bosqich otkazga o'zgardi, sabab saqlandi",
+          reverted.stage == PIPELINE_STAGE_LOST and reverted.events[-1].note == "Xato bosilgan edi")
 
-# Buyurtma bilan bog'lanish: manager_log_id orqali order.id yoziladi
+# ...va yana orqaga, muvaffaqiyatliga qaytarish (keyingi bo'limda shu karta
+# orqali buyurtma yaratiladi)
+with app.test_client() as c:
+    login(c, "mgr_t")
+    c.post(f"/menejerlar/pipeline/{card1.id}/holat", data={"stage": "muvaffaqiyatli"})
+
+with app.app_context():
+    updated = db.session.get(ClientPipelineCard, card1.id)
+    check("Pipeline: bosqich yana 'muvaffaqiyatli'ga qaytarildi", updated.stage == PIPELINE_STAGE_WON)
+    check("Pipeline: karta tarixida jami 6 ta voqea (1+1+3+1+1... hech bo'lmasa >=6)",
+          len(updated.events) >= 6)
+
+# Buyurtma bilan bog'lanish: pipeline_card_id orqali order.id yoziladi
 with app.test_client() as c:
     login(c, "mgr_t")
     r = c.post("/buyurtmalar/yangi", data={
         "client_id": str(client_id), "client_name": "Smoke MChJ",
-        "manager_log_id": str(success_entry.id),
+        "pipeline_card_id": str(card1.id),
         "item_type": ["Vizitka"], "item_description": [""],
         "item_quantity": ["10"], "item_unit_price": ["1000"],
         "deadline": today_local().isoformat(),
     }, follow_redirects=True)
-    check("Jurnal: manager_log_id bilan buyurtma yaratildi (200)", r.status_code == 200)
+    check("Pipeline: pipeline_card_id bilan buyurtma yaratildi (200)", r.status_code == 200)
 
 with app.app_context():
-    linked = db.session.get(ManagerClientLog, success_entry.id)
-    check("Jurnal: yozuvga order_id yozildi", linked.order_id is not None)
+    linked = db.session.get(ClientPipelineCard, card1.id)
+    check("Pipeline: kartaga order_id yozildi", linked.order_id is not None)
 
-# O'chirish
+# O'chirish — voqealar ham kaskad o'chishi kerak
 with app.test_client() as c:
     login(c, "mgr_t")
-    r = c.post(f"/menejerlar/jurnal/{declined_entry.id}/ochirish", follow_redirects=True)
-    check("Jurnal: yozuv o'chirildi (200)", r.status_code == 200)
+    r = c.post(f"/menejerlar/pipeline/{card2.id}/ochirish", follow_redirects=True)
+    check("Pipeline: karta o'chirildi (200)", r.status_code == 200)
 
 with app.app_context():
-    remaining = ManagerClientLog.query.filter_by(manager_id=mgr_id).count()
-    check("Jurnal: o'chirishdan keyin 2 ta yozuv qoldi", remaining == 2)
+    remaining = ClientPipelineCard.query.filter_by(manager_id=mgr_id).count()
+    check("Pipeline: o'chirishdan keyin 1 ta karta qoldi", remaining == 1)
+    orphan_events = ClientPipelineEvent.query.filter_by(card_id=card2.id).count()
+    check("Pipeline: o'chirilgan kartaning voqealari ham kaskad o'chdi", orphan_events == 0)
+
+# ---------------------------------------------------------------- 4b. To'lov usuli majburiy
+# (2026-08-30, foydalanuvchi qarori): mijoz to'lovni qaysi usul yoki
+# shartnoma (korxona) orqali qilgani har bir to'lovda majburiy tanlanadi.
+print("\n=== BUYURTMA TO'LOVI: TO'LOV USULI MAJBURIY ===")
+with app.app_context():
+    paid_order_id = db.session.get(ClientPipelineCard, card1.id).order_id
+
+with app.test_client() as c:
+    login(c, "mgr_t")
+    r = c.post(f"/buyurtmalar/{paid_order_id}/tolov", data={
+        "amount": "5000", "paid_on": today_local().isoformat(),
+    }, follow_redirects=True)
+    check("To'lov usulisiz to'lov rad etiladi (200, flash)", r.status_code == 200)
+
+with app.app_context():
+    check("To'lov usulisiz to'lov yozuvi yaratilmadi",
+          Payment.query.filter_by(order_id=paid_order_id).count() == 0)
+
+with app.test_client() as c:
+    login(c, "mgr_t")
+    r = c.post(f"/buyurtmalar/{paid_order_id}/tolov", data={
+        "amount": "5000", "paid_on": today_local().isoformat(),
+        "payment_method": "Notogri usul",
+    }, follow_redirects=True)
+    check("Noto'g'ri to'lov usuli rad etiladi (200, flash)", r.status_code == 200)
+
+with app.app_context():
+    check("Noto'g'ri to'lov usulida ham yozuv yaratilmadi",
+          Payment.query.filter_by(order_id=paid_order_id).count() == 0)
+
+with app.test_client() as c:
+    login(c, "mgr_t")
+    r = c.post(f"/buyurtmalar/{paid_order_id}/tolov", data={
+        "amount": "5000", "paid_on": today_local().isoformat(),
+        "payment_method": "Dogovor Marvel", "note": "Smoke test",
+    }, follow_redirects=True)
+    check("To'g'ri to'lov usuli bilan to'lov qabul qilindi (200)", r.status_code == 200)
+
+with app.app_context():
+    saved = Payment.query.filter_by(order_id=paid_order_id).first()
+    check("To'lov yozildi va payment_method saqlandi",
+          saved is not None and saved.payment_method == "Dogovor Marvel")
+    check("ORDER_PAYMENT_METHODS ro'yxatida 8 ta variant bor", len(ORDER_PAYMENT_METHODS) == 8)
+
+# Buyurtmalar ro'yxatida "Kim yaratdi" ustuni va hisobotda "Korxonalar
+# bo'yicha tushum" bloki xatosiz chiqishi kerak.
+with app.test_client() as c:
+    login(c, "admin_t")
+    r = c.get("/buyurtmalar/")
+    check("Buyurtmalar ro'yxati ochildi (200)", r.status_code == 200)
+    check("Ro'yxatda 'Kim yaratdi' ustuni bor", "Kim yaratdi" in r.get_data(as_text=True))
+
+    r2 = c.get("/moliya/hisobot")
+    check("Moliyaviy hisobot ochildi (200)", r2.status_code == 200)
+    body2 = r2.get_data(as_text=True)
+    check("Hisobotda 'Korxonalar bo'yicha tushum' bloki bor",
+          "Korxonalar bo'yicha tushum" in body2)
+    check("Hisobotda 'Dogovor Marvel' ko'rinadi", "Dogovor Marvel" in body2)
 
 # ---------------------------------------------------------------- 5. Bosh sahifa rol bo'yicha
 print("\n=== BOSH SAHIFA: ALERTS VA MOLIYAVIY KARTALAR ROL BO'YICHA ===")
@@ -321,6 +445,36 @@ for role, uname in [("admin", "admin_t"), ("boss", "boss_t"),
         expected_finance = role in ("admin", "boss", "xarajatchi")
         check(f"Dashboard: {role} uchun moliyaviy kartalar {'korinadi' if expected_finance else 'yashirilgan'}",
               has_finance == expected_finance)
+
+# ---------------------------------------------------------------- 5b. Xodimlar tug'ilgan kuni
+# (2026-08-30, foydalanuvchi qarori): bugun/ertaga tug'ilgan kuni bo'lgan
+# xodimlar haqida eslatma — FAQAT Boss ko'radi.
+print("\n=== BOSH SAHIFA: XODIMLAR TUG'ILGAN KUNI (FAQAT BOSS) ===")
+with app.app_context():
+    today = today_local()
+    tomorrow = today + timedelta(days=1)
+    bday_today = Employee(full_name="Bugun Tugilgan", phone="+998900000001",
+                           birth_date=today.replace(year=1988), is_active=True,
+                           created_by=admin_id)
+    bday_tomorrow = Employee(full_name="Ertaga Tugilgan", phone="+998900000002",
+                              birth_date=tomorrow.replace(year=1990), is_active=True,
+                              created_by=admin_id)
+    db.session.add_all([bday_today, bday_tomorrow])
+    db.session.commit()
+
+for role, uname in [("boss", "boss_t"), ("admin", "admin_t"),
+                     ("xarajatchi", "xar_t"), ("menejer", "mgr_t")]:
+    with app.test_client() as c:
+        login(c, uname)
+        r = c.get("/")
+        body = r.get_data(as_text=True)
+        has_today = "Bugun Tugilgan" in body
+        has_tomorrow = "Ertaga Tugilgan" in body
+        expected = (role == "boss")
+        check(f"Dashboard: {role} uchun tug'ilgan kun eslatmasi (bugun) {'korinadi' if expected else 'yashirilgan'}",
+              has_today == expected)
+        check(f"Dashboard: {role} uchun tug'ilgan kun eslatmasi (ertaga) {'korinadi' if expected else 'yashirilgan'}",
+              has_tomorrow == expected)
 
 # ---------------------------------------------------------------- yakun
 os.remove(db_path)

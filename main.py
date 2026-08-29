@@ -5,7 +5,7 @@ from flask_login import login_required, current_user
 from sqlalchemy import func
 
 from extensions import db
-from models import Order, Client, Expense, Payment, ACTIVE_STATUSES, STATUS_CANCELLED, ZERO
+from models import Order, Client, Expense, Payment, Employee, ACTIVE_STATUSES, STATUS_CANCELLED, ZERO
 from permissions import has_perm
 from queries import (
     eager_orders, overdue_orders, deadline_orders, old_debt_orders, total_supplier_debt,
@@ -88,6 +88,21 @@ def dashboard():
         .order_by(Order.created_at.desc()).limit(8)
     ).all()
 
+    # ---- xodimlar tug'ilgan kuni eslatmasi (faqat Boss ko'radi) ----
+    # 2026-08-30, foydalanuvchi qarori: bugun/ertaga tug'ilgan kuni bo'lgan
+    # xodimlar haqida eslatma — faqat Boss uchun (admin/xarajatchi/menejer
+    # bu blokni ko'rmaydi).
+    birthday_today, birthday_tomorrow = [], []
+    if current_user.role == "boss":
+        tomorrow = today + timedelta(days=1)
+        for e in Employee.query.filter(
+            Employee.is_active.is_(True), Employee.birth_date.isnot(None)
+        ).order_by(Employee.full_name).all():
+            if e.birth_date.month == today.month and e.birth_date.day == today.day:
+                birthday_today.append(e)
+            elif e.birth_date.month == tomorrow.month and e.birth_date.day == tomorrow.day:
+                birthday_tomorrow.append(e)
+
     return render_template(
         "dashboard.html",
         total_orders=total_orders,
@@ -104,4 +119,6 @@ def dashboard():
         recent_orders=recent_orders,
         overdue_debt_days=OVERDUE_DEBT_DAYS,
         supplier_debt=supplier_debt,
+        birthday_today=birthday_today,
+        birthday_tomorrow=birthday_tomorrow,
     )
