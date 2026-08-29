@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h3>Taminotchi qarzlari</h3>
+    <div class="subtitle">Kimdan qancha qarzimiz borligi — bitta joyda</div>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-sm-6 col-lg-4">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon {% if total_debt %}red{% else %}slate{% endif %}"><i class="bi bi-wallet2"></i></div>
+      <div>
+        <div class="stat-label">Jami qarzimiz</div>
+        <div class="stat-value num {% if total_debt %}text-danger{% endif %}">{{ total_debt|uzs }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-4">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon blue"><i class="bi bi-truck"></i></div>
+      <div>
+        <div class="stat-label">Qarzdor taminotchilar</div>
+        <div class="stat-value">{{ debtors|length }} / {{ supplier_count }}</div>
+      </div>
+    </div>
+  </div>
+  {% if total_credit %}
+  <div class="col-sm-6 col-lg-4">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon green"><i class="bi bi-arrow-repeat"></i></div>
+      <div>
+        <div class="stat-label">Ortiqcha to'langan (avans)</div>
+        <div class="stat-value num text-success">{{ total_credit|uzs }}</div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<div class="card p-3">
+{% if debtors %}
+<div class="table-responsive">
+<table class="table table-hover">
+<thead><tr>
+  <th>Taminotchi</th><th>Telefon</th>
+  <th class="text-end">Jami xarid</th><th class="text-end">To'langan</th>
+  <th class="text-end">Qarzimiz</th>
+</tr></thead>
+<tbody>
+{% for s in debtors %}
+<tr {% if has_perm('suppliers.view') %}role="button" onclick="window.location='{{ url_for('suppliers.supplier_detail', supplier_id=s.id) }}'"{% endif %}>
+  <td>
+    <div class="d-flex align-items-center gap-2">
+      <div class="avatar-circle"><i class="bi bi-truck"></i></div>
+      <span class="fw-semibold">{{ s.name }}</span>
+    </div>
+  </td>
+  <td>{{ s.phone or '-' }}</td>
+  <td class="text-end num">{{ s.total_purchased|uzs }}</td>
+  <td class="text-end num text-success">{{ s.total_paid|uzs }}</td>
+  <td class="text-end"><span class="badge bg-danger num">{{ s.debt|uzs }}</span></td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% else %}
+<div class="empty-state"><i class="bi bi-emoji-smile"></i><p>Hech qanday taminotchiga qarzimiz yo'q</p></div>
+{% endif %}
+</div>
+{% endblock %}

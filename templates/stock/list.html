@@ -91,6 +91,9 @@
     <div class="stock-tile-meta {% if m.quantity < 0 %}zero{% elif m.is_low %}low{% endif %}">
       qoldiq {{ m.quantity|qty }} {{ m.unit }}
     </div>
+    {% if m.location %}
+    <div class="stock-tile-meta"><i class="bi bi-geo-alt"></i> {{ m.location }}</div>
+    {% endif %}
     <div class="stock-tile-price">
       <div class="stock-tile-meta">{{ m.last_price|uzs }} so'm</div>
       <div class="stock-tile-meta">{{ m.stock_value|uzs }} jami</div>

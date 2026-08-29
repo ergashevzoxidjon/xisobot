@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h3>{{ manager.display_name }}</h3>
+    <div class="subtitle">Manager hisoboti · {{ month_name }} {{ year }}</div>
+  </div>
+  <div class="d-flex gap-2">
+    {% if has_perm('managers.view') and current_user.role != 'menejer' %}
+    <a href="{{ url_for('managers.list_managers') }}" class="btn btn-outline-secondary">
+      <i class="bi bi-arrow-left"></i> Barcha menejerlar</a>
+    {% endif %}
+    <form method="get" class="d-flex gap-2">
+      <select name="month" class="form-select" onchange="this.form.submit()">
+        {% for i in range(1, 13) %}
+        <option value="{{ i }}" {% if i == month %}selected{% endif %}>{{ i }}-oy</option>
+        {% endfor %}
+      </select>
+      <input type="number" name="year" value="{{ year }}" class="form-control" style="width:100px" min="2000" max="2100">
+      <button class="btn btn-outline-primary"><i class="bi bi-search"></i></button>
+    </form>
+  </div>
+</div>
+
+{% if can_manage %}
+<div class="card p-3 mb-3">
+  <form method="post" action="{{ url_for('managers.set_plan', user_id=manager.id) }}" class="row g-2 align-items-end">
+    {{ csrf() }}
+    <input type="hidden" name="year" value="{{ year }}">
+    <input type="hidden" name="month" value="{{ month }}">
+    <div class="col-sm-4">
+      <label class="form-label mb-1">{{ month_name }} {{ year }} uchun plan</label>
+      <input type="number" step="0.01" min="0" name="amount" class="form-control"
+             value="{{ plan_amount }}" placeholder="Masalan: 20000000">
+    </div>
+    <div class="col-sm-auto">
+      <button class="btn btn-primary"><i class="bi bi-check-lg"></i> Planni saqlash</button>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+<div class="row g-3 mb-3 row-cols-2 row-cols-lg-5">
+  <div class="col">
+    <div class="card p-3 stat-card h-100">
+      <div class="stat-icon blue"><i class="bi bi-people"></i></div>
+      <div><div class="stat-label">Mijozlar (shu oy)</div><div class="stat-value">{{ summary.clients_count }}</div></div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card p-3 stat-card h-100">
+      <div class="stat-icon green"><i class="bi bi-graph-up-arrow"></i></div>
+      <div><div class="stat-label">Savdo summasi</div><div class="stat-value num text-success">{{ summary.total_sum|uzs }}</div></div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card p-3 stat-card h-100">
+      <div class="stat-icon {% if remaining %}amber{% else %}green{% endif %}"><i class="bi bi-flag"></i></div>
+      <div><div class="stat-label">Planga qolgan</div><div class="stat-value num">{{ remaining|uzs }}</div></div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card p-3 stat-card h-100">
+      <div class="stat-icon {% if percent is not none and percent >= 100 %}green{% elif percent is not none %}blue{% else %}slate{% endif %}">
+        <i class="bi bi-percent"></i></div>
+      <div>
+        <div class="stat-label">Plan bajarilishi</div>
+        <div class="stat-value">{% if percent is not none %}{{ percent }}%{% else %}—{% endif %}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card p-3 stat-card h-100 position-relative">
+      <div class="stat-icon amber"><i class="bi bi-award"></i></div>
+      <div>
+        <div class="stat-label">KPI summasi</div>
+        <div class="stat-value num text-success">{{ kpi_amount|uzs }}</div>
+      </div>
+      {% if employee_salary is not none %}
+      <div class="position-absolute" style="bottom:.5rem; right:.75rem; font-size:.68rem; color:#94a3b8;">
+        Oylik: {{ employee_salary|uzs }}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-lg-7">
+    <div class="card p-4 h-100">
+      <h6 class="fw-bold mb-1">Oxirgi 6 oy — savdo dinamikasi</h6>
+      <div class="chart-note mb-3">Har oyning umumiy buyurtma summasi</div>
+      <div class="chart-box h-md"><canvas id="trendChart"></canvas></div>
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="card p-4 h-100">
+      <h6 class="fw-bold mb-1">Plan bajarilishi</h6>
+      <div class="chart-note mb-3">
+        {% if plan_amount %}Bajarilgan va qolgan qism{% else %}Bu oy uchun plan qo'yilmagan{% endif %}
+      </div>
+      {% if plan_amount %}
+      <div class="chart-box h-md"><canvas id="planChart"></canvas></div>
+      {% else %}
+      <div class="empty-state py-4"><i class="bi bi-flag"></i><p>Admin plan kiritishi kerak</p></div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<a href="{{ url_for('managers.client_log_board', manager_id=manager.id) }}"
+   class="card p-3 mb-3 text-decoration-none text-reset d-flex flex-row justify-content-between align-items-center">
+  <div class="d-flex align-items-center gap-2">
+    <i class="bi bi-people text-muted"></i>
+    <div>
+      <div class="fw-bold">Kunlik mijozlar bilan ishlash</div>
+      <div class="form-text mb-0">Bugun <strong>{{ today_log_count }}</strong> ta mijoz bilan ishlangan.</div>
+    </div>
+  </div>
+  <i class="bi bi-arrow-right"></i>
+</a>
+
+<div class="card p-3">
+  <h6 class="fw-bold mb-3"><i class="bi bi-receipt me-1 text-muted"></i> {{ month_name }} oyidagi buyurtmalar</h6>
+  {% if orders %}
+  <div class="table-responsive">
+  <table class="table table-hover">
+  <thead><tr><th>№</th><th>Mijoz</th><th>Turi</th><th class="text-end">Summa</th><th>Holat</th><th>Muddat</th></tr></thead>
+  <tbody>
+  {% for o in orders %}
+  <tr role="button" onclick="window.location='{{ url_for('orders.order_detail', order_id=o.id) }}'">
+    <td class="fw-semibold">{{ o.order_number }}</td>
+    <td>{{ o.client.name if o.client else '-' }}</td>
+    <td>{{ o.items_summary }}</td>
+    <td class="text-end num">{{ o.total_price|uzs }}</td>
+    <td><span class="badge bg-{{ o.status|status_color }}"><i class="bi {{ o.status|status_icon }} me-1"></i>{{ o.status }}</span></td>
+    <td class="num">
+      {% if o.is_overdue %}
+        <span class="text-danger fw-semibold" title="Muddati o'tgan"><i class="bi bi-exclamation-circle"></i> {{ o.deadline|date_uz }}</span>
+      {% elif o.days_left is not none and o.days_left in (0, 1) and o.status not in ('maxsulot yetkazildi', 'bekor qilindi') %}
+        <span class="text-warning-emphasis fw-semibold" title="Muddat yaqinlashmoqda"><i class="bi bi-alarm"></i> {{ o.deadline|date_uz }}</span>
+      {% else %}
+        {{ o.deadline|date_uz }}
+      {% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+  </table>
+  </div>
+  {% else %}
+  <div class="empty-state"><i class="bi bi-receipt"></i><p>Bu oyda buyurtma yo'q</p></div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% include "charts.html" %}
+<script>
+new Chart(document.getElementById('trendChart'), {
+  type: 'bar',
+  data: {
+    labels: {{ trend|map(attribute='label')|list|tojson }},
+    datasets: [{
+      label: 'Savdo summasi',
+      data: {{ trend|map(attribute='total')|map('float')|list|tojson }},
+      backgroundColor: VIZ.series[0], borderRadius: 4, borderSkipped: false,
+      barPercentage: 0.72,
+    }]
+  },
+  options: {
+    plugins: {legend: {display: false}, tooltip: TOOLTIP},
+    scales: {y: moneyAxisY(), x: CATEGORY_AXIS},
+  }
+});
+
+{% if plan_amount %}
+doughnut(
+  document.getElementById('planChart'),
+  ['Bajarilgan', 'Qolgan'],
+  [{{ (summary.total_sum if summary.total_sum < plan_amount else plan_amount)|float }}, {{ remaining|float }}],
+  [VIZ.series[2], VIZ.other]
+);
+{% endif %}
+</script>
+{% endblock %}

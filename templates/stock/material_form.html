@@ -69,6 +69,13 @@
                placeholder="Qaerdan olinadi, taminotchi..."
                value="{{ src.note|default('', true) if src else '' }}">
       </div>
+      <div class="col-sm-7">
+        <label class="form-label">Ombordagi joylashuvi</label>
+        <input class="form-control" name="location" maxlength="120"
+               placeholder="Masalan: A-2 raf, 3-qavat"
+               value="{{ src.location|default('', true) if src else '' }}">
+        <div class="form-text">Mahsulotni omborda tez topish uchun.</div>
+      </div>
     </div>
 
     {% if material %}

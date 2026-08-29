@@ -12,7 +12,7 @@ from sqlalchemy.orm import joinedload, selectinload
 from extensions import db
 from models import (
     Order, Client, Payment, Material, StockMove,
-    Supplier, SupplierPayment, Expense,
+    Supplier, SupplierPayment, Expense, EmployeeSalary, EmployeeAdvance,
     STATUS_CANCELLED, STATUS_DELIVERED, STOCK_IN,
 )
 from utils import to_money, ZERO
@@ -294,3 +294,139 @@ def top_suppliers(limit=5):
         {"supplier": s, "purchased": to_money(purchased), "count": count}
         for s, purchased, count in rows
     ]
+
+
+def total_supplier_debt():
+    """Barcha (faol) taminotchilarga jami qarzimiz.
+
+    Har bir taminotchining balansi ALOHIDA nolga qisqartiriladi (avans
+    bergan taminotchimiz boshqasiga qarzimizni "yopib" yubormasligi
+    uchun) — xuddi suppliers.list_suppliers/finance.supplier_debts dagi
+    kabi bir xil mantiq.
+    """
+    total = ZERO
+    for s in suppliers_with_stats(only_active=True):
+        total += s.debt
+    return total
+
+
+# ---------- menejerlar ----------
+
+def manager_month_summary(user_id, start, end):
+    """Bitta menejer uchun: shu oy davomida ishlagan mijozlari soni,
+    buyurtmalar summasi va soni — bitta so'rovda."""
+    row = (
+        db.session.query(
+            func.count(func.distinct(Order.client_id)),
+            func.coalesce(func.sum(Order.total_price), 0),
+            func.count(Order.id),
+        )
+        .filter(
+            Order.created_by == user_id,
+            Order.created_at >= start,
+            Order.created_at < end,
+            Order.status != STATUS_CANCELLED,
+            Order.is_deleted.is_(False),
+        )
+        .one()
+    )
+    clients_count, total_sum, order_count = row
+    return {
+        "clients_count": clients_count or 0,
+        "total_sum": to_money(total_sum),
+        "order_count": order_count or 0,
+    }
+
+
+def all_managers_month_summary(start, end):
+    """Har bir menejer (created_by) uchun shu oydagi statistika — bitta so'rov.
+
+    user_id -> {clients_count, total_sum} lug'atini qaytaradi.
+    """
+    rows = (
+        db.session.query(
+            Order.created_by,
+            func.count(func.distinct(Order.client_id)),
+            func.coalesce(func.sum(Order.total_price), 0),
+        )
+        .filter(
+            Order.created_at >= start,
+            Order.created_at < end,
+            Order.status != STATUS_CANCELLED,
+            Order.is_deleted.is_(False),
+            Order.created_by.isnot(None),
+        )
+        .group_by(Order.created_by)
+        .all()
+    )
+    return {
+        user_id: {"clients_count": count or 0, "total_sum": to_money(total)}
+        for user_id, count, total in rows
+    }
+
+
+def all_managers_total_clients():
+    """Har bir menejer bugungi kungacha jami nechta mijoz bilan ishlaganini
+    (bekor qilinmagan buyurtmalar bo'yicha, hamma vaqt kesimida) qaytaradi."""
+    rows = (
+        db.session.query(Order.created_by, func.count(func.distinct(Order.client_id)))
+        .filter(
+            Order.status != STATUS_CANCELLED,
+            Order.is_deleted.is_(False),
+            Order.created_by.isnot(None),
+        )
+        .group_by(Order.created_by)
+        .all()
+    )
+    return {user_id: count or 0 for user_id, count in rows}
+
+
+# ---------- HR ----------
+
+def employees_month_salary_totals(year, month):
+    """Har bir xodim uchun shu oy uchun belgilangan oylik — bitta so'rov."""
+    rows = (
+        db.session.query(EmployeeSalary.employee_id, EmployeeSalary.amount)
+        .filter(EmployeeSalary.year == year, EmployeeSalary.month == month)
+        .all()
+    )
+    return {employee_id: to_money(amount) for employee_id, amount in rows}
+
+
+def employees_month_advance_totals(start, end):
+    """Har bir xodim uchun shu oy davomida berilgan JAMI summa (barcha turkumlar) — bitta so'rov."""
+    rows = (
+        db.session.query(
+            EmployeeAdvance.employee_id,
+            func.coalesce(func.sum(EmployeeAdvance.amount), 0),
+        )
+        .filter(EmployeeAdvance.paid_on >= start, EmployeeAdvance.paid_on < end)
+        .group_by(EmployeeAdvance.employee_id)
+        .all()
+    )
+    return {employee_id: to_money(total) for employee_id, total in rows}
+
+
+def employees_month_payment_totals(start, end):
+    """Har bir xodim uchun shu oy davomida TURKUM bo'yicha (oylik/avans/kpi)
+    berilgan summalar — bitta so'rov. Natija:
+    {employee_id: {"oylik": Decimal, "avans": Decimal, "kpi": Decimal, "jami": Decimal}}
+    """
+    rows = (
+        db.session.query(
+            EmployeeAdvance.employee_id,
+            EmployeeAdvance.kind,
+            func.coalesce(func.sum(EmployeeAdvance.amount), 0),
+        )
+        .filter(EmployeeAdvance.paid_on >= start, EmployeeAdvance.paid_on < end)
+        .group_by(EmployeeAdvance.employee_id, EmployeeAdvance.kind)
+        .all()
+    )
+    out = {}
+    for employee_id, kind, total in rows:
+        entry = out.setdefault(employee_id, {"oylik": ZERO, "avans": ZERO, "kpi": ZERO})
+        if kind in entry:
+            entry[kind] = to_money(total)
+    for entry in out.values():
+        entry["jami"] = entry["oylik"] + entry["avans"] + entry["kpi"]
+    return out

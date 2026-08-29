@@ -288,6 +288,21 @@ def main():
         widen_order_status_column()
         migrate_order_status_rename()
 
+        # --- v9: mijoz qaysi korxonadan ekanligi; menejer plani
+        # (manager_plan jadvali create_all bilan yaratiladi) ---
+        add_column("client", "company VARCHAR(150)", "company")
+
+        # --- v10: ombordagi mahsulot joylashuvi; HR bo'limi (employee,
+        # employee_salary, employee_advance jadvallari create_all bilan
+        # yaratiladi) ---
+        add_column("material", "location VARCHAR(120)", "location")
+
+        # --- v11: "Ishchiga berilayotgan summa" turkumlari (Oylik/Avans/KPI)
+        # va manager kunlik mijozlar bilan ishlash jurnali
+        # (manager_client_log jadvali create_all bilan yaratiladi) —
+        # 2026-08-29, foydalanuvchi qarori. ---
+        add_column("employee_advance", "kind VARCHAR(20) DEFAULT 'avans' NOT NULL", "kind")
+
         migrate_paid_amount()
         ensure_upload_folder(app)
 

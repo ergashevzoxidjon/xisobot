@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h3>Manager xisoboti</h3>
+    <div class="subtitle">{{ month_name }} {{ year }} · qaysi manager qancha mijoz bilan ishlayapti</div>
+  </div>
+  <form method="get" class="d-flex gap-2">
+    <select name="month" class="form-select" onchange="this.form.submit()">
+      {% for i in range(1, 13) %}
+      <option value="{{ i }}" {% if i == month %}selected{% endif %}>{{ i }}-oy</option>
+      {% endfor %}
+    </select>
+    <input type="number" name="year" value="{{ year }}" class="form-control" style="width:110px" min="2000" max="2100">
+    <button class="btn btn-outline-primary"><i class="bi bi-search"></i></button>
+  </form>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-sm-6 col-lg-4">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon blue"><i class="bi bi-person-badge"></i></div>
+      <div>
+        <div class="stat-label">Menejerlar</div>
+        <div class="stat-value">{{ rows|length }} ta</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-4">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon green"><i class="bi bi-graph-up-arrow"></i></div>
+      <div>
+        <div class="stat-label">{{ month_name }} — jami savdo</div>
+        <div class="stat-value num text-success">{{ grand_total|uzs }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card p-4 mb-3">
+  <h6 class="fw-bold mb-1">Menejerlar bo'yicha savdo</h6>
+  <div class="chart-note mb-3">{{ month_name }} {{ year }} — har bir menejerning shu oydagi savdo summasi</div>
+  {% if rows %}
+  <div class="chart-box h-md"><canvas id="managerChart"></canvas></div>
+  {% else %}
+  <div class="empty-state py-4"><i class="bi bi-person-badge"></i><p>Menejer topilmadi</p></div>
+  {% endif %}
+</div>
+
+<div class="card p-3">
+{% if rows %}
+<div class="table-responsive">
+<table class="table table-hover">
+<thead><tr>
+  <th>Menejer</th>
+  <th class="text-end">Mijozlar (shu oy)</th>
+  <th class="text-end">Jami mijozlar</th>
+  <th class="text-end">Savdo summasi</th>
+  <th>Plan</th>
+  <th class="text-end">Bajarilishi</th>
+</tr></thead>
+<tbody>
+{% for row in rows %}
+<tr role="button" onclick="window.location='{{ url_for('managers.manager_detail', user_id=row.manager.id, year=year, month=month) }}'">
+  <td>
+    <div class="d-flex align-items-center gap-2">
+      <div class="avatar-circle">{{ row.manager.display_name[0]|upper }}</div>
+      <span class="fw-semibold">{{ row.manager.display_name }}</span>
+      {% if not row.manager.is_active_user %}<span class="badge bg-secondary ms-1">bloklangan</span>{% endif %}
+    </div>
+  </td>
+  <td class="text-end num">{{ row.clients_count }}</td>
+  <td class="text-end num text-muted">{{ row.total_clients }}</td>
+  <td class="text-end num fw-semibold">{{ row.total_sum|uzs }}</td>
+  <td class="num">
+    {% if row.plan_amount %}{{ row.plan_amount|uzs }}{% else %}<span class="text-muted">qo'yilmagan</span>{% endif %}
+  </td>
+  <td class="text-end" style="min-width:140px">
+    {% if row.percent is not none %}
+    <div class="d-flex align-items-center gap-2 justify-content-end">
+      <div class="progress" style="width:80px; height:8px">
+        <div class="progress-bar {% if row.percent >= 100 %}bg-success{% elif row.percent >= 50 %}bg-primary{% else %}bg-warning{% endif %}"
+             style="width:{{ [row.percent, 100]|min }}%"></div>
+      </div>
+      <span class="small fw-semibold num">{{ row.percent }}%</span>
+    </div>
+    {% else %}
+    <span class="text-muted small">—</span>
+    {% endif %}
+  </td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% else %}
+<div class="empty-state"><i class="bi bi-person-badge"></i><p>Menejer topilmadi</p></div>
+{% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% include "charts.html" %}
+<script>
+{% if rows %}
+new Chart(document.getElementById('managerChart'), {
+  type: 'bar',
+  data: {
+    labels: {{ rows|map(attribute='manager')|map(attribute='display_name')|list|tojson }},
+    datasets: [{
+      label: 'Savdo summasi',
+      data: {{ rows|map(attribute='total_sum')|map('float')|list|tojson }},
+      backgroundColor: VIZ.series[0], borderRadius: 4, borderSkipped: false,
+      barPercentage: 0.7, categoryPercentage: 0.6,
+    }]
+  },
+  options: {
+    plugins: {legend: {display: false}, tooltip: TOOLTIP},
+    scales: {y: moneyAxisY(), x: CATEGORY_AXIS},
+  }
+});
+{% endif %}
+</script>
+{% endblock %}

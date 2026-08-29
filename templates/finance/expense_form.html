@@ -61,6 +61,7 @@
           <div class="small text-muted" id="pickedInfo">
             {% if selected_order %}
               {{ selected_order.client.name if selected_order.client else '' }} · {{ selected_order.items_summary }}
+              {% if selected_order.creator %} · kiritdi: {{ selected_order.creator.display_name }}{% endif %}
             {% endif %}
           </div>
         </div>
@@ -100,6 +101,13 @@
       </label>
       {% endfor %}
     </div>
+    {% if has_perm('hr.view') %}
+    <div class="form-text mt-2" id="salaryHrHint" style="display:none">
+      <i class="bi bi-info-circle"></i> Xodimga beriladigan avansni
+      <a href="{{ url_for('hr.list_employees') }}">HR bo'limi</a> orqali kiriting — u yerda
+      xodim, oylik va avans tarixi bir joyda ko'rinadi.
+    </div>
+    {% endif %}
   </div>
 
   {# ---------------- 3. SARFLANGAN PULLAR ---------------- #}
@@ -421,8 +429,19 @@ recalc();
 
 /* turkum o'zgarsa — mahsulot jadvali / oddiy summa ko'rinishi almashadi */
 document.querySelectorAll('input[name="category"]').forEach(radio => {
-  radio.addEventListener('change', () => { applyExpenseMode(); recalc(); });
+  radio.addEventListener('change', () => {
+    applyExpenseMode();
+    recalc();
+    const hint = document.getElementById('salaryHrHint');
+    if (hint) hint.style.display = (radio.checked && radio.value === 'ish haqi') ? '' : 'none';
+  });
 });
+{% if src and src.category == 'ish haqi' %}
+{
+  const hint = document.getElementById('salaryHrHint');
+  if (hint) hint.style.display = '';
+}
+{% endif %}
 
 /* ---------------- buyurtma qidiruvi ---------------- */
 
@@ -439,7 +458,8 @@ function showPicked(order) {
   orderId.value = order.id;
   document.getElementById('pickedNumber').textContent = order.number;
   document.getElementById('pickedInfo').textContent =
-    order.client + ' · ' + order.summary + ' · ' + order.total + " so'm";
+    order.client + ' · ' + order.summary + ' · ' + order.total + " so'm" +
+    (order.creator ? ' · kiritdi: ' + order.creator : '');
   picked.classList.remove('d-none');
   searchBox.classList.add('d-none');
   categoryBox.classList.add('d-none');   // buyurtma xarajatida turkum kerak emas
@@ -478,7 +498,7 @@ function render(items) {
     btn.className = 'list-group-item list-group-item-action py-2';
     btn.innerHTML = `<span class="fw-semibold">${o.number}</span>
       <span class="ms-2">${o.client}</span>
-      <div class="text-muted small">${o.summary} · ${o.total} so'm</div>`;
+      <div class="text-muted small">${o.summary} · ${o.total} so'm${o.creator ? ' · manager: ' + o.creator : ''}</div>`;
     btn.addEventListener('click', () => showPicked(o));
     results.appendChild(btn);
   });

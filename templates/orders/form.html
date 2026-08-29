@@ -39,6 +39,7 @@
 <form method="post" id="orderForm">
   {{ csrf() }}
   {% if order %}<input type="hidden" name="version" value="{{ order.version }}">{% endif %}
+  {% if manager_log_id is defined and manager_log_id %}<input type="hidden" name="manager_log_id" value="{{ manager_log_id }}">{% endif %}
 
   {# ---------------- 1. MIJOZ ---------------- #}
   <div class="form-step" id="stepClient">
@@ -55,21 +56,28 @@
 
     <div class="position-relative" style="max-width:560px">
       <input type="hidden" name="client_id" id="clientId"
-             value="{{ order.client_id if order else (src.client_id|default('', true) if src else '') }}">
+             value="{{ order.client_id if order else (src.client_id|default('', true) if src else (prefill_client_id|default('', true))) }}">
       <div class="input-group">
         <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
         <input class="form-control border-start-0" name="client_name" id="clientName" required autocomplete="off"
                placeholder="Mijoz nomini yozing..."
-               value="{{ order.client.name if order and order.client else (src.client_name|default('', true) if src else '') }}">
+               value="{{ order.client.name if order and order.client else (src.client_name|default('', true) if src else (prefill_client_name|default('', true))) }}">
       </div>
       <div id="clientResults" class="list-group position-absolute w-100 shadow"
            style="z-index:1000; display:none; max-height:260px; overflow-y:auto"></div>
     </div>
 
-    <div class="mt-3" id="newClientBox" style="display:none; max-width:560px">
-      <label class="form-label">Telefon <span class="text-muted fw-normal">(yangi mijoz uchun, ixtiyoriy)</span></label>
-      <input class="form-control" name="client_phone" placeholder="+998 90 123 45 67"
-             value="{{ src.client_phone|default('', true) if src else '' }}">
+    <div class="mt-3 row g-2" id="newClientBox" style="display:none; max-width:560px">
+      <div class="col-sm-6">
+        <label class="form-label">Telefon <span class="text-muted fw-normal">(yangi mijoz uchun, ixtiyoriy)</span></label>
+        <input class="form-control" name="client_phone" placeholder="+998 90 123 45 67"
+               value="{{ src.client_phone|default('', true) if src else '' }}">
+      </div>
+      <div class="col-sm-6">
+        <label class="form-label">Korxona <span class="text-muted fw-normal">(ixtiyoriy)</span></label>
+        <input class="form-control" name="client_company" placeholder="Tashkilot nomi"
+               value="{{ src.client_company|default('', true) if src else '' }}">
+      </div>
     </div>
   </div>
 

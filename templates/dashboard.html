@@ -21,7 +21,11 @@
         </div>
         {% for o in overdue_orders %}
         <div class="d-flex justify-content-between small mb-1">
+          {% if has_perm('orders.view') %}
           <a href="{{ url_for('orders.order_detail', order_id=o.id) }}" class="text-truncate me-2">{{ o.order_number }} · {{ o.client.name }}</a>
+          {% else %}
+          <span class="text-truncate me-2">{{ o.order_number }} · {{ o.client.name }}</span>
+          {% endif %}
           <span class="text-danger num">{{ -o.days_left }} kun</span>
         </div>
         {% endfor %}
@@ -37,7 +41,11 @@
         </div>
         {% for o in soon_orders %}
         <div class="d-flex justify-content-between small mb-1">
+          {% if has_perm('orders.view') %}
           <a href="{{ url_for('orders.order_detail', order_id=o.id) }}" class="text-truncate me-2">{{ o.order_number }} · {{ o.client.name }}</a>
+          {% else %}
+          <span class="text-truncate me-2">{{ o.order_number }} · {{ o.client.name }}</span>
+          {% endif %}
           <span class="num">{{ o.days_left }} kun</span>
         </div>
         {% endfor %}
@@ -53,7 +61,11 @@
         </div>
         {% for o in old_debts %}
         <div class="d-flex justify-content-between small mb-1">
+          {% if has_perm('orders.view') %}
           <a href="{{ url_for('orders.order_detail', order_id=o.id) }}" class="text-truncate me-2">{{ o.client.name }}</a>
+          {% else %}
+          <span class="text-truncate me-2">{{ o.client.name }}</span>
+          {% endif %}
           <span class="text-danger num">{{ o.remaining|uzs }}</span>
         </div>
         {% endfor %}
@@ -93,8 +105,20 @@
       </div>
     </div>
   </div>
+  {% if has_perm('reports.view') %}
+  <div class="col-sm-6 col-lg-4">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon {% if supplier_debt %}red{% else %}slate{% endif %}"><i class="bi bi-wallet2"></i></div>
+      <div>
+        <div class="stat-label">Taminotchilarga qarzimiz</div>
+        <div class="stat-value num {% if supplier_debt %}text-danger{% endif %}">{{ supplier_debt|uzs }}</div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 </div>
 
+{% if has_perm('reports.view') %}
 <div class="row g-3 mb-4">
   <div class="col-sm-6 col-lg-4">
     <div class="card p-3 stat-card">
@@ -131,6 +155,7 @@
     </div>
   </div>
 </div>
+{% endif %}
 
 <div class="card p-3">
   <div class="d-flex justify-content-between align-items-center mb-2">
@@ -145,7 +170,7 @@
     <thead><tr><th>№</th><th>Mijoz</th><th>Turi</th><th class="text-end">Summa</th><th>Holat</th><th>To'lov</th></tr></thead>
     <tbody>
     {% for o in recent_orders %}
-      <tr role="button" onclick="window.location='{{ url_for('orders.order_detail', order_id=o.id) }}'">
+      <tr {% if has_perm('orders.view') %}role="button" onclick="window.location='{{ url_for('orders.order_detail', order_id=o.id) }}'"{% endif %}>
         <td class="fw-semibold">{{ o.order_number }}</td>
         <td>{{ o.client.name }}</td>
         <td>{{ o.order_type }}</td>
@@ -161,4 +186,14 @@
   <div class="empty-state"><i class="bi bi-inbox"></i><p>Hozircha buyurtma yo'q</p></div>
   {% endif %}
 </div>
+
+{% if has_perm('managers.view') %}
+<div class="card p-3 mt-3">
+  <div class="d-flex justify-content-between align-items-center">
+    <h6 class="fw-bold mb-0"><i class="bi bi-person-badge me-1 text-muted"></i> Manager xisoboti</h6>
+    <a href="{{ url_for('managers.list_managers') }}" class="small">Batafsil <i class="bi bi-arrow-right"></i></a>
+  </div>
+  <div class="form-text mt-1">Har bir menejerning shu oydagi mijozlari, savdo summasi va plan bajarilishi.</div>
+</div>
+{% endif %}
 {% endblock %}

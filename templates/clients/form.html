@@ -46,6 +46,14 @@
         </div>
       </div>
       <div class="col-sm-6">
+        <label class="form-label">Korxona</label>
+        <div class="input-group">
+          <span class="input-group-text bg-white border-end-0"><i class="bi bi-building text-muted"></i></span>
+          <input class="form-control border-start-0" name="company"
+                 value="{{ src.company if src else '' }}" placeholder="Tashkilot nomi" maxlength="150">
+        </div>
+      </div>
+      <div class="col-sm-6">
         <label class="form-label">Manzil</label>
         <input class="form-control" name="address" value="{{ src.address if src else '' }}"
                maxlength="255" placeholder="Shahar, ko'cha">

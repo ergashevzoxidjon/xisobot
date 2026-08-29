@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h3>HR — xodimlar</h3>
+    <div class="subtitle">{{ month_name }} {{ year }} · oylik, ishchiga berilayotgan summa va pasport nusxalari</div>
+  </div>
+  <div class="d-flex gap-2">
+    <form method="get" class="d-flex gap-2">
+      <select name="month" class="form-select" onchange="this.form.submit()">
+        {% for i in range(1, 13) %}
+        <option value="{{ i }}" {% if i == month %}selected{% endif %}>{{ i }}-oy</option>
+        {% endfor %}
+      </select>
+      <input type="number" name="year" value="{{ year }}" class="form-control" style="width:110px" min="2000" max="2100">
+      <button class="btn btn-outline-primary"><i class="bi bi-search"></i></button>
+    </form>
+    {% if can_manage %}
+    <a href="{{ url_for('hr.new_employee') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Yangi xodim</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-sm-6 col-lg-4">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon blue"><i class="bi bi-person-vcard"></i></div>
+      <div>
+        <div class="stat-label">Xodimlar</div>
+        <div class="stat-value">{{ rows|length }} ta</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-4">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon slate"><i class="bi bi-cash-stack"></i></div>
+      <div>
+        <div class="stat-label">{{ month_name }} — belgilangan oylik</div>
+        <div class="stat-value num">{{ total_salary|uzs }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-4">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon amber"><i class="bi bi-cash-coin"></i></div>
+      <div>
+        <div class="stat-label">{{ month_name }} — berilgan summa</div>
+        <div class="stat-value num text-warning-emphasis">{{ total_given|uzs }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card p-3">
+{% if rows %}
+<div class="table-responsive">
+<table class="table table-hover">
+<thead><tr>
+  <th>Xodim</th>
+  <th>Telefon</th>
+  <th class="text-end">Belgilangan oylik</th>
+  <th class="text-end">Berilgan (Oylik + Avans)</th>
+  <th class="text-end">KPI to'langan</th>
+  <th class="text-end">Qoldiq</th>
+  <th></th>
+</tr></thead>
+<tbody>
+{% for row in rows %}
+<tr role="button" onclick="window.location='{{ url_for('hr.employee_detail', employee_id=row.employee.id, year=year) }}'">
+  <td>
+    <div class="d-flex align-items-center gap-2">
+      <div class="avatar-circle">{{ row.employee.full_name[0]|upper }}</div>
+      <span class="fw-semibold">{{ row.employee.full_name }}</span>
+      {% if row.employee.user %}<span class="badge bg-light text-dark border ms-1">menejer</span>{% endif %}
+      {% if row.employee.has_passport %}<i class="bi bi-file-earmark-check text-success ms-1" title="Pasport nusxasi bor"></i>{% endif %}
+    </div>
+  </td>
+  <td class="text-muted">{{ row.employee.phone or '-' }}</td>
+  <td class="text-end num">{{ row.salary|uzs }}</td>
+  <td class="text-end num" style="min-width:150px">
+    {{ (row.paid.oylik + row.paid.avans)|uzs }}
+    <div class="text-muted" style="font-size:.7rem">Oylik: {{ row.paid.oylik|uzs }} · Avans: {{ row.paid.avans|uzs }}</div>
+  </td>
+  <td class="text-end num text-success">{{ row.paid.kpi|uzs }}</td>
+  <td class="text-end num fw-semibold {% if row.remaining < 0 %}text-danger{% endif %}">{{ row.remaining|uzs }}</td>
+  <td class="text-end no-print">
+    {% if can_manage %}
+    <a href="{{ url_for('hr.edit_employee', employee_id=row.employee.id) }}" class="btn btn-sm btn-outline-secondary"
+       onclick="event.stopPropagation()"><i class="bi bi-pencil"></i></a>
+    {% endif %}
+  </td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% else %}
+<div class="empty-state">
+  <i class="bi bi-person-vcard"></i>
+  <p>Xodim qo'shilmagan</p>
+  {% if can_manage %}
+  <a href="{{ url_for('hr.new_employee') }}" class="btn btn-sm btn-primary mt-2">
+    <i class="bi bi-plus-lg"></i> Birinchi xodimni qo'shish</a>
+  {% endif %}
+</div>
+{% endif %}
+</div>
+{% endblock %}

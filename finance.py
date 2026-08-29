@@ -16,8 +16,11 @@ from models import (
     EXPENSE_CATEGORIES, GENERAL_EXPENSE_CATEGORIES, EXPENSE_ORDER_CATEGORY,
     STATUS_CANCELLED, STOCK_OUT, ZERO, PAYMENT_TRANSFER,
 )
-from permissions import permission_required
-from queries import top_debtors, eager_orders, materials_with_stock
+from permissions import permission_required, has_perm
+from queries import (
+    top_debtors, eager_orders, materials_with_stock,
+    suppliers_with_stats, all_managers_month_summary,
+)
 from stock import consume, shortage
 from utils import (
     ValidationError, parse_money, parse_date, parse_text, parse_choice, parse_int,
@@ -312,7 +315,9 @@ def new_expense():
     selected_order = None
     if preselected_id:
         selected_order = (
-            Order.query.options(joinedload(Order.client), selectinload(Order.items))
+            Order.query.options(
+                joinedload(Order.client), selectinload(Order.items), joinedload(Order.creator)
+            )
             .get(preselected_id)
         )
     return _expense_page(selected_order=selected_order, expense=None, form=None)
@@ -368,6 +373,9 @@ def edit_expense(expense_id):
 @login_required
 @permission_required("reports.view")
 def report():
+    from models import User
+    from utils import month_bounds as _month_bounds
+
     year = request.args.get("year", today_local().year, type=int)
     if year < 2000 or year > 2100:
         year = today_local().year
@@ -379,11 +387,58 @@ def report():
 
     start, end = date_range_for_year(year)
 
+    # Menejerlar bo'yicha shu oylik ko'rsatkich — hisobotda ham ko'rinishi
+    # kerak (2026-08-29, foydalanuvchi qarori).
+    manager_rows = []
+    if has_perm("managers.view"):
+        today = today_local()
+        m_start, m_end = _month_bounds(today.year, today.month)
+        stats = all_managers_month_summary(m_start, m_end)
+        managers = User.query.filter_by(role="menejer").order_by(User.username).all()
+        manager_rows = [
+            {
+                "manager": m,
+                "clients_count": stats.get(m.id, {}).get("clients_count", 0),
+                "total_sum": stats.get(m.id, {}).get("total_sum", ZERO),
+            }
+            for m in managers
+        ]
+
+    supplier_debt_total = ZERO
+    if has_perm("reports.view"):
+        for s in suppliers_with_stats(only_active=True):
+            supplier_debt_total += s.debt
+
     return render_template(
         "finance/report.html",
         months=months, year=year,
         total_income=total_income, total_expense=total_expense, total_profit=total_profit,
+        manager_rows=manager_rows,
+        supplier_debt_total=supplier_debt_total,
         **expense_breakdown(start, end),
+    )
+
+
+@finance_bp.route("/taminotchi-qarzlari")
+@login_required
+@permission_required("reports.view")
+def supplier_debts():
+    """Kimdan qancha qarzimiz borligi — alohida hisobot sahifasi
+    (2026-08-29, foydalanuvchi qarori — boss suppliers.view huquqisiz
+    ham shuni ko'ra olishi kerak)."""
+    suppliers = suppliers_with_stats(only_active=True)
+    total_debt = ZERO
+    total_credit = ZERO
+    for s in suppliers:
+        total_debt += s.debt
+        total_credit += s.credit
+
+    debtors = sorted((s for s in suppliers if s.debt > ZERO), key=lambda s: s.debt, reverse=True)
+
+    return render_template(
+        "finance/supplier_debts.html",
+        debtors=debtors, total_debt=total_debt, total_credit=total_credit,
+        supplier_count=len(suppliers),
     )
 
 

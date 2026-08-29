@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% set src = form or employee %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h3>{{ 'Xodimni tahrirlash' if employee else 'Yangi xodim' }}</h3>
+    <div class="subtitle">
+      {% if employee %}{{ employee.full_name }}
+      {% else %}Ism, aloqa va (kerak bo'lsa) menejer hisobini bog'lang{% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="card p-4" style="max-width:640px">
+<form method="post">
+  {{ csrf() }}
+
+  <div class="form-step">
+    <div class="form-step-head">
+      <span class="step-num">1</span>
+      <div>
+        <h6>Shaxsiy ma'lumotlar</h6>
+        <div class="hint">HR kartochkasida shu bo'yicha ko'rinadi</div>
+      </div>
+    </div>
+
+    <label class="form-label">Ism familiya</label>
+    <input class="form-control mb-3" name="full_name" required autofocus maxlength="150"
+           placeholder="Alisher Navoiy" value="{{ src.full_name|default('', true) if src else '' }}">
+
+    <div class="row g-3">
+      <div class="col-sm-6">
+        <label class="form-label">Telefon</label>
+        <input class="form-control" name="phone" maxlength="50" placeholder="+998 90 123 45 67"
+               value="{{ src.phone|default('', true) if src else '' }}">
+      </div>
+      <div class="col-sm-6">
+        <label class="form-label">Manzil</label>
+        <input class="form-control" name="address" maxlength="255" placeholder="Shahar, mahalla..."
+               value="{{ src.address|default('', true) if src else '' }}">
+      </div>
+    </div>
+  </div>
+
+  <div class="form-step">
+    <div class="form-step-head">
+      <span class="step-num">2</span>
+      <div>
+        <h6>Menejer hisobi (ixtiyoriy)</h6>
+        <div class="hint">Bog'lansa — Manager xisoboti bo'limidagi KPI shu kartochkada oylar kesimida ko'rinadi</div>
+      </div>
+    </div>
+    <select class="form-select" name="user_id">
+      <option value="">— bog'lanmagan —</option>
+      {% for m in managers %}
+      <option value="{{ m.id }}" {% if employee and employee.user_id == m.id %}selected{% endif %}>{{ m.display_name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="form-step">
+    <div class="form-step-head">
+      <span class="step-num">3</span>
+      <div>
+        <h6>Izoh</h6>
+        <div class="hint">Ixtiyoriy — lavozim, bo'lim va h.k.</div>
+      </div>
+    </div>
+    <input class="form-control" name="note" maxlength="255"
+           placeholder="Masalan: dizayner, ishlab chiqarish bo'limi"
+           value="{{ src.note|default('', true) if src else '' }}">
+
+    {% if employee %}
+    <div class="form-check form-switch mt-3 mb-0">
+      <input class="form-check-input" type="checkbox" role="switch" name="is_active" value="1"
+             id="isActive" {% if employee.is_active %}checked{% endif %}>
+      <label class="form-check-label" for="isActive">
+        Faol — HR ro'yxatida ko'rinadi
+      </label>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="sticky-actions">
+    <button class="btn btn-primary"><i class="bi bi-check-lg"></i> Saqlash</button>
+    <a href="{{ url_for('hr.list_employees') }}" class="btn btn-outline-secondary">Bekor qilish</a>
+  </div>
+</form>
+</div>
+{% endblock %}

@@ -4,7 +4,8 @@
   <div>
     <h3>{{ client.name }}</h3>
     <div class="subtitle">
-      {% if client.phone %}<i class="bi bi-telephone"></i> {{ client.phone }}{% endif %}
+      {% if client.company %}<i class="bi bi-building"></i> {{ client.company }}{% endif %}
+      {% if client.phone %} · <i class="bi bi-telephone"></i> {{ client.phone }}{% endif %}
       {% if client.address %} · <i class="bi bi-geo-alt"></i> {{ client.address }}{% endif %}
     </div>
   </div>

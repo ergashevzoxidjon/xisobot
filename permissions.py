@@ -37,17 +37,21 @@ PERMISSIONS = {
     "stock.view", "stock.manage",
     "suppliers.view", "suppliers.manage",
     "reports.view", "reports.export",
+    "managers.view", "managers.manage",
+    "hr.view", "hr.manage", "hr.pay",
     "users.manage",
     "settings.manage",
 }
 
 ROLE_PERMISSIONS = {
     "admin": set(PERMISSIONS),
-    # Menejer moliya bilan ishlamaydi — faqat buyurtma va mijoz.
-    # Xarajat, foyda va hisobotlar unga ko'rinmaydi.
+    # Menejer moliya bilan ishlamaydi — faqat buyurtma va mijoz. Xarajat,
+    # foyda va umumiy hisobotlar unga ko'rinmaydi, lekin o'zining shaxsiy
+    # menejer hisobotini (managers.view) ko'radi (2026-08-29).
     "menejer": {
         "orders.view", "orders.create", "orders.edit", "orders.manage",
         "clients.view", "clients.create",
+        "managers.view",
     },
     # Ish boshqaruvchi omborni yuritadi: mahsulot qabul qiladi va sarflaydi,
     # taminotchilar bilan ishlaydi (qarz-to'lov). Moliyaviy hisobot va
@@ -56,22 +60,38 @@ ROLE_PERMISSIONS = {
     "xarajatchi": {"expenses.view", "expenses.create", "orders.view",
                    "stock.view", "stock.manage",
                    "suppliers.view", "suppliers.manage",
-                   "reports.view"},
-    # Boss — korxona rahbari. Hamma narsani KO'RADI, hech narsani
-    # o'zgartirmaydi: buyurtma, mijoz, ombor va sozlamalarga tegmaydi.
+                   "reports.view",
+                   # HR: xodimlar ro'yxatini ko'radi va avans kiritadi
+                   # (2026-08-29, foydalanuvchi qarori) — pasport yuklash
+                   # va xodim/oylik boshqaruvi faqat adminda (hr.manage).
+                   "hr.view", "hr.pay",
+                   # Manager xisoboti: ish boshqaruvchi menejerlarning
+                   # kunlik mijozlar bilan ishlash jurnalini kuzatib borishi
+                   # kerak (2026-08-29, foydalanuvchi qarori) — shu bilan
+                   # birga sotuv/KPI hisobotini ham ko'radi (bitta ruxsat).
+                   "managers.view"},
+    # Boss — korxona rahbari. Endi Buyurtmalar, Mijozlar, Taminotchilar va
+    # Ombor bo'limlariga kirmaydi (2026-08-29, foydalanuvchi qarori) — faqat
+    # hisobot, tahlil, menejerlar statistikasi va HR ro'yxatini ko'radi.
+    # Istisno: "Ishchiga berilayotgan summa" (hr.pay) — Boss shu yerda
+    # xarajatchi kabi to'liq kirita oladi (2026-08-29, foydalanuvchi qarori).
     "boss": {
-        "orders.view", "clients.view", "stock.view",
-        "expenses.view", "suppliers.view",
+        "expenses.view",
         "reports.view", "reports.export",
+        "managers.view",
+        "hr.view", "hr.pay",
     },
 }
 
-# rol uchun kirishdan keyingi asosiy sahifa
+# rol uchun kirishdan keyingi asosiy sahifa — barcha rollar endi bitta
+# umumiy Bosh sahifaga tushadi (2026-08-29, foydalanuvchi qarori): mazmuni
+# shablonda (dashboard.html) ruxsatlarga qarab farqlanadi ("Diqqat talab
+# qiladi" — faqat admin, moliyaviy kartalar — reports.view bo'lganlarga).
 ROLE_HOME_ENDPOINT = {
     "admin": "main.dashboard",
     "boss": "main.dashboard",
-    "menejer": "orders.list_orders",
-    "xarajatchi": "finance.expenses_list",
+    "menejer": "main.dashboard",
+    "xarajatchi": "main.dashboard",
 }
 
 

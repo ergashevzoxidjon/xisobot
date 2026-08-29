@@ -25,7 +25,7 @@ fails = []
 
 # ---------------------------------------------------------------- 1. endpointlar
 ROUTE_FILES = ["auth.py", "main.py", "clients.py", "orders.py", "finance.py",
-               "stock.py", "suppliers.py", "settings.py"]
+               "stock.py", "suppliers.py", "settings.py", "managers.py", "hr.py"]
 endpoints = set()
 for fname in ROUTE_FILES:
     src = open(f"{APP}/{fname}").read()
@@ -90,16 +90,23 @@ ROLE_PERMISSIONS = {
               "expenses.view", "expenses.create",
               "stock.view", "stock.manage",
               "suppliers.view", "suppliers.manage",
-              "reports.view", "reports.export", "users.manage", "settings.manage"},
+              "reports.view", "reports.export",
+              "managers.view", "managers.manage",
+              "hr.view", "hr.manage", "hr.pay",
+              "users.manage", "settings.manage"},
     "menejer": {"orders.view", "orders.create", "orders.edit", "orders.manage",
-                "clients.view", "clients.create"},
+                "clients.view", "clients.create",
+                "managers.view"},
     "xarajatchi": {"expenses.view", "expenses.create", "orders.view",
                    "stock.view", "stock.manage",
                    "suppliers.view", "suppliers.manage",
-                   "reports.view"},
-    "boss": {"orders.view", "clients.view", "stock.view",
-             "expenses.view", "suppliers.view",
-             "reports.view", "reports.export"},
+                   "reports.view",
+                   "hr.view", "hr.pay",
+                   "managers.view"},
+    "boss": {"expenses.view",
+             "reports.view", "reports.export",
+             "managers.view",
+             "hr.view", "hr.pay"},
 }
 ROLE_LABELS = {"admin": "Administrator", "menejer": "Menejer",
                "xarajatchi": "Ish boshqaruvchi", "boss": "Boss"}
@@ -151,7 +158,7 @@ user = SimpleNamespace(id=1, username="admin", full_name="Test Admin",
 client = SimpleNamespace(
     id=1, name="Test MChJ", phone="+998901234567", address="Toshkent",
     notes="Izoh matni", total_debt=Decimal("15000.00"), orders_count=3,
-    is_deleted=False, deleted_at=None,
+    is_deleted=False, deleted_at=None, company="Test Poligrafiya MChJ",
 )
 payment = SimpleNamespace(id=1, amount=Decimal("20000.00"), paid_on=TODAY,
                           note="Naqd", creator=user)
@@ -174,6 +181,7 @@ material = SimpleNamespace(
     id=1, name="Qog'oz A4 80g", unit="list", quantity=Decimal("240.000"),
     last_price=Decimal("450.00"), min_qty=Decimal("100.000"), is_active=True,
     note="Sifatli ofset", stock_value=Decimal("108000.00"), is_low=False,
+    location="A-2 raf",
 )
 move_in = SimpleNamespace(
     id=1, material=material, kind="kirim", quantity=Decimal("500.000"),
@@ -268,6 +276,59 @@ months_rows = [
 audit = SimpleNamespace(id=1, created_at=datetime.now(), user=user, action="create",
                         entity="order", entity_id=1, detail="B-2026-0001 yaratildi")
 
+# ---- HR va Manager xisoboti mocklari (2026-08-29, foydalanuvchi qarori) ----
+manager_user = SimpleNamespace(id=5, username="komila", full_name="Komila Ahmedova",
+                               display_name="Komila Ahmedova", role="menejer", is_active_user=True)
+employee = SimpleNamespace(
+    id=1, full_name="Sardor Aliyev", phone="+998901234567", address="Toshkent",
+    user_id=None, user=None, passport_filename=None, passport_original_name=None,
+    has_passport=False, is_active=True, note="Dizayner",
+)
+employee_linked = SimpleNamespace(
+    id=2, full_name="Komila Ahmedova", phone="+998901112233", address="Toshkent",
+    user_id=5, user=manager_user, passport_filename="passport_x.pdf",
+    passport_original_name="pasport.pdf", has_passport=True, is_active=True, note="",
+)
+payment_oylik = SimpleNamespace(id=1, kind="oylik", kind_label="Oylik",
+                                amount=Decimal("2000000.00"), paid_on=TODAY, note=None)
+payment_avans = SimpleNamespace(id=2, kind="avans", kind_label="Avans",
+                                amount=Decimal("500000.00"), paid_on=TODAY, note="Ehtiyoj")
+payment_kpi = SimpleNamespace(id=3, kind="kpi", kind_label="KPI",
+                              amount=Decimal("300000.00"), paid_on=TODAY, note=None)
+hr_months = [
+    {"month": m, "name": UZ_MONTHS[m - 1], "salary": Decimal("2000000.00"),
+     "payments": [payment_oylik, payment_avans] if m == TODAY.month else [],
+     "paid_oylik": Decimal("2000000.00") if m == TODAY.month else Decimal("0.00"),
+     "paid_avans": Decimal("500000.00") if m == TODAY.month else Decimal("0.00"),
+     "paid_kpi": Decimal("0.00"),
+     "paid_total": Decimal("2500000.00") if m == TODAY.month else Decimal("0.00"),
+     "remaining": Decimal("-500000.00") if m == TODAY.month else Decimal("2000000.00"),
+     "kpi_calc": None, "kpi_remaining": None}
+    for m in range(1, 13)
+]
+
+manager_client = SimpleNamespace(id=1, name="Test MChJ", company="Test Poligrafiya MChJ",
+                                 phone="+998901234567")
+manager_order = SimpleNamespace(id=1, order_number="B-2026-0001")
+log_success = SimpleNamespace(
+    id=1, status="muvaffaqiyatli", status_label="Muvaffaqiyatli", status_color="success",
+    client=manager_client, client_id=1, client_name=None, company_name=None, phone=None,
+    display_name="Test MChJ", has_proposal=False, order=manager_order, note=None,
+    manager=manager_user,
+)
+log_pending = SimpleNamespace(
+    id=2, status="tasdiqlash_jarayonida", status_label="Tasdiqlash jarayonida", status_color="warning",
+    client=None, client_id=None, client_name="Aziz Karimov", company_name="Aziz Trade",
+    phone="+998901112233", display_name="Aziz Karimov", has_proposal=True, order=None, note=None,
+    manager=manager_user,
+)
+log_declined = SimpleNamespace(
+    id=3, status="otkaz", status_label="Otkaz berdi", status_color="danger",
+    client=manager_client, client_id=1, client_name=None, company_name=None, phone=None,
+    display_name="Test MChJ", has_proposal=False, order=None, note="Narx mos kelmadi",
+    manager=manager_user,
+)
+
 CONTEXTS = {
     "login.html": {},
     "charts.html": {},
@@ -277,6 +338,7 @@ CONTEXTS = {
         month_profit=Decimal("7000000.00"), profit_change=12.5,
         overdue_orders=[overdue_order], soon_orders=[order], old_debts=[overdue_order],
         alerts_count=3, recent_orders=[order], overdue_debt_days=30,
+        supplier_debt=Decimal("2500000.00"),
     ),
     "clients/list.html": dict(clients=[client], pagination=FakePagination([client], 42), q=""),
     "clients/detail.html": dict(
@@ -339,6 +401,8 @@ CONTEXTS = {
                      "revenue": Decimal("50000.00"), "profit": Decimal("38000.00")}],
         product_rows=[{"name": "Vizitka", "spent": Decimal("12000.00"),
                        "revenue": Decimal("50000.00"), "profit": Decimal("38000.00"), "count": 3}],
+        manager_rows=[{"manager": manager_user, "clients_count": 2, "total_sum": Decimal("32650500.00")}],
+        supplier_debt_total=Decimal("2500000.00"),
     ),
     "finance/analytics.html": dict(
         year=2026,
@@ -356,6 +420,55 @@ CONTEXTS = {
     "settings/order_type_form.html": dict(order_type=None, form=None),
     "settings/company.html": dict(company=company, form=None),
     "settings/telegram.html": dict(settings=tg_settings, form=None),
+    "finance/supplier_debts.html": dict(
+        debtors=[supplier], total_debt=Decimal("420000.00"),
+        total_credit=Decimal("0.00"), supplier_count=2,
+    ),
+    "hr/list.html": dict(
+        rows=[
+            {"employee": employee, "salary": Decimal("2000000.00"),
+             "paid": {"oylik": Decimal("2000000.00"), "avans": Decimal("500000.00"),
+                      "kpi": Decimal("0.00"), "jami": Decimal("2500000.00")},
+             "remaining": Decimal("-500000.00")},
+            {"employee": employee_linked, "salary": Decimal("2500000.00"),
+             "paid": {"oylik": Decimal("0.00"), "avans": Decimal("0.00"),
+                      "kpi": Decimal("0.00"), "jami": Decimal("0.00")},
+             "remaining": Decimal("2500000.00")},
+        ],
+        year=2026, month=8, month_name="Avgust",
+        total_salary=Decimal("4500000.00"), total_given=Decimal("2500000.00"),
+        can_manage=True,
+    ),
+    "hr/form.html": dict(employee=None, managers=[manager_user], form=None),
+    "hr/detail.html": dict(
+        employee=employee, year=2026, months=hr_months, today=TODAY,
+        total_salary_year=Decimal("24000000.00"), total_given_year=Decimal("2500000.00"),
+        payment_kinds=["oylik", "avans", "kpi"],
+        payment_kind_labels={"oylik": "Oylik", "avans": "Avans", "kpi": "KPI"},
+        can_manage=True, can_pay=True,
+    ),
+    "managers/list.html": dict(
+        rows=[{"manager": manager_user, "clients_count": 2, "total_clients": 5,
+               "total_sum": Decimal("32650500.00"), "plan_amount": Decimal("100000000.00"),
+               "remaining": Decimal("67349500.00"), "percent": 32.7}],
+        year=2026, month=8, month_name="Avgust",
+        grand_total=Decimal("40750500.00"), can_manage=True,
+    ),
+    "managers/detail.html": dict(
+        manager=manager_user, year=2026, month=8, month_name="Avgust",
+        summary={"clients_count": 2, "total_sum": Decimal("32650500.00")},
+        plan_amount=Decimal("100000000.00"), remaining=Decimal("67349500.00"), percent=32.7,
+        kpi_amount=Decimal("979515.00"), employee_salary=Decimal("2500000.00"),
+        trend=[{"label": m, "total": Decimal("5000000.00")} for m in UZ_MONTHS[2:8]],
+        orders=[order], can_manage=True, today=TODAY,
+        today_log_count=3,
+    ),
+    "managers/jurnal.html": dict(
+        log_date=TODAY, logs=[log_success, log_pending, log_declined], today=TODAY,
+        all_managers=[manager_user], manager_filter_id=None,
+        can_add=True, log_statuses=["muvaffaqiyatli", "tasdiqlash_jarayonida", "otkaz"],
+        show_manager_column=True,
+    ),
     "errors/error.html": dict(code=404, title="Topilmadi", message="Sahifa yo'q"),
 }
 
@@ -415,7 +528,7 @@ print("\n=== ORTIQCHA TO'LOV (AVANS) SHABLONLARI ===")
 prepaid_client = SimpleNamespace(
     id=2, name="Avansli MChJ", phone="+998901112233", address="Samarqand",
     notes=None, total_debt=Decimal("-30000.00"), orders_count=1,
-    is_deleted=False, deleted_at=None,
+    is_deleted=False, deleted_at=None, company=None,
 )
 prepaid_order = SimpleNamespace(
     id=3, order_number="B-2026-0003", client=prepaid_client, client_id=2,
@@ -469,15 +582,23 @@ print(f"  OK   4 rol × {len(PREPAID_CONTEXTS)} shablon avans holatida")
 # ---------------------------------------------------------------- 4. rol ajratish
 print("\n=== ROLLAR BO'YICHA MENYU AJRATILISHI ===")
 EXPECTED_MENU = {
-    "admin": ["Bosh sahifa", "Buyurtmalar", "Mijozlar", "Ombor", "Taminotchilar", "Xarajatlar",
-              "Moliyaviy hisobot", "Tahlil", "Firma ma'lumotlari",
-              "Buyurtma turlari", "Telegram", "O'chirilgan buyurtmalar", "O'chirilgan mijozlar",
+    # "Bosh sahifa" endi barcha rollarga ko'rinadi (2026-08-29, uchinchi
+    # so'rov) — reports.view bilan bog'liq emas. "Manager xisoboti"dan keyin
+    # barcha rollarga (managers.view bo'lgani uchun) yangi alohida
+    # "Kunlik mijozlar bilan ishlash" havolasi qo'shildi.
+    "admin": ["Bosh sahifa", "Buyurtmalar", "Mijozlar", "Ombor", "Taminotchilar", "Manager xisoboti",
+              "Kunlik mijozlar bilan ishlash",
+              "Xarajatlar", "Moliyaviy hisobot", "Tahlil", "Taminotchi qarzlari", "HR",
+              "Firma ma'lumotlari", "Buyurtma turlari", "Telegram",
+              "O'chirilgan buyurtmalar", "O'chirilgan mijozlar",
               "Foydalanuvchilar", "Harakatlar jurnali"],
-    "menejer": ["Buyurtmalar", "Mijozlar"],
-    "xarajatchi": ["Bosh sahifa", "Buyurtmalar", "Ombor", "Taminotchilar", "Xarajatlar",
-                   "Moliyaviy hisobot", "Tahlil"],
-    "boss": ["Bosh sahifa", "Buyurtmalar", "Mijozlar", "Ombor", "Taminotchilar", "Xarajatlar",
-             "Moliyaviy hisobot", "Tahlil"],
+    "menejer": ["Bosh sahifa", "Buyurtmalar", "Mijozlar", "Manager xisoboti",
+                "Kunlik mijozlar bilan ishlash"],
+    "xarajatchi": ["Bosh sahifa", "Buyurtmalar", "Ombor", "Taminotchilar", "Manager xisoboti",
+                   "Kunlik mijozlar bilan ishlash",
+                   "Xarajatlar", "Moliyaviy hisobot", "Tahlil", "Taminotchi qarzlari", "HR"],
+    "boss": ["Bosh sahifa", "Manager xisoboti", "Kunlik mijozlar bilan ishlash", "Xarajatlar",
+             "Moliyaviy hisobot", "Tahlil", "Taminotchi qarzlari", "HR"],
 }
 for role, perms in ROLE_PERMISSIONS.items():
     env = Environment(loader=FileSystemLoader(f"{APP}/templates"), undefined=StrictUndefined)

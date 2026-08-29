@@ -24,7 +24,7 @@
 {% if clients %}
 <div class="table-responsive">
 <table class="table table-hover">
-<thead><tr><th>Mijoz</th><th>Telefon</th><th>Manzil</th><th class="text-end">Buyurtma</th><th class="text-end">Qarzdorlik</th><th></th></tr></thead>
+<thead><tr><th>Mijoz</th><th>Korxona</th><th>Telefon</th><th>Manzil</th><th class="text-end">Buyurtma</th><th class="text-end">Qarzdorlik</th><th></th></tr></thead>
 <tbody>
 {% for c in clients %}
 <tr role="button" onclick="window.location='{{ url_for('clients.client_detail', client_id=c.id) }}'">
@@ -34,6 +34,7 @@
       <span class="fw-semibold">{{ c.name }}</span>
     </div>
   </td>
+  <td class="text-muted">{{ c.company or '-' }}</td>
   <td>{{ c.phone or '-' }}</td>
   <td class="text-muted">{{ c.address or '-' }}</td>
   <td class="text-end num">{{ c.orders_count }}</td>

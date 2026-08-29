@@ -13,7 +13,7 @@ import sys
 import os
 APP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ROUTE_FILES = ["auth.py", "main.py", "clients.py", "orders.py", "finance.py",
-               "stock.py", "suppliers.py", "settings.py"]
+               "stock.py", "suppliers.py", "settings.py", "managers.py", "hr.py"]
 ALL_PY = [f for f in os.listdir(APP) if f.endswith(".py")]
 
 fails = []
@@ -140,8 +140,9 @@ patterns = {
     r"\.paid_amount\s*\+=": "eski to'lov mantig'i (paid_amount +=)",
     r"debug\s*=\s*True": "qattiq yozilgan debug=True",
     r"datetime\.utcnow": "UTC vaqt (mahalliy vaqt ishlatilishi kerak)",
-    r"float\(request\.form": "tekshirilmagan float() o'qish",
-    r"int\(request\.form": "tekshirilmagan int() o'qish",
+    # (?<!parse_) — parse_int(...)/parse_float(...) (tekshirilgan) yolg'on ijobiy bermasin
+    r"(?<!parse_)float\(request\.form": "tekshirilmagan float() o'qish",
+    r"(?<!parse_)int\(request\.form": "tekshirilmagan int() o'qish",
 }
 found_any = False
 for fname in sorted(ALL_PY):

@@ -5,6 +5,7 @@
     <h3>{{ material.name }}</h3>
     <div class="subtitle">
       Birligi: {{ material.unit }}
+      {% if material.location %}· <i class="bi bi-geo-alt"></i> {{ material.location }}{% endif %}
       {% if not material.is_active %}· <span class="badge bg-secondary">arxiv</span>{% endif %}
       {% if material.note %}· {{ material.note }}{% endif %}
     </div>

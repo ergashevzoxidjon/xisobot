@@ -56,6 +56,52 @@
   </div>
 </div>
 
+{# ---------------- 1b. TAMINOTCHI QARZI VA MENEJERLAR ---------------- #}
+{% if has_perm('reports.view') or has_perm('managers.view') %}
+<div class="row g-3 mb-3">
+  {% if supplier_debt_total is defined %}
+  <div class="col-lg-4">
+    <div class="card p-4 h-100">
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          <div class="stat-label">Taminotchilarga qarzimiz</div>
+          <div class="stat-value num {% if supplier_debt_total %}text-danger{% endif %}">{{ supplier_debt_total|uzs }}</div>
+        </div>
+        <div class="stat-icon {% if supplier_debt_total %}red{% else %}slate{% endif %}"><i class="bi bi-wallet2"></i></div>
+      </div>
+      <a href="{{ url_for('finance.supplier_debts') }}" class="small mt-2 d-inline-block">Batafsil <i class="bi bi-arrow-right"></i></a>
+    </div>
+  </div>
+  {% endif %}
+  {% if manager_rows %}
+  <div class="col-lg-8">
+    <div class="card p-4 h-100">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <h6 class="fw-bold mb-0"><i class="bi bi-person-badge me-1 text-muted"></i> Menejerlar — shu oy</h6>
+        <a href="{{ url_for('managers.list_managers') }}" class="small">Batafsil <i class="bi bi-arrow-right"></i></a>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm mb-0">
+          <thead><tr><th>Menejer</th><th class="text-end">Mijozlar</th><th class="text-end">Summa</th></tr></thead>
+          <tbody>
+          {% for row in manager_rows %}
+          <tr>
+            <td>{{ row.manager.display_name }}</td>
+            <td class="text-end num">{{ row.clients_count }}</td>
+            <td class="text-end num fw-semibold">{{ row.total_sum|uzs }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="3" class="text-muted small">Menejer topilmadi</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
 {# ---------------- 2. OYLIK GRAFIK ---------------- #}
 <div class="card p-4 mb-3">
   <h6 class="fw-bold mb-1">Oylar kesimida — tushum, xarajat va foyda</h6>

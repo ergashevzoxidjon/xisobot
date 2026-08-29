@@ -16,6 +16,7 @@ def _client_form_data(form):
     return {
         "name": parse_text(form.get("name"), "Ism", required=True, max_length=150),
         "phone": parse_text(form.get("phone"), "Telefon", required=False, max_length=50),
+        "company": parse_text(form.get("company"), "Korxona", required=False, max_length=150),
         "address": parse_text(form.get("address"), "Manzil", required=False, max_length=255),
         "notes": parse_text(form.get("notes"), "Izoh", required=False, max_length=2000),
     }

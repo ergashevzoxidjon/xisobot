@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h3>{{ employee.full_name }}</h3>
+    <div class="subtitle">
+      {% if employee.phone %}<i class="bi bi-telephone"></i> {{ employee.phone }}{% endif %}
+      {% if employee.address %} · <i class="bi bi-geo-alt"></i> {{ employee.address }}{% endif %}
+      {% if employee.user %} · <span class="badge bg-light text-dark border">menejer hisobi: {{ employee.user.display_name }}</span>{% endif %}
+      {% if not employee.is_active %} · <span class="badge bg-secondary">nofaol</span>{% endif %}
+    </div>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('hr.list_employees') }}" class="btn btn-outline-secondary">
+      <i class="bi bi-arrow-left"></i> HR ro'yxati</a>
+    {% if can_manage %}
+    <a href="{{ url_for('hr.edit_employee', employee_id=employee.id) }}" class="btn btn-outline-secondary">
+      <i class="bi bi-pencil"></i> Tahrirlash</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-lg-6">
+    <div class="card p-3 h-100">
+      <h6 class="fw-bold mb-2"><i class="bi bi-file-earmark-lock me-1 text-muted"></i> Pasport nusxasi</h6>
+      {% if employee.has_passport %}
+      <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <span class="text-success"><i class="bi bi-file-earmark-check"></i> {{ employee.passport_original_name }}</span>
+        <a href="{{ url_for('hr.download_passport', employee_id=employee.id) }}" class="btn btn-sm btn-outline-primary">
+          <i class="bi bi-download"></i> Yuklab olish</a>
+      </div>
+      {% else %}
+      <div class="text-muted small mb-2"><i class="bi bi-exclamation-circle"></i> Hali yuklanmagan.</div>
+      {% endif %}
+      {% if can_manage %}
+      <form method="post" action="{{ url_for('hr.upload_passport', employee_id=employee.id) }}"
+            enctype="multipart/form-data" class="d-flex gap-2 mt-2">
+        {{ csrf() }}
+        <input type="file" name="passport" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png,.tif,.tiff" required>
+        <button class="btn btn-sm btn-primary text-nowrap">
+          <i class="bi bi-upload"></i> {{ 'Almashtirish' if employee.has_passport else 'Yuklash' }}</button>
+      </form>
+      <div class="form-text">Faqat admin yuklaydi — qolganlar faqat ko'radi.</div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card p-3 h-100">
+      <h6 class="fw-bold mb-2"><i class="bi bi-calendar-range me-1 text-muted"></i> {{ year }}-yil bo'yicha jami</h6>
+      <div class="row g-2">
+        <div class="col-6">
+          <div class="stat-label">Belgilangan oylik</div>
+          <div class="stat-value num">{{ total_salary_year|uzs }}</div>
+        </div>
+        <div class="col-6">
+          <div class="stat-label">Berilgan summa (jami)</div>
+          <div class="stat-value num text-warning-emphasis">{{ total_given_year|uzs }}</div>
+        </div>
+      </div>
+      <form method="get" class="d-flex gap-2 mt-3">
+        <input type="number" name="year" value="{{ year }}" class="form-control form-control-sm" style="width:110px" min="2000" max="2100">
+        <button class="btn btn-sm btn-outline-primary"><i class="bi bi-search"></i> Yilni ko'rish</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% if can_pay %}
+<div class="card p-3 mb-3">
+  <h6 class="fw-bold mb-2"><i class="bi bi-cash-coin me-1 text-muted"></i> Ishchiga berilayotgan summa</h6>
+  <div class="form-text mb-2">Turkumni tanlang, so'ng summani kiriting — bir oyda bir necha marta berilishi mumkin, har biri alohida yoziladi.</div>
+  <form method="post" action="{{ url_for('hr.add_advance', employee_id=employee.id) }}" class="row g-2 align-items-end">
+    {{ csrf() }}
+    <div class="col-12">
+      <label class="form-label mb-1 d-block">Turkum</label>
+      <div class="btn-group" role="group" aria-label="Turkum">
+        <input type="radio" class="btn-check" name="kind" id="kindOylik" value="oylik" autocomplete="off">
+        <label class="btn btn-outline-primary" for="kindOylik"><i class="bi bi-cash-stack me-1"></i>Oylik</label>
+
+        <input type="radio" class="btn-check" name="kind" id="kindAvans" value="avans" autocomplete="off" checked>
+        <label class="btn btn-outline-primary" for="kindAvans"><i class="bi bi-cash-coin me-1"></i>Avans</label>
+
+        <input type="radio" class="btn-check" name="kind" id="kindKpi" value="kpi" autocomplete="off">
+        <label class="btn btn-outline-primary" for="kindKpi"><i class="bi bi-award me-1"></i>KPI</label>
+      </div>
+    </div>
+    <div class="col-sm-3">
+      <label class="form-label mb-1">Summa</label>
+      <input type="number" step="0.01" min="0.01" name="amount" class="form-control" required placeholder="500000">
+    </div>
+    <div class="col-sm-3">
+      <label class="form-label mb-1">Sana</label>
+      <input type="date" name="paid_on" class="form-control" max="{{ today.isoformat() }}" value="{{ today.isoformat() }}">
+    </div>
+    <div class="col-sm-4">
+      <label class="form-label mb-1">Izoh</label>
+      <input name="note" class="form-control" maxlength="255" placeholder="Ixtiyoriy">
+    </div>
+    <div class="col-sm-2">
+      <button class="btn btn-primary w-100"><i class="bi bi-check-lg"></i> Berish</button>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+<div class="card p-3">
+  <h6 class="fw-bold mb-3"><i class="bi bi-table me-1 text-muted"></i> Oylar kesimida</h6>
+  <div class="table-responsive">
+  <table class="table table-hover align-middle">
+  <thead><tr>
+    <th style="width:110px">Oy</th>
+    <th class="text-end">Belgilangan oylik</th>
+    <th class="text-end">Berilgan (Oylik + Avans)</th>
+    <th class="text-end">Qoldiq</th>
+    {% if employee.user %}<th class="text-end">KPI (hisoblangan / to'langan)</th>{% endif %}
+    <th></th>
+  </tr></thead>
+  <tbody>
+  {% for row in months %}
+  <tr>
+    <td class="fw-semibold">{{ row.name }}</td>
+    <td class="text-end" style="min-width:190px">
+      {% if can_manage %}
+      <form method="post" action="{{ url_for('hr.set_salary', employee_id=employee.id) }}" class="d-flex gap-1 justify-content-end">
+        {{ csrf() }}
+        <input type="hidden" name="year" value="{{ year }}">
+        <input type="hidden" name="month" value="{{ row.month }}">
+        <input type="number" step="0.01" min="0" name="amount" value="{{ row.salary }}"
+               class="form-control form-control-sm text-end" style="width:130px">
+        <button class="btn btn-sm btn-outline-primary" title="Saqlash"><i class="bi bi-check-lg"></i></button>
+      </form>
+      {% else %}
+      <span class="num">{{ row.salary|uzs }}</span>
+      {% endif %}
+    </td>
+    <td class="text-end" style="min-width:170px">
+      <div class="num fw-semibold">{{ (row.paid_oylik + row.paid_avans)|uzs }}</div>
+      <div class="text-muted" style="font-size:.7rem">Oylik: {{ row.paid_oylik|uzs }} · Avans: {{ row.paid_avans|uzs }}</div>
+    </td>
+    <td class="text-end num fw-semibold {% if row.remaining < 0 %}text-danger{% endif %}">{{ row.remaining|uzs }}</td>
+    {% if employee.user %}
+    <td class="text-end" style="min-width:150px">
+      {% if row.kpi_calc is not none %}
+      <div class="num text-success">{{ row.kpi_calc|uzs }}</div>
+      <div class="text-muted" style="font-size:.7rem">to'langan: {{ row.paid_kpi|uzs }}</div>
+      {% else %}—{% endif %}
+    </td>
+    {% endif %}
+    <td class="text-end" style="width:36px">
+      {% if row.payments %}
+      <details>
+        <summary class="text-muted small" style="cursor:pointer">{{ row.payments|length }} ta</summary>
+        <div class="mt-2 text-start">
+          {% for p in row.payments %}
+          <div class="d-flex align-items-center justify-content-between gap-2 py-1 border-bottom">
+            <div class="small">
+              <span class="badge {% if p.kind == 'oylik' %}bg-primary{% elif p.kind == 'kpi' %}bg-success{% else %}bg-warning text-dark{% endif %}">{{ p.kind_label }}</span>
+              <span class="num fw-semibold">{{ p.amount|uzs }}</span>
+              <span class="text-muted">· {{ p.paid_on|date_uz }}</span>
+              {% if p.note %}<span class="text-muted">· {{ p.note }}</span>{% endif %}
+            </div>
+            {% if can_pay %}
+            <form method="post" action="{{ url_for('hr.delete_advance', advance_id=p.id) }}"
+                  onsubmit="return confirm('Ushbu yozuv o\'chirilsinmi?')">
+              {{ csrf() }}
+              <button class="btn btn-sm btn-outline-danger py-0 px-1"><i class="bi bi-x-lg"></i></button>
+            </form>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </details>
+      {% else %}
+      <span class="text-muted">-</span>
+      {% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+  </table>
+  </div>
+</div>
+{% endblock %}

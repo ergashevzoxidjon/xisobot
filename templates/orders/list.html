@@ -77,6 +77,10 @@
   <td class="num">
     {% if o.is_overdue %}
       <span class="text-danger fw-semibold" title="Muddati o'tgan"><i class="bi bi-exclamation-circle"></i> {{ o.deadline|date_uz }}</span>
+    {% elif o.days_left is not none and o.days_left == 0 and o.status not in ('yetkazish uchun tayyor', 'maxsulot yetkazildi', 'bekor qilindi') %}
+      <span class="text-warning-emphasis fw-semibold" title="Topshirish muddati bugun"><i class="bi bi-alarm-fill"></i> {{ o.deadline|date_uz }}</span>
+    {% elif o.days_left is not none and o.days_left == 1 and o.status not in ('maxsulot yetkazildi', 'bekor qilindi') %}
+      <span class="text-warning-emphasis fw-semibold" title="1 kun qoldi"><i class="bi bi-alarm"></i> {{ o.deadline|date_uz }}</span>
     {% else %}
       {{ o.deadline|date_uz }}
     {% endif %}

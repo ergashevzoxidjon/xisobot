@@ -11,6 +11,7 @@
 {% set posted_units = form.getlist('row_unit') if form and form.getlist is defined else [] %}
 {% set posted_qtys = form.getlist('row_quantity') if form and form.getlist is defined else [] %}
 {% set posted_prices = form.getlist('row_price') if form and form.getlist is defined else [] %}
+{% set posted_locations = form.getlist('row_location') if form and form.getlist is defined else [] %}
 {% set posted_supplier_id = form.get('supplier_id', '') if form and form.get is defined else '' %}
 {% set posted_supplier_name = form.get('supplier_name', '') if form and form.get is defined else '' %}
 {% set posted_payment_method = form.get('payment_method', 'naqd') if form and form.get is defined else 'naqd' %}
@@ -25,6 +26,7 @@
       'unit': posted_units[loop.index0] if posted_units|length > loop.index0 else '',
       'quantity': posted_qtys[loop.index0] if posted_qtys|length > loop.index0 else '',
       'price': posted_prices[loop.index0] if posted_prices|length > loop.index0 else '',
+      'location': posted_locations[loop.index0] if posted_locations|length > loop.index0 else '',
     }) %}
   {% endfor %}
 {% elif preselected_id %}
@@ -34,6 +36,7 @@
       'material_id': preselected_id,
       'material_name': _preselected[0].name,
       'unit': _preselected[0].unit, 'quantity': '', 'price': '',
+      'location': _preselected[0].location or '',
     }) %}
   {% endif %}
 {% endif %}
@@ -70,11 +73,14 @@
       </div>
       {% for m in materials %}
       <div class="stock-tile" data-id="{{ m.id }}" data-name="{{ m.name }}" data-unit="{{ m.unit }}"
-           data-price="{{ m.last_price|string }}" tabindex="0">
+           data-price="{{ m.last_price|string }}" data-location="{{ m.location or '' }}" tabindex="0">
         <div class="stock-tile-badge"><i class="bi bi-check-lg"></i></div>
         <div class="stock-tile-icon"><i class="bi {{ unit_icons.get(m.unit, 'bi-tag') }}"></i></div>
         <div class="stock-tile-name">{{ m.name }}</div>
-        <div class="stock-tile-meta">qoldiq {{ m.quantity|qty }} {{ m.unit }}</div>
+        <div class="stock-tile-meta">
+          qoldiq {{ m.quantity|qty }} {{ m.unit }}
+          {% if m.location %}· <i class="bi bi-geo-alt"></i> {{ m.location }}{% endif %}
+        </div>
       </div>
       {% endfor %}
     </div>
@@ -104,6 +110,8 @@
                name="row_quantity" placeholder="Soni">
         <input type="number" step="0.01" min="0.01" class="form-control form-control-sm row-price"
                name="row_price" placeholder="Narxi">
+        <input type="text" maxlength="120" class="form-control form-control-sm row-location"
+               name="row_location" placeholder="Joylashuvi (masalan: A-2 raf)">
         <div class="cart-row-line">0.00</div>
         <button type="button" class="btn btn-sm btn-outline-danger row-remove"
                 title="Savatdan olib tashlash"><i class="bi bi-x-lg"></i></button>
@@ -253,6 +261,7 @@ function addCartRow(opts) {
   row.querySelector('.cart-unit-text').textContent = opts.unit || '';
   if (opts.qty) row.querySelector('.row-qty').value = opts.qty;
   if (opts.price && parseFloat(opts.price) > 0) row.querySelector('.row-price').value = opts.price;
+  if (opts.location) row.querySelector('.row-location').value = opts.location;
   cartBody.appendChild(row);
   recalcCart();
   return row;
@@ -305,6 +314,7 @@ function selectTile(tile, opts) {
   const row = addCartRow({
     clientId, materialId: tile.dataset.id, name: tile.dataset.name,
     unit: tile.dataset.unit, qty: opts.qty, price: opts.price || tile.dataset.price,
+    location: opts.location || tile.dataset.location,
   });
   row.querySelector('.row-qty').focus();
 }
@@ -382,12 +392,13 @@ INITIAL_ROWS.forEach(r => {
   const idStr = r.material_id != null && r.material_id !== '' ? String(r.material_id) : '';
   const tile = idStr ? catalogGrid.querySelector('.stock-tile[data-id="' + idStr + '"]') : null;
   if (tile) {
-    selectTile(tile, {qty: r.quantity, price: r.price});
+    selectTile(tile, {qty: r.quantity, price: r.price, location: r.location});
   } else {
     newItemSeq += 1;
     addCartRow({
       clientId: 'restore' + newItemSeq, materialId: r.material_id || '',
       name: r.material_name, unit: r.unit, qty: r.quantity, price: r.price,
+      location: r.location,
     });
   }
 });

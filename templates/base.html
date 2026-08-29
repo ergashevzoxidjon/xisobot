@@ -221,6 +221,7 @@ a{ text-decoration:none; }
 .cart-row-name{ font-weight:600; font-size:.85rem; flex:1 1 auto; min-width:0; }
 .cart-row-name small{ display:block; color:#94a3b8; font-weight:500; font-size:.72rem; }
 .cart-row input[type="number"]{ width:88px; text-align:right; }
+.cart-row input.row-location{ width:130px; }
 .cart-row-line{ width:110px; text-align:right; font-weight:700; font-variant-numeric:tabular-nums; }
 
 .sticky-actions{
@@ -316,13 +317,11 @@ a{ text-decoration:none; }
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-brand"><i class="bi bi-printer-fill"></i> Poligrafiya</div>
     <nav class="sidebar-nav">
-      {% if has_perm('reports.view') %}
       <a href="{{ url_for('main.dashboard') }}" class="{% if request.endpoint == 'main.dashboard' %}active{% endif %}">
         <i class="bi bi-speedometer2"></i> Bosh sahifa
       </a>
-      {% endif %}
 
-      {% if has_perm('orders.view') or has_perm('clients.view') or has_perm('stock.view') %}
+      {% if has_perm('orders.view') or has_perm('clients.view') or has_perm('stock.view') or has_perm('suppliers.view') or has_perm('managers.view') %}
       <div class="sidebar-section">Faoliyat</div>
       {% endif %}
       {% if has_perm('orders.view') %}
@@ -345,6 +344,14 @@ a{ text-decoration:none; }
         <i class="bi bi-truck"></i> Taminotchilar
       </a>
       {% endif %}
+      {% if has_perm('managers.view') %}
+      <a href="{{ url_for('managers.list_managers') }}" class="{% if request.endpoint and request.endpoint.startswith('managers.') and request.endpoint != 'managers.client_log_board' %}active{% endif %}">
+        <i class="bi bi-person-badge"></i> Manager xisoboti
+      </a>
+      <a href="{{ url_for('managers.client_log_board') }}" class="{% if request.endpoint == 'managers.client_log_board' %}active{% endif %}">
+        <i class="bi bi-people"></i> Kunlik mijozlar bilan ishlash
+      </a>
+      {% endif %}
 
       {% if has_perm('expenses.view') or has_perm('reports.view') %}
       <div class="sidebar-section">Moliya</div>
@@ -361,10 +368,18 @@ a{ text-decoration:none; }
       <a href="{{ url_for('finance.analytics') }}" class="{% if request.endpoint == 'finance.analytics' %}active{% endif %}">
         <i class="bi bi-pie-chart"></i> Tahlil
       </a>
+      <a href="{{ url_for('finance.supplier_debts') }}" class="{% if request.endpoint == 'finance.supplier_debts' %}active{% endif %}">
+        <i class="bi bi-wallet2"></i> Taminotchi qarzlari
+      </a>
       {% endif %}
 
-      {% if has_perm('users.manage') or has_perm('settings.manage') %}
+      {% if has_perm('users.manage') or has_perm('settings.manage') or has_perm('hr.view') %}
       <div class="sidebar-section">Boshqaruv</div>
+      {% endif %}
+      {% if has_perm('hr.view') %}
+      <a href="{{ url_for('hr.list_employees') }}" class="{% if request.endpoint and request.endpoint.startswith('hr.') %}active{% endif %}">
+        <i class="bi bi-person-vcard"></i> HR
+      </a>
       {% endif %}
       {% if has_perm('settings.manage') %}
       <a href="{{ url_for('settings.company') }}" class="{% if request.endpoint == 'settings.company' %}active{% endif %}">

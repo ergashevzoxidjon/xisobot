@@ -49,6 +49,7 @@ def _material_form_data(form):
         "unit": parse_choice(form.get("unit"), "Birligi", STOCK_UNITS),
         "min_qty": parse_qty(form.get("min_qty"), "Eng kam qoldiq", required=False),
         "note": parse_text(form.get("note"), "Izoh", required=False, max_length=255),
+        "location": parse_text(form.get("location"), "Joylashuvi", required=False, max_length=120),
     }
 
 
@@ -228,6 +229,7 @@ def receipt_rows_from_form(form):
     units = form.getlist("row_unit")
     quantities = form.getlist("row_quantity")
     prices = form.getlist("row_price")
+    locations = form.getlist("row_location")
 
     if len(names) > MAX_RECEIPT_ROWS:
         raise ValidationError(f"Bir marta {MAX_RECEIPT_ROWS} tadan ko'p qator bo'lmaydi.")
@@ -239,6 +241,7 @@ def receipt_rows_from_form(form):
         unit_raw = units[index] if index < len(units) else ""
         qty_text = (quantities[index] if index < len(quantities) else "").strip()
         price_text = (prices[index] if index < len(prices) else "").strip()
+        location_text = (locations[index] if index < len(locations) else "").strip()
         if not name_text and not qty_text and not price_text:
             continue
 
@@ -254,6 +257,8 @@ def receipt_rows_from_form(form):
                                   min_value=Decimal("0.001")),
             "unit_price": parse_money(price_text, f"{row}-qator, narxi",
                                       min_value=Decimal("0.01")),
+            "location": parse_text(location_text, f"{row}-qator, joylashuvi",
+                                   required=False, max_length=120) if location_text else None,
         })
 
     if not rows:
@@ -325,6 +330,8 @@ def receive():
                 created_by=current_user.id,
             ))
             material.last_price = data["unit_price"]
+            if data.get("location"):
+                material.location = data["location"]
             log_action(current_user, "create", "stock_in", material.id,
                        f"{material.name} +{qty_str(data['quantity'])} {material.unit}"
                        f" ({supplier.name})")

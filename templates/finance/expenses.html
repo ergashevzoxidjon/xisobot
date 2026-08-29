@@ -21,9 +21,16 @@
     <a href="{{ url_for('finance.expenses_list') }}"
        class="btn btn-sm {% if not category %}btn-primary{% else %}btn-outline-secondary{% endif %}">Barchasi</a>
     {% for c in categories %}
+    {% if c == 'ish haqi' and has_perm('hr.view') %}
+    <a href="{{ url_for('hr.list_employees') }}" class="btn btn-sm btn-outline-secondary"
+       title="Xodimlar, oylik, avans va KPI to'lovlari — HR bo'limiga o'tish">
+      <i class="bi {{ c|category_icon }}"></i> {{ c }}
+      <i class="bi bi-box-arrow-up-right ms-1" style="font-size:.7em"></i></a>
+    {% else %}
     <a href="{{ url_for('finance.expenses_list', category=c) }}"
        class="btn btn-sm {% if c == category %}btn-primary{% else %}btn-outline-secondary{% endif %}">
       <i class="bi {{ c|category_icon }}"></i> {{ c }}</a>
+    {% endif %}
     {% endfor %}
   </form>
 </div>

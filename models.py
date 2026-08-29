@@ -69,6 +69,39 @@ EXPENSE_CATEGORIES = ["ijara", "ish haqi", "kommunal", "transport", "xomashyo",
 # bundan mustasno: u avtomatik qo'yiladi, foydalanuvchi tanlamaydi/filtrlamaydi.
 GENERAL_EXPENSE_CATEGORIES = [c for c in EXPENSE_CATEGORIES if c != EXPENSE_ORDER_CATEGORY]
 
+# HR bo'limidagi avanslar shu turkumdagi xarajat sifatida yoziladi
+# (2026-08-29, foydalanuvchi qarori).
+SALARY_EXPENSE_CATEGORY = "ish haqi"
+
+# "Ishchiga berilayotgan summa" turkumlari (2026-08-29, foydalanuvchi qarori) —
+# EmployeeAdvance.kind shulardan biri bo'ladi.
+PAYMENT_KIND_OYLIK = "oylik"
+PAYMENT_KIND_AVANS = "avans"
+PAYMENT_KIND_KPI = "kpi"
+PAYMENT_KINDS = [PAYMENT_KIND_OYLIK, PAYMENT_KIND_AVANS, PAYMENT_KIND_KPI]
+PAYMENT_KIND_LABELS = {
+    PAYMENT_KIND_OYLIK: "Oylik",
+    PAYMENT_KIND_AVANS: "Avans",
+    PAYMENT_KIND_KPI: "KPI",
+}
+
+# Manager kunlik mijozlar bilan ishlash jurnali — holatlar
+# (2026-08-29, foydalanuvchi qarori).
+LOG_STATUS_SUCCESS = "muvaffaqiyatli"
+LOG_STATUS_PENDING = "tasdiqlash_jarayonida"
+LOG_STATUS_DECLINED = "otkaz"
+LOG_STATUSES = [LOG_STATUS_SUCCESS, LOG_STATUS_PENDING, LOG_STATUS_DECLINED]
+LOG_STATUS_LABELS = {
+    LOG_STATUS_SUCCESS: "Muvaffaqiyatli",
+    LOG_STATUS_PENDING: "Tasdiqlash jarayonida",
+    LOG_STATUS_DECLINED: "Otkaz berdi",
+}
+LOG_STATUS_COLORS = {
+    LOG_STATUS_SUCCESS: "success",
+    LOG_STATUS_PENDING: "warning",
+    LOG_STATUS_DECLINED: "danger",
+}
+
 # ---------- ombor ----------
 
 STOCK_IN = "kirim"
@@ -132,6 +165,9 @@ class Client(db.Model):
     name = db.Column(db.String(150), nullable=False, index=True)
     phone = db.Column(db.String(50))
     address = db.Column(db.String(255))
+    # Mijoz qaysi korxona/tashkilotdan ekanligi — manager mijoz qo'shganda
+    # kiritadi (2026-08-29, foydalanuvchi qarori).
+    company = db.Column(db.String(150))
     notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=now_local)
     is_deleted = db.Column(db.Boolean, default=False, nullable=False, index=True)
@@ -532,6 +568,9 @@ class Material(db.Model):
     min_qty = db.Column(QTY, default=0, nullable=False)
     is_active = db.Column(db.Boolean, default=True, nullable=False, index=True)
     note = db.Column(db.String(255))
+    # Ombordagi joylashuvi — mahsulotni tezroq topish uchun
+    # (2026-08-29, foydalanuvchi qarori).
+    location = db.Column(db.String(120))
     created_at = db.Column(db.DateTime, default=now_local)
 
     moves = db.relationship(
@@ -702,6 +741,166 @@ class AuditLog(db.Model):
     created_at = db.Column(db.DateTime, default=now_local, index=True)
 
     user = db.relationship("User", foreign_keys=[user_id])
+
+
+class ManagerPlan(db.Model):
+    """Menejerga oy uchun qo'yilgan savdo plani (admin kiritadi).
+
+    Bitta menejer uchun bitta oyda faqat bitta yozuv bo'ladi — qayta
+    kiritilsa yangilanadi (managers.set_plan shu tartibda ishlaydi).
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+    year = db.Column(db.Integer, nullable=False)
+    month = db.Column(db.Integer, nullable=False)
+    amount = db.Column(MONEY, default=0, nullable=False)
+    created_at = db.Column(db.DateTime, default=now_local)
+    updated_at = db.Column(db.DateTime, default=now_local, onupdate=now_local)
+
+    manager = db.relationship("User", foreign_keys=[user_id])
+
+    __table_args__ = (
+        db.UniqueConstraint("user_id", "year", "month", name="uq_manager_plan_period"),
+    )
+
+
+class ManagerClientLog(db.Model):
+    """Manager kunlik mijozlar bilan ishlash jurnali (2026-08-29, foydalanuvchi qarori).
+
+    Manager kun davomida ishlagan har bir mijoz uchun bitta yozuv ochadi:
+      - MUVAFFAQIYATLI — mavjud mijoz tanlanadi (`client_id`), keyin oddiy
+        buyurtma yaratish jarayoniga o'tiladi (`order_id` shu yerga yoziladi,
+        ish odatdagi tusda davom etaveradi).
+      - TASDIQLASH_JARAYONIDA yoki OTKAZ — mijoz hali rasmiylashmagan yoki
+        voz kechgan: mijoz ismi, korxona nomi, telefoni va unga berilgan
+        tijoriy taklif fayli shu yerda saqlanadi.
+
+    Manager — o'z yozuvlarini kiritadi/tahrirlaydi. Boss va Ish boshqaruvchi
+    (xarajatchi) — faqat kuzatib boradi (managers.view orqali ko'radi).
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    manager_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+    log_date = db.Column(db.Date, default=today_local, nullable=False, index=True)
+    status = db.Column(db.String(30), default=LOG_STATUS_PENDING, nullable=False, index=True)
+
+    client_id = db.Column(db.Integer, db.ForeignKey("client.id"), index=True)
+    client_name = db.Column(db.String(150))
+    company_name = db.Column(db.String(150))
+    phone = db.Column(db.String(50))
+
+    proposal_filename = db.Column(db.String(255))
+    proposal_original_name = db.Column(db.String(255))
+
+    order_id = db.Column(db.Integer, db.ForeignKey("order.id"), index=True)
+    note = db.Column(db.String(255))
+
+    created_at = db.Column(db.DateTime, default=now_local)
+    updated_at = db.Column(db.DateTime, default=now_local, onupdate=now_local)
+    created_by = db.Column(db.Integer, db.ForeignKey("user.id"))
+
+    manager = db.relationship("User", foreign_keys=[manager_id])
+    client = db.relationship("Client", foreign_keys=[client_id])
+    order = db.relationship("Order", foreign_keys=[order_id])
+    creator = db.relationship("User", foreign_keys=[created_by])
+
+    @property
+    def status_label(self):
+        return LOG_STATUS_LABELS.get(self.status, self.status)
+
+    @property
+    def status_color(self):
+        return LOG_STATUS_COLORS.get(self.status, "secondary")
+
+    @property
+    def display_name(self):
+        """Ko'rsatiladigan mijoz nomi — bog'langan bo'lsa Client, aks holda qo'lda kiritilgan."""
+        if self.client:
+            return self.client.name
+        return self.client_name or "—"
+
+    @property
+    def has_proposal(self):
+        return bool(self.proposal_filename)
+
+
+class Employee(db.Model):
+    """HR kartochkasi — har bir xodim uchun (2026-08-29, foydalanuvchi qarori).
+
+    `user_id` ixtiyoriy: agar xodim menejer bo'lsa, uning tizim hisobiga
+    bog'lanadi — shu orqali KPI (managers.manager_kpi) va oylik hisobot
+    avtomatik ko'rinadi. Bog'lanmagan xodimlar (dizayner, haydovchi va h.k.)
+    ham shu jadvalda, faqat KPI ustuni bo'sh qoladi.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    full_name = db.Column(db.String(150), nullable=False, index=True)
+    phone = db.Column(db.String(50))
+    address = db.Column(db.String(255))
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), index=True)
+    # pasport nusxasi — faqat admin yuklaydi (hr.manage), qolganlari ko'radi
+    passport_filename = db.Column(db.String(255))        # diskdagi nomi
+    passport_original_name = db.Column(db.String(255))   # foydalanuvchi ko'radigan nom
+    is_active = db.Column(db.Boolean, default=True, nullable=False, index=True)
+    note = db.Column(db.String(255))
+    created_at = db.Column(db.DateTime, default=now_local)
+    created_by = db.Column(db.Integer, db.ForeignKey("user.id"))
+
+    user = db.relationship("User", foreign_keys=[user_id])
+    creator = db.relationship("User", foreign_keys=[created_by])
+
+    salaries = db.relationship(
+        "EmployeeSalary", backref="employee", lazy="select", cascade="all, delete-orphan"
+    )
+    advances = db.relationship(
+        "EmployeeAdvance", backref="employee", lazy="select", cascade="all, delete-orphan"
+    )
+
+    @property
+    def has_passport(self):
+        return bool(self.passport_filename)
+
+
+class EmployeeSalary(db.Model):
+    """Xodimga oy uchun belgilangan oylik (admin kiritadi).
+
+    `ManagerPlan` bilan bir xil naqsh — bitta xodim uchun bitta oyda
+    faqat bitta yozuv bo'ladi (qayta kiritilsa yangilanadi).
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    employee_id = db.Column(db.Integer, db.ForeignKey("employee.id"), nullable=False, index=True)
+    year = db.Column(db.Integer, nullable=False)
+    month = db.Column(db.Integer, nullable=False)
+    amount = db.Column(MONEY, default=0, nullable=False)
+    created_at = db.Column(db.DateTime, default=now_local)
+    updated_at = db.Column(db.DateTime, default=now_local, onupdate=now_local)
+
+    __table_args__ = (
+        db.UniqueConstraint("employee_id", "year", "month", name="uq_employee_salary_period"),
+    )
+
+
+class EmployeeAdvance(db.Model):
+    """Xodimga berilgan avans — bir oyda bir necha marta bo'lishi mumkin.
+
+    Har bir avans shu payt `Expense` (turkum "ish haqi") sifatida ham
+    yoziladi — pul chiqqani umumiy xarajat hisobotida ko'rinishi uchun
+    (ombor kirimi `Expense` bilan juftlangani kabi mantiq).
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    employee_id = db.Column(db.Integer, db.ForeignKey("employee.id"), nullable=False, index=True)
+    kind = db.Column(db.String(20), default=PAYMENT_KIND_AVANS, nullable=False, index=True)
+    amount = db.Column(MONEY, nullable=False)
+    paid_on = db.Column(db.Date, default=today_local, nullable=False, index=True)
+    note = db.Column(db.String(255))
+    expense_id = db.Column(db.Integer, db.ForeignKey("expense.id"), index=True)
+    created_at = db.Column(db.DateTime, default=now_local)
+    created_by = db.Column(db.Integer, db.ForeignKey("user.id"))
+
+    creator = db.relationship("User", foreign_keys=[created_by])
+    expense = db.relationship("Expense", foreign_keys=[expense_id])
+
+    @property
+    def kind_label(self):
+        return PAYMENT_KIND_LABELS.get(self.kind, self.kind)
 
 
 def log_action(user, action, entity=None, entity_id=None, detail=None):

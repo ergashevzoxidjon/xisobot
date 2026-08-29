@@ -15,7 +15,7 @@ from werkzeug.utils import secure_filename
 from extensions import db
 from models import (
     Order, OrderItem, Client, Payment, OrderType, OrderFile, CompanySettings,
-    log_action, can_transition,
+    ManagerClientLog, log_action, can_transition,
     ORDER_STATUSES, ALLOWED_TRANSITIONS, STATUS_CANCELLED, ZERO,
 )
 from notifications import notify_new_order, notify_payment
@@ -135,6 +135,7 @@ def _client_from_form(form):
     client = Client(
         name=name,
         phone=parse_text(form.get("client_phone"), "Telefon", required=False, max_length=50),
+        company=parse_text(form.get("client_company"), "Korxona", required=False, max_length=150),
     )
     db.session.add(client)
     db.session.flush()
@@ -195,7 +196,9 @@ def search_orders():
     q = (request.args.get("q") or "").strip()
 
     query = (
-        Order.query.options(joinedload(Order.client), selectinload(Order.items))
+        Order.query.options(
+            joinedload(Order.client), selectinload(Order.items), joinedload(Order.creator)
+        )
         .join(Client)
         .filter(Order.is_deleted.is_(False))
     )
@@ -215,6 +218,7 @@ def search_orders():
             "client": o.client.name if o.client else "",
             "summary": o.items_summary,
             "total": money_str(o.total_price),
+            "creator": o.creator.display_name if o.creator else "",
         }
         for o in rows
     ])
@@ -233,6 +237,28 @@ def new_order():
         src = db.session.get(Order, copy_from)
         if src:
             prefill = src
+
+    # Mijoz oldindan tanlangan holda kelish (masalan, Manager xisobotidagi
+    # "kunlik mijozlar" jurnalidan "Muvaffaqiyatli" deb belgilangach —
+    # 2026-08-29, foydalanuvchi qarori).
+    prefill_client_id = ""
+    prefill_client_name = ""
+    if request.method == "GET" and not prefill:
+        pid = request.args.get("client_id", type=int)
+        if pid:
+            pc = db.session.get(Client, pid)
+            if pc:
+                prefill_client_id = pc.id
+                prefill_client_name = pc.name
+        elif request.args.get("client_name"):
+            # Nomi bor, lekin hali bazadagi mijozga bog'lanmagan (masalan,
+            # menejer jurnalida qo'lda kiritilgan mijoz) — matn to'ldiriladi,
+            # forma o'zi mavjud mijozni topadi yoki yangisini yaratadi.
+            prefill_client_name = request.args.get("client_name")
+
+    # Manager kunlik jurnalidagi yozuv shu buyurtma orqali "yopiladi" —
+    # buyurtma saqlangach shu yozuvga order_id yoziladi (2026-08-29).
+    manager_log_id = request.args.get("manager_log_id", type=int) if request.method == "GET" else None
 
     def back_to_form():
         return render_template(
@@ -283,6 +309,17 @@ def new_order():
 
         log_action(current_user, "create", "order", o.id,
                    f"{o.order_number} yaratildi ({len(items)} qator)")
+
+        # Manager kunlik jurnalidan kelgan bo'lsa — shu yozuv shu buyurtma
+        # bilan "yopiladi" (2026-08-29, foydalanuvchi qarori).
+        posted_log_id = request.form.get("manager_log_id", type=int)
+        if posted_log_id:
+            log_entry = db.session.get(ManagerClientLog, posted_log_id)
+            if log_entry:
+                log_entry.order_id = o.id
+                if not log_entry.client_id:
+                    log_entry.client_id = client.id
+
         db.session.commit()
         notify_new_order(o)
         if client_created:
@@ -293,6 +330,8 @@ def new_order():
     return render_template(
         "orders/form.html", order_types=order_types,
         order=None, prefill=prefill, form=None,
+        prefill_client_id=prefill_client_id, prefill_client_name=prefill_client_name,
+        manager_log_id=manager_log_id,
     )
 
 

@@ -48,6 +48,8 @@ def create_app(config_object=Config):
     from stock import stock_bp
     from suppliers import suppliers_bp
     from settings import settings_bp
+    from managers import managers_bp
+    from hr import hr_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
@@ -57,6 +59,8 @@ def create_app(config_object=Config):
     app.register_blueprint(stock_bp)
     app.register_blueprint(suppliers_bp)
     app.register_blueprint(settings_bp)
+    app.register_blueprint(managers_bp)
+    app.register_blueprint(hr_bp)
 
     register_error_handlers(app)
 
