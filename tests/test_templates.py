@@ -57,7 +57,7 @@ for tf in template_files:
     for m in re.finditer(r"url_for\(\s*'([\w.]+)'", content):
         referenced.add((m.group(1), os.path.relpath(tf, f"{APP}/templates")))
 
-bad = [(ep, tf) for ep, tf in referenced if ep not in endpoints]
+bad = [(ep, tf) for ep, tf in referenced if ep not in endpoints and ep != "static"]
 if bad:
     for ep, tf in sorted(bad):
         fails.append(f"MAVJUD BO'LMAGAN endpoint '{ep}' ({tf})")
@@ -131,6 +131,8 @@ if _perm_ns["ROLE_LABELS"] != ROLE_LABELS:
 
 
 def fake_url_for(endpoint, **kw):
+    if endpoint == "static":
+        return f"/static/{kw.get('filename', '')}"
     if endpoint not in endpoints:
         raise AssertionError(f"NOMA'LUM ENDPOINT: {endpoint}")
     return f"/_/{endpoint}"
