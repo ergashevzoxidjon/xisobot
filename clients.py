@@ -2,6 +2,7 @@ from flask import (
     Blueprint, render_template, request, redirect, url_for, flash, current_app, jsonify,
 )
 from flask_login import login_required, current_user
+from sqlalchemy import or_
 from sqlalchemy.orm import joinedload
 
 from extensions import db
@@ -31,6 +32,17 @@ def list_clients():
     page = request.args.get("page", 1, type=int)
 
     query = Client.query.filter(Client.is_deleted.is_(False))
+    # Bir nechta menejer bo'lishi mumkin — har biri faqat o'zi qo'shgan
+    # yoki o'zi buyurtma bergan mijozlarni ko'radi (2026-09-03, foydalanuvchi
+    # qarori). Faqat "created_by" bo'yicha cheklash noto'g'ri bo'lardi —
+    # bu ustun yangi qo'shilgani uchun eski mijozlarning barchasida bo'sh,
+    # va ular boshqa menejer orqali ham buyurtma berishi mumkin edi;
+    # shuning uchun "shu menejer bilan buyurtmasi bor" mijozlar ham qo'shiladi.
+    if current_user.role == "menejer":
+        query = query.filter(or_(
+            Client.created_by == current_user.id,
+            Client.orders.any(Order.created_by == current_user.id),
+        ))
     if q:
         query = query.filter(Client.name.ilike(f"%{q}%"))
 
