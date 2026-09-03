@@ -66,12 +66,24 @@ def dashboard():
 
         supplier_debt = total_supplier_debt()
 
-    total_orders = Order.query.filter(
+    # Bir nechta menejer bo'lishi mumkin — "Jami"/"Faol buyurtmalar"
+    # kartochkalari ham har biriga faqat o'zinikini ko'rsatishi kerak
+    # (2026-09-03, foydalanuvchi qarori) — Buyurtmalar ro'yxatidagi filtr
+    # bilan bir xil qoida. Admin/boss/xarajatchi — kompaniya bo'yicha umumiy
+    # sonni ko'rishda qoladi (ularga umumiy nazorat kerak).
+    own_orders_only = current_user.role == "menejer"
+
+    total_orders_query = Order.query.filter(
         Order.status != STATUS_CANCELLED, Order.is_deleted.is_(False)
-    ).count()
-    active_orders = Order.query.filter(
+    )
+    active_orders_query = Order.query.filter(
         Order.status.in_(ACTIVE_STATUSES), Order.is_deleted.is_(False)
-    ).count()
+    )
+    if own_orders_only:
+        total_orders_query = total_orders_query.filter(Order.created_by == current_user.id)
+        active_orders_query = active_orders_query.filter(Order.created_by == current_user.id)
+    total_orders = total_orders_query.count()
+    active_orders = active_orders_query.count()
     total_clients = Client.query.filter(Client.is_deleted.is_(False)).count()
 
     # ---- diqqat talab qiladigan holatlar (faqat admin ko'radi) ----
