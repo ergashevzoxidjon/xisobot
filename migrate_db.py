@@ -449,6 +449,11 @@ def main():
         # 2026-08-30, foydalanuvchi qarori. ---
         add_column("employee", "birth_date DATE", "birth_date")
 
+        # --- v15: mijozni kim qo'shgani — menejer qidiruv natijasida
+        # ko'radi (2026-09-03, foydalanuvchi qarori). Eski mijozlarda
+        # bo'sh qoladi (kim qo'shgani noma'lum). ---
+        add_column("client", "created_by INTEGER", "created_by")
+
         migrate_paid_amount()
         ensure_upload_folder(app)
 

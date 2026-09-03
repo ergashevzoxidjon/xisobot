@@ -188,8 +188,12 @@ class Client(db.Model):
     created_at = db.Column(db.DateTime, default=now_local)
     is_deleted = db.Column(db.Boolean, default=False, nullable=False, index=True)
     deleted_at = db.Column(db.DateTime)
+    # Mijozni kim bazaga qo'shgani — menejer qidiruvda ko'radi, bir xil
+    # mijozni ikkinchi menejer ham qo'shib qo'ymasligi uchun (2026-09-03).
+    created_by = db.Column(db.Integer, db.ForeignKey("user.id"))
 
     orders = db.relationship("Order", backref="client", lazy="select")
+    creator = db.relationship("User", foreign_keys=[created_by])
 
     # Ro'yxatlarda statistika SQL agregat orqali oldindan hisoblanadi
     # (queries.clients_with_stats). Bo'lmasa — yozuvlar bo'ylab hisoblanadi.

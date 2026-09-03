@@ -304,6 +304,7 @@ def _resolve_client_from_form(form):
         name=name,
         phone=parse_text(form.get("client_phone"), "Telefon", required=True, max_length=50),
         company=parse_text(form.get("client_company"), "Korxona", required=True, max_length=150),
+        created_by=current_user.id,
     )
     db.session.add(client)
     db.session.flush()

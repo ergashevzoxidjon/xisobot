@@ -2,6 +2,7 @@ from flask import (
     Blueprint, render_template, request, redirect, url_for, flash, current_app, jsonify,
 )
 from flask_login import login_required, current_user
+from sqlalchemy.orm import joinedload
 
 from extensions import db
 from models import Client, Order, log_action, STATUS_CANCELLED, ZERO
@@ -65,7 +66,8 @@ def search_clients():
         return jsonify([])
 
     rows = (
-        Client.query.filter(
+        Client.query.options(joinedload(Client.creator))
+        .filter(
             Client.is_deleted.is_(False),
             Client.name.ilike(f"%{q}%"),
         )
@@ -74,7 +76,11 @@ def search_clients():
         .all()
     )
     return jsonify([
-        {"id": c.id, "name": c.name, "phone": c.phone or ""} for c in rows
+        {
+            "id": c.id, "name": c.name, "phone": c.phone or "",
+            "creator": c.creator.display_name if c.creator else "",
+        }
+        for c in rows
     ])
 
 
@@ -111,7 +117,7 @@ def new_client():
             flash("Bu nomdagi mijoz allaqachon mavjud.", "warning")
             return render_template("clients/form.html", client=None, form=request.form)
 
-        c = Client(**data)
+        c = Client(created_by=current_user.id, **data)
         db.session.add(c)
         db.session.flush()
         log_action(current_user, "create", "client", c.id, c.name)

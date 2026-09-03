@@ -137,6 +137,7 @@ def _client_from_form(form):
         name=name,
         phone=parse_text(form.get("client_phone"), "Telefon", required=False, max_length=50),
         company=parse_text(form.get("client_company"), "Korxona", required=False, max_length=150),
+        created_by=current_user.id,
     )
     db.session.add(client)
     db.session.flush()
@@ -152,6 +153,23 @@ def _order_common_fields(form):
     }
 
 
+def _own_orders_only():
+    """Bir nechta menejer bo'lishi mumkin — har biri faqat o'zi yaratgan
+    buyurtmalarni ko'rishi/boshqarishi kerak (2026-09-03, foydalanuvchi
+    qarori). Admin va xarajatchi (ish boshqaruvchi) — hammasini ko'radi,
+    chunki ularga umumiy nazorat kerak."""
+    return current_user.role == "menejer"
+
+
+def _guard_order_owner(o):
+    """Menejer boshqa menejerning buyurtmasiga kira olmaydi (to'g'ridan-to'g'ri
+    URL orqali ham) — ro'yxatdagi filtr bilan bir xil qoidani mustahkamlaydi."""
+    if _own_orders_only() and o.created_by != current_user.id:
+        flash("Bu buyurtma sizga tegishli emas.", "danger")
+        return redirect(url_for("orders.list_orders"))
+    return None
+
+
 @orders_bp.route("/")
 @login_required
 @permission_required("orders.view")
@@ -161,6 +179,8 @@ def list_orders():
     page = request.args.get("page", 1, type=int)
 
     query = Order.query.join(Client).filter(Order.is_deleted.is_(False))
+    if _own_orders_only():
+        query = query.filter(Order.created_by == current_user.id)
     if status and status in ORDER_STATUSES:
         query = query.filter(Order.status == status)
     if q:
@@ -236,7 +256,7 @@ def new_order():
     copy_from = request.args.get("copy", type=int)
     if request.method == "GET" and copy_from:
         src = db.session.get(Order, copy_from)
-        if src:
+        if src and not (_own_orders_only() and src.created_by != current_user.id):
             prefill = src
 
     # Mijoz oldindan tanlangan holda kelish (masalan, Manager xisobotidagi
@@ -340,6 +360,9 @@ def new_order():
 @permission_required("orders.edit")
 def edit_order(order_id):
     o = Order.query.get_or_404(order_id)
+    guard = _guard_order_owner(o)
+    if guard:
+        return guard
     order_types = OrderType.query.filter_by(is_active=True).order_by(OrderType.name).all()
 
     def back_to_form(keep_form=True):
@@ -413,6 +436,9 @@ def edit_order(order_id):
 @permission_required("orders.view")
 def order_detail(order_id):
     o = Order.query.options(joinedload(Order.client)).get_or_404(order_id)
+    guard = _guard_order_owner(o)
+    if guard:
+        return guard
     payments = sorted(o.payments, key=lambda p: (p.paid_on, p.id), reverse=True)
     # faqat shu holatdan o'tish mumkin bo'lganlarini ko'rsatamiz
     allowed = [o.status] + [s for s in ALLOWED_TRANSITIONS.get(o.status, []) if s != o.status]
@@ -427,6 +453,9 @@ def order_detail(order_id):
 @permission_required("orders.view")
 def invoice(order_id):
     o = Order.query.options(joinedload(Order.client)).get_or_404(order_id)
+    guard = _guard_order_owner(o)
+    if guard:
+        return guard
     return render_template(
         "orders/invoice.html", order=o, today=today_local(),
         company=CompanySettings.get(),
@@ -438,6 +467,9 @@ def invoice(order_id):
 @permission_required("orders.manage")
 def update_status(order_id):
     o = Order.query.get_or_404(order_id)
+    guard = _guard_order_owner(o)
+    if guard:
+        return guard
     try:
         new_status = parse_choice(request.form.get("status"), "Holat", ORDER_STATUSES)
     except ValidationError as e:
@@ -472,6 +504,9 @@ def update_status(order_id):
 @permission_required("orders.manage")
 def add_payment(order_id):
     o = Order.query.get_or_404(order_id)
+    guard = _guard_order_owner(o)
+    if guard:
+        return guard
 
     if o.status == STATUS_CANCELLED:
         flash("Bekor qilingan buyurtmaga to'lov qo'shib bo'lmaydi.", "danger")
@@ -519,6 +554,9 @@ def add_payment(order_id):
 @permission_required("orders.delete")
 def delete_payment(payment_id):
     p = Payment.query.get_or_404(payment_id)
+    guard = _guard_order_owner(p.order)
+    if guard:
+        return guard
     order_id = p.order_id
     log_action(current_user, "payment_delete", "order", order_id, f"{p.amount} so'm to'lov o'chirildi")
     db.session.delete(p)
@@ -582,6 +620,9 @@ def deleted_orders():
 @permission_required("orders.edit")
 def upload_file(order_id):
     o = Order.query.get_or_404(order_id)
+    guard = _guard_order_owner(o)
+    if guard:
+        return guard
     uploaded = request.files.get("file")
 
     if not uploaded or not uploaded.filename:
@@ -622,6 +663,9 @@ def upload_file(order_id):
 @permission_required("orders.view")
 def download_file(file_id):
     f = OrderFile.query.get_or_404(file_id)
+    guard = _guard_order_owner(f.order)
+    if guard:
+        return guard
     return send_from_directory(
         current_app.config["UPLOAD_FOLDER"],
         f.filename,

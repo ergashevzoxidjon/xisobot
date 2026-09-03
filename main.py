@@ -83,9 +83,14 @@ def dashboard():
         old_debts = old_debt_orders(today - timedelta(days=OVERDUE_DEBT_DAYS))
         alerts_count = len(overdue_list) + len(soon_list) + len(old_debts)
 
+    # Bir nechta menejer bo'lishi mumkin — har biri faqat o'zi yaratgan
+    # buyurtmalarni ko'rishi kerak (2026-09-03, foydalanuvchi qarori),
+    # aks holda bu yerdagi havola /buyurtmalar bo'limida bloklanadi.
+    recent_orders_query = Order.query.filter(Order.is_deleted.is_(False))
+    if current_user.role == "menejer":
+        recent_orders_query = recent_orders_query.filter(Order.created_by == current_user.id)
     recent_orders = eager_orders(
-        Order.query.filter(Order.is_deleted.is_(False))
-        .order_by(Order.created_at.desc()).limit(8)
+        recent_orders_query.order_by(Order.created_at.desc()).limit(8)
     ).all()
 
     # ---- xodimlar tug'ilgan kuni eslatmasi (faqat Boss ko'radi) ----
