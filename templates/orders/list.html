@@ -29,9 +29,19 @@
         {% endfor %}
       </select>
     </div>
+    {% if managers %}
+    <div class="col-md-3">
+      <select name="manager_id" class="form-select" onchange="this.form.submit()">
+        <option value="">Barcha menejerlar</option>
+        {% for m in managers %}
+        <option value="{{ m.id }}" {% if manager_id == m.id %}selected{% endif %}>{{ m.display_name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
     <div class="col-md-auto">
       <button class="btn btn-outline-primary"><i class="bi bi-funnel"></i> Filtrlash</button>
-      {% if q or status %}
+      {% if q or status or manager_id %}
       <a href="{{ url_for('orders.list_orders') }}" class="btn btn-link text-muted">Tozalash</a>
       {% endif %}
     </div>
@@ -45,7 +55,9 @@
 <thead><tr>
   <th>№</th><th>Mijoz</th><th>Turi</th><th>Kim yaratdi</th>
   <th class="text-end">Summa</th><th class="text-end">To'langan</th><th class="text-end">Qolgan</th>
-  <th>Holat</th><th>To'lov</th><th>Muddat</th>
+  <th>Holat</th><th>To'lov</th>
+  {% if has_perm('expenses.view') %}<th>Xarajat</th>{% endif %}
+  <th>Muddat</th>
 </tr></thead>
 <tbody>
 {% for o in orders %}
@@ -72,6 +84,16 @@
   </td>
   <td><span class="badge bg-{{ o.status|status_color }}"><i class="bi {{ o.status|status_icon }} me-1"></i>{{ o.status }}</span></td>
   <td><span class="badge bg-{{ o.payment_status|payment_color }}">{{ o.payment_status }}</span></td>
+  {% if has_perm('expenses.view') %}
+  <td>
+    {% if o.expenses_total > 0 %}
+    <span class="badge bg-success-subtle text-success border border-success-subtle">
+      <i class="bi bi-check-circle"></i> kiritilgan</span>
+    {% else %}
+    <span class="badge bg-light text-muted border">kiritilmagan</span>
+    {% endif %}
+  </td>
+  {% endif %}
   <td class="num">
     {% if o.is_overdue %}
       <span class="text-danger fw-semibold" title="Muddati o'tgan"><i class="bi bi-exclamation-circle"></i> {{ o.deadline|date_uz }}</span>
@@ -88,7 +110,7 @@
 </tbody>
 </table>
 </div>
-{{ pager(pagination, 'orders.list_orders', {'q': q, 'status': status}) }}
+{{ pager(pagination, 'orders.list_orders', {'q': q, 'status': status, 'manager_id': manager_id or ''}) }}
 {% else %}
 <div class="empty-state"><i class="bi bi-receipt"></i><p>Buyurtma topilmadi</p></div>
 {% endif %}

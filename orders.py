@@ -15,9 +15,9 @@ from werkzeug.utils import secure_filename
 from extensions import db
 from models import (
     Order, OrderItem, Client, Payment, OrderType, OrderFile, CompanySettings,
-    ClientPipelineCard, log_action, can_transition,
-    ORDER_STATUSES, ALLOWED_TRANSITIONS, STATUS_CANCELLED, ZERO,
-    ORDER_PAYMENT_METHODS,
+    ClientPipelineCard, User, log_action, can_transition,
+    ORDER_STATUSES, ALLOWED_TRANSITIONS, STATUS_CANCELLED, STATUS_PRODUCTION,
+    STATUS_READY, ZERO, ORDER_PAYMENT_METHODS,
 )
 from notifications import notify_new_order, notify_payment
 from permissions import permission_required, has_perm
@@ -28,6 +28,13 @@ from utils import (
 )
 
 orders_bp = Blueprint("orders", __name__, url_prefix="/buyurtmalar")
+
+# Sahifa bir necha soniya "qotib qolganda" menejer tugmani qayta bosib,
+# bitta to'lovni ikki marta yuborib yuborishi mumkin edi (2026-09-03,
+# foydalanuvchi xabari). Shu buyurtmaga oxirgi to'lov shu vaqt ichida
+# yozilgan bo'lsa — keyingisi bloklanadi (frontendda tugma ham darhol
+# o'chiriladi, lekin bu — asosiy, server tomonidagi himoya).
+PAYMENT_COOLDOWN_SECONDS = 60
 
 
 def next_order_number():
@@ -177,10 +184,18 @@ def list_orders():
     status = request.args.get("status", "")
     q = (request.args.get("q") or "").strip()
     page = request.args.get("page", 1, type=int)
+    # Bir nechta menejer bo'lganda admin/xarajatchi hammasini ko'rgani
+    # uchun, kerakli menejerni tezroq topish uchun filtr (2026-09-05,
+    # foydalanuvchi qarori). Menejerning o'ziga bu filtr kerak emas — u
+    # baribir faqat o'zinikini ko'radi.
+    show_manager_filter = not _own_orders_only()
+    manager_id = request.args.get("manager_id", type=int) if show_manager_filter else None
 
     query = Order.query.join(Client).filter(Order.is_deleted.is_(False))
     if _own_orders_only():
         query = query.filter(Order.created_by == current_user.id)
+    elif manager_id:
+        query = query.filter(Order.created_by == manager_id)
     if status and status in ORDER_STATUSES:
         query = query.filter(Order.status == status)
     if q:
@@ -196,6 +211,14 @@ def list_orders():
     pagination = query.paginate(
         page=page, per_page=current_app.config["PER_PAGE"], error_out=False
     )
+
+    managers = []
+    if show_manager_filter:
+        managers = (
+            User.query.filter_by(role="menejer")
+            .order_by(User.username).all()
+        )
+
     return render_template(
         "orders/list.html",
         orders=pagination.items,
@@ -203,6 +226,8 @@ def list_orders():
         statuses=ORDER_STATUSES,
         status=status,
         q=q,
+        managers=managers,
+        manager_id=manager_id,
     )
 
 
@@ -441,7 +466,15 @@ def order_detail(order_id):
         return guard
     payments = sorted(o.payments, key=lambda p: (p.paid_on, p.id), reverse=True)
     # faqat shu holatdan o'tish mumkin bo'lganlarini ko'rsatamiz
-    allowed = [o.status] + [s for s in ALLOWED_TRANSITIONS.get(o.status, []) if s != o.status]
+    possible = [s for s in ALLOWED_TRANSITIONS.get(o.status, []) if s != o.status]
+    if has_perm("orders.manage"):
+        allowed = [o.status] + possible
+    elif has_perm("orders.status") and o.status == STATUS_PRODUCTION and STATUS_READY in possible:
+        # Ish boshqaruvchi — faqat "ishlab chiqarishda" -> "yetkazish uchun
+        # tayyor" o'tishini ko'radi (2026-09-05, foydalanuvchi qarori).
+        allowed = [o.status, STATUS_READY]
+    else:
+        allowed = [o.status]
     return render_template(
         "orders/detail.html", order=o, payments=payments, statuses=allowed,
         order_payment_methods=ORDER_PAYMENT_METHODS,
@@ -464,12 +497,23 @@ def invoice(order_id):
 
 @orders_bp.route("/<int:order_id>/holat", methods=["POST"])
 @login_required
-@permission_required("orders.manage")
+@permission_required("orders.view")
 def update_status(order_id):
     o = Order.query.get_or_404(order_id)
     guard = _guard_order_owner(o)
     if guard:
         return guard
+
+    # To'liq huquq — admin/menejer (orders.manage). Ish boshqaruvchi
+    # (orders.status) esa FAQAT "ishlab chiqarishda" -> "yetkazish uchun
+    # tayyor" o'tishini qila oladi — ishlab chiqarish tugaganini birinchi
+    # u biladi (2026-09-05, foydalanuvchi qarori).
+    if not has_perm("orders.manage"):
+        if not (has_perm("orders.status") and o.status == STATUS_PRODUCTION
+                and request.form.get("status") == STATUS_READY):
+            flash("Bu bo'limga kirish huquqingiz yo'q.", "danger")
+            return redirect(url_for("orders.order_detail", order_id=order_id))
+
     try:
         new_status = parse_choice(request.form.get("status"), "Holat", ORDER_STATUSES)
     except ValidationError as e:
@@ -526,6 +570,25 @@ def add_payment(order_id):
     if paid_on > today_local():
         flash("To'lov sanasi kelajakda bo'lishi mumkin emas.", "danger")
         return redirect(url_for("orders.order_detail", order_id=order_id))
+
+    # Sahifa bir necha soniya qotib qolganda ikkinchi marta bosilib,
+    # bitta to'lov ikki marta yozilib qolmasligi uchun — shu buyurtmaga
+    # so'nggi to'lovdan beri kamida 1 daqiqa o'tgan bo'lishi kerak.
+    last_payment = (
+        Payment.query.filter_by(order_id=o.id)
+        .order_by(Payment.created_at.desc())
+        .first()
+    )
+    if last_payment and last_payment.created_at:
+        elapsed = (now_local() - last_payment.created_at).total_seconds()
+        if elapsed < PAYMENT_COOLDOWN_SECONDS:
+            wait = int(PAYMENT_COOLDOWN_SECONDS - elapsed) + 1
+            flash(
+                f"Bu buyurtmaga hozirgina to'lov kiritildi. Takroriy (bexosdan "
+                f"ikki marta yuborilgan) to'lovning oldini olish uchun yana "
+                f"{wait} soniya kuting va qayta urinib ko'ring.", "warning",
+            )
+            return redirect(url_for("orders.order_detail", order_id=order_id))
 
     # Qarzdan ko'p to'lash mumkin — ortiqchasi mijozning avansi (zapas puli)
     # bo'lib qoladi. Faqat ogohlantiramiz, bloklamaymiz.

@@ -157,6 +157,69 @@ def edit_material(material_id):
                            units=STOCK_UNITS, form=None)
 
 
+@stock_bp.route("/mahsulot/<int:material_id>/tuzatish", methods=["POST"])
+@login_required
+@permission_required("stock.adjust")
+def adjust_material(material_id):
+    """Qoldiq/narxni to'g'ridan-to'g'ri tuzatish — jismoniy inventarizatsiya
+    kabi hollarda (2026-09-03, foydalanuvchi qarori). Faqat admin.
+
+    Oddiy kirim/chiqimdan farqli — bu YANGI XARAJAT YOZMAYDI (haqiqiy xarid
+    emas, faqat bazadagi raqamni haqiqiy qoldiqqa moslashtirish). Qoldiq
+    farqi bo'lsa muvozanatlash uchun StockMove yoziladi (kirim/chiqim kabi
+    hisoblansin, lekin `expense_id` bo'sh qoladi).
+    """
+    m = Material.query.get_or_404(material_id)
+
+    # parse_qty/parse_money bo'sh matnda ZERO qaytaradi (None emas) —
+    # "bo'sh qoldirilgan" va "0 kiritilgan" holatlarini ajratish uchun
+    # avval xom matnni o'zimiz tekshiramiz.
+    raw_qty = (request.form.get("target_quantity") or "").strip()
+    raw_price = (request.form.get("target_price") or "").strip()
+    try:
+        new_qty = parse_qty(raw_qty, "Yangi qoldiq") if raw_qty else None
+        new_price = parse_money(raw_price, "Yangi narx") if raw_price else None
+    except ValidationError as e:
+        flash(str(e), "danger")
+        return redirect(url_for("stock.material_detail", material_id=m.id))
+
+    if new_qty is None and new_price is None:
+        flash("Yangi qoldiq yoki narxdan birini kiriting.", "danger")
+        return redirect(url_for("stock.material_detail", material_id=m.id))
+
+    changes = []
+
+    if new_qty is not None:
+        current_qty = m.quantity
+        delta = to_qty(new_qty) - current_qty
+        if delta != QTY_ZERO:
+            kind = STOCK_IN if delta > 0 else STOCK_OUT
+            db.session.add(StockMove(
+                material_id=m.id, kind=kind, quantity=abs(delta),
+                unit_price=new_price if new_price is not None else m.last_price,
+                moved_on=today_local(),
+                note="Tuzatish (inventarizatsiya) — admin",
+                created_by=current_user.id,
+            ))
+            changes.append(
+                f"qoldiq {qty_str(current_qty)} -> {qty_str(new_qty)} {m.unit}"
+            )
+
+    if new_price is not None and new_price != m.last_price:
+        changes.append(f"narx {money_str(m.last_price)} -> {money_str(new_price)}")
+        m.last_price = new_price
+
+    if not changes:
+        flash("O'zgarish yo'q — qiymatlar allaqachon shunday.", "info")
+        return redirect(url_for("stock.material_detail", material_id=m.id))
+
+    log_action(current_user, "adjust", "material", m.id,
+               f"{m.name}: " + ", ".join(changes))
+    db.session.commit()
+    flash("Tuzatildi: " + ", ".join(changes) + ".", "success")
+    return redirect(url_for("stock.material_detail", material_id=m.id))
+
+
 @stock_bp.route("/<int:material_id>")
 @login_required
 @permission_required("stock.view")

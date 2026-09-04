@@ -32,9 +32,19 @@ ROLE_DESCRIPTIONS = {
 
 PERMISSIONS = {
     "orders.view", "orders.create", "orders.edit", "orders.manage", "orders.delete",
+    # "ishlab chiqarishda" -> "yetkazish uchun tayyor" o'tishi uchun —
+    # ish boshqaruvchi ishlab chiqarish tugaganini birinchi biladi
+    # (2026-09-05, foydalanuvchi qarori). orders.manage'dan farqli — bu
+    # faqat shu bitta o'tishga ruxsat beradi, to'lov/bekor qilishga emas.
+    "orders.status",
     "clients.view", "clients.create", "clients.delete",
     "expenses.view", "expenses.create",
     "stock.view", "stock.manage",
+    # Ombordagi mahsulotning joriy qoldig'i va narxini to'g'ridan-to'g'ri
+    # tuzatish (masalan, jismoniy inventarizatsiyadan keyin) — bu oddiy
+    # kirim/chiqimdan farqli, moliyaviy izsiz o'tkaziladigan operatsiya,
+    # shuning uchun faqat admin (2026-09-03, foydalanuvchi qarori).
+    "stock.adjust",
     "suppliers.view", "suppliers.manage",
     "reports.view", "reports.export",
     "managers.view", "managers.manage",
@@ -57,7 +67,7 @@ ROLE_PERMISSIONS = {
     # taminotchilar bilan ishlaydi (qarz-to'lov). Moliyaviy hisobot va
     # tahlilni ham ko'radi (2026-08-27, foydalanuvchi qarori) — buyurtmalar
     # rentabelligi va boshqa hisobotlarni kuzatishi kerak.
-    "xarajatchi": {"expenses.view", "expenses.create", "orders.view",
+    "xarajatchi": {"expenses.view", "expenses.create", "orders.view", "orders.status",
                    "stock.view", "stock.manage",
                    "suppliers.view", "suppliers.manage",
                    "reports.view",

@@ -54,6 +54,35 @@
   </div>
 </div>
 
+{% if has_perm('stock.adjust') %}
+<div class="card p-3 mb-3 no-print">
+  <h6 class="fw-bold mb-1"><i class="bi bi-sliders me-1 text-muted"></i> Qoldiq/narxni tuzatish</h6>
+  <div class="form-text mb-2">
+    Jismoniy sanoqdan keyin farq chiqsa shu yerdan to'g'irlang. Bu — oddiy
+    kirim emas, yangi xarajat yozilmaydi, faqat raqam moslashtiriladi.
+  </div>
+  <form method="post" action="{{ url_for('stock.adjust_material', material_id=material.id) }}"
+        onsubmit="if(this.dataset.sent)return false; this.dataset.sent='1';">
+    {{ csrf() }}
+    <div class="row g-2">
+      <div class="col-sm-4">
+        <label class="form-label small text-muted">Yangi qoldiq ({{ material.unit }})</label>
+        <input type="number" step="0.001" min="0" name="target_quantity" class="form-control"
+               placeholder="{{ material.quantity|qty }}">
+      </div>
+      <div class="col-sm-4">
+        <label class="form-label small text-muted">Yangi narx</label>
+        <input type="number" step="0.01" min="0" name="target_price" class="form-control"
+               placeholder="{{ material.last_price|uzs }}">
+      </div>
+      <div class="col-sm-4 d-flex align-items-end">
+        <button class="btn btn-outline-primary w-100"><i class="bi bi-check-lg"></i> Tuzatish</button>
+      </div>
+    </div>
+  </form>
+</div>
+{% endif %}
+
 <div class="card p-3">
   <h6 class="fw-bold mb-3"><i class="bi bi-list-check me-1 text-muted"></i> Kirim va chiqim tarixi</h6>
   {% if moves %}

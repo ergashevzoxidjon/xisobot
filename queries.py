@@ -37,12 +37,16 @@ def eager_orders(query):
     Shablondagi `o.client.name`, `o.paid_amount_calc` o'zgarishsiz ishlaydi.
     `o.creator` ham shu yerda — ro'yxatda kim yaratganini ko'rsatish uchun
     (2026-08-30, foydalanuvchi qarori).
+    `expenses`/`stock_moves` — `o.expenses_total` (xarajat kiritilganmi
+    belgisi, ro'yxatda) N+1 qilmasligi uchun (2026-09-05).
     """
     return query.options(
         joinedload(Order.client),
         joinedload(Order.creator),
         selectinload(Order.payments),
         selectinload(Order.items),
+        selectinload(Order.expenses),
+        selectinload(Order.stock_moves),
     )
 
 

@@ -86,9 +86,10 @@ if not any("CSRF YO'Q" in f for f in fails):
 # ---------------------------------------------------------------- 3. render
 ROLE_PERMISSIONS = {
     "admin": {"orders.view", "orders.create", "orders.edit", "orders.manage", "orders.delete",
+              "orders.status",
               "clients.view", "clients.create", "clients.delete",
               "expenses.view", "expenses.create",
-              "stock.view", "stock.manage",
+              "stock.view", "stock.manage", "stock.adjust",
               "suppliers.view", "suppliers.manage",
               "reports.view", "reports.export",
               "managers.view", "managers.manage",
@@ -97,7 +98,7 @@ ROLE_PERMISSIONS = {
     "menejer": {"orders.view", "orders.create", "orders.edit", "orders.manage",
                 "clients.view", "clients.create",
                 "managers.view"},
-    "xarajatchi": {"expenses.view", "expenses.create", "orders.view",
+    "xarajatchi": {"expenses.view", "expenses.create", "orders.view", "orders.status",
                    "stock.view", "stock.manage",
                    "suppliers.view", "suppliers.manage",
                    "reports.view",
@@ -383,6 +384,7 @@ CONTEXTS = {
         statuses=["buyurtma yaratildi", "to'lov qilish jarayonida", "dizayn jarayonida",
                   "ishlab chiqarishda", "yetkazish uchun tayyor", "maxsulot yetkazildi",
                   "bekor qilindi"], status="", q="",
+        managers=[], manager_id=None,
     ),
     "orders/form.html": dict(order_types=[order_type], order=None,
                              prefill=None, form=None),
@@ -605,7 +607,7 @@ PREPAID_CONTEXTS = {
                                        "dizayn jarayonida", "ishlab chiqarishda",
                                        "yetkazish uchun tayyor", "maxsulot yetkazildi",
                                        "bekor qilindi"],
-                             status="", q=""),
+                             status="", q="", managers=[], manager_id=None),
     "clients/list.html": dict(clients=[prepaid_client],
                               pagination=FakePagination([prepaid_client], 1), q=""),
     "clients/detail.html": dict(
@@ -636,12 +638,13 @@ EXPECTED_MENU = {
     # so'rov) — reports.view bilan bog'liq emas. "Manager xisoboti"dan keyin
     # barcha rollarga (managers.view bo'lgani uchun) yangi alohida
     # "Mijozlar bilan ishlash" havolasi qo'shildi.
-    # "Firma ma'lumotlari" va "Telegram" vaqtincha yashirilgan (2026-08-29,
+    # "Firma ma'lumotlari" hali ham vaqtincha yashirilgan (2026-08-29,
     # foydalanuvchi so'rovi bilan) — base.html'da Jinja izohiga olingan.
+    # "Telegram" 2026-09-05'da foydalanuvchi so'rovi bilan qaytarildi.
     "admin": ["Bosh sahifa", "Buyurtmalar", "Mijozlar", "Ombor", "Taminotchilar", "Manager xisoboti",
               "Mijozlar bilan ishlash",
               "Xarajatlar", "Moliyaviy hisobot", "Tahlil", "Taminotchi qarzlari", "HR",
-              "Buyurtma turlari",
+              "Buyurtma turlari", "Telegram",
               "O'chirilgan buyurtmalar", "O'chirilgan mijozlar",
               "Foydalanuvchilar", "Harakatlar jurnali"],
     "menejer": ["Bosh sahifa", "Buyurtmalar", "Mijozlar", "Manager xisoboti",
@@ -730,6 +733,20 @@ checks = [
      "xarajatchi taminotchi qo'sha oladi"),
     ("xarajatchi", "suppliers/detail.html", "To'lov qilish", True,
      "xarajatchi taminotchiga to'lov qila oladi"),
+    ("admin", "stock/detail.html", "Qoldiq/narxni tuzatish", True,
+     "admin ombordagi mahsulot qoldig'i/narxini tuzata oladi"),
+    ("xarajatchi", "stock/detail.html", "Qoldiq/narxni tuzatish", False,
+     "xarajatchi qoldiq/narxni tuzata olmaydi (faqat admin)"),
+    ("menejer", "stock/detail.html", "Qoldiq/narxni tuzatish", False,
+     "menejerda ombor huquqi yo'q"),
+    ("xarajatchi", "orders/detail.html", "Holatni o'zgartirish", True,
+     "xarajatchi holat blokini ko'radi (faqat ishlab chiqarish->tayyor uchun)"),
+    ("boss", "orders/detail.html", "Holatni o'zgartirish", False,
+     "bossda holat o'zgartirish huquqi yo'q"),
+    ("admin", "orders/list.html", "kiritilgan", True,
+     "adminga buyurtma xarajati kiritilgani ko'rinadi"),
+    ("menejer", "orders/list.html", "Xarajat", False,
+     "menejerga xarajat ustuni ko'rinmaydi"),
 ]
 for role, tpl, needle, should_exist, desc in checks:
     out = render_for(role, tpl)

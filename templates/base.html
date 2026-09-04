@@ -455,11 +455,9 @@ a{ text-decoration:none; }
       <a href="{{ url_for('settings.order_types') }}" class="{% if request.endpoint and request.endpoint.startswith('settings.order_type') %}active{% endif %}">
         <i class="bi bi-tags"></i> Buyurtma turlari
       </a>
-      {#
       <a href="{{ url_for('settings.telegram') }}" class="{% if request.endpoint and request.endpoint.startswith('settings.telegram') %}active{% endif %}">
         <i class="bi bi-send"></i> Telegram
       </a>
-      #}
       {% endif %}
       {% if has_perm('orders.delete') %}
       <a href="{{ url_for('orders.deleted_orders') }}" class="{% if request.endpoint == 'orders.deleted_orders' %}active{% endif %}">
