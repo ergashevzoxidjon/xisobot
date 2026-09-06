@@ -59,7 +59,12 @@ def income_by_method(start, end):
     """Tushum — to'lov usuli bo'yicha taqsimlangan (Naqd/Karta/Terminal/Birja
     va "Dogovor ..." — korxonalar). Moliyaviy hisobotdagi "Korxonalar
     bo'yicha tushum" bloki uchun (2026-08-30, foydalanuvchi qarori).
-    Bekor qilingan/o'chirilgan buyurtmalar hisobga olinmaydi."""
+    Bekor qilingan/o'chirilgan buyurtmalar hisobga olinmaydi.
+
+    Har bir qator bilan birga bugungi kun bo'yicha tushum ham alohida
+    ustunda ko'rsatilishi uchun hisoblab qo'shiladi (2026-09-06,
+    foydalanuvchi qarori) — yillik jamidan farqli, real kalendar sanasi
+    "bugun"ga tegishli to'lovlar summasi."""
     rows = (
         db.session.query(Payment.payment_method, func.coalesce(func.sum(Payment.amount), 0))
         .join(Order, Payment.order_id == Order.id)
@@ -73,11 +78,27 @@ def income_by_method(start, end):
         .order_by(func.sum(Payment.amount).desc())
         .all()
     )
+
+    today = today_local()
+    today_rows = (
+        db.session.query(Payment.payment_method, func.coalesce(func.sum(Payment.amount), 0))
+        .join(Order, Payment.order_id == Order.id)
+        .filter(
+            Payment.paid_on == today,
+            Order.status != STATUS_CANCELLED,
+            Order.is_deleted.is_(False),
+        )
+        .group_by(Payment.payment_method)
+        .all()
+    )
+    today_map = {m: to_money(t) for m, t in today_rows}
+
     return [
         {
             "method": m or "Ko'rsatilmagan",
             "total": to_money(t),
             "is_company": m in ORDER_PAYMENT_COMPANY_METHODS,
+            "today_total": today_map.get(m, ZERO),
         }
         for m, t in rows
     ]
@@ -445,6 +466,7 @@ def report():
     income_company_total = sum(
         (row["total"] for row in income_totals if row["is_company"]), ZERO
     )
+    income_today_total_all = sum((row["today_total"] for row in income_totals), ZERO)
 
     return render_template(
         "finance/report.html",
@@ -455,6 +477,7 @@ def report():
         income_totals=income_totals,
         income_total_all=income_total_all,
         income_company_total=income_company_total,
+        income_today_total_all=income_today_total_all,
         **expense_breakdown(start, end),
     )
 
