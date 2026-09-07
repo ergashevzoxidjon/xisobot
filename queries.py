@@ -13,7 +13,8 @@ from extensions import db
 from models import (
     Order, Client, Payment, Material, StockMove,
     Supplier, SupplierPayment, Expense, EmployeeSalary, EmployeeAdvance,
-    CashHandover, HANDOVER_CONFIRMED,
+    CashHandover, HANDOVER_CONFIRMED, HANDOVER_CHANNEL_CASH, HANDOVER_CHANNEL_CARD,
+    CashDeposit,
     CASH_SOURCE_OFFICE, CASH_SOURCE_OWNER,
     STATUS_CANCELLED, STATUS_DELIVERED, STOCK_IN,
 )
@@ -487,7 +488,7 @@ def employees_month_payment_totals(start, end):
     return out
 
 
-# ---------- "Pullar" — naqd pul topshirish (2026-09-07) ----------
+# ---------- "Pullar" — naqd/karta pul topshirish (2026-09-07/08) ----------
 
 def cash_spent_subq():
     """to_user_id (xarajatchi) -> shu foydalanuvchi O'Z qo'lidagi (o'ziga
@@ -509,18 +510,22 @@ def cash_spent_subq():
     )
 
 
-def cash_received_subq():
+def handover_received_subq(channel):
     """to_user_id -> shu foydalanuvchiga tasdiqlangan (qabul qilingan)
-    naqd topshiriqlar jami."""
+    topshiriqlar jami, faqat shu KANAL (naqd/karta) bo'yicha."""
     return (
         db.session.query(
             CashHandover.to_user_id.label("user_id"),
             func.coalesce(func.sum(CashHandover.amount), 0).label("received"),
         )
-        .filter(CashHandover.status == HANDOVER_CONFIRMED)
+        .filter(CashHandover.status == HANDOVER_CONFIRMED, CashHandover.channel == channel)
         .group_by(CashHandover.to_user_id)
         .subquery()
     )
+
+
+def cash_received_subq():
+    return handover_received_subq(HANDOVER_CHANNEL_CASH)
 
 
 def cash_balances():
@@ -573,13 +578,58 @@ def total_order_cash_on_hand():
     return sum(cash_balances().values(), ZERO)
 
 
+# ---- karta (boshliqning shaxsiy kartasi) — 2026-09-08, foydalanuvchi qarori ----
+# Hozircha kartadan sarflash mexanizmi yo'q (boshliq ombor kirimiga
+# kirmaydi), shuning uchun "qoldiq" = "jami qabul qilingan". Struktura
+# naqddagi bilan bir xil — kelajakda kartadan sarflash qo'shilsa,
+# card_balances() shunga moslab kengaytiriladi.
+
+def card_received_subq():
+    return handover_received_subq(HANDOVER_CHANNEL_CARD)
+
+
+def card_received(user_id):
+    """Bitta boshliqqa BUTUN TARIX bo'yicha jami qabul qilingan karta puli."""
+    received = card_received_subq()
+    row = (
+        db.session.query(received.c.received)
+        .filter(received.c.user_id == user_id)
+        .first()
+    )
+    return to_money(row[0]) if row else ZERO
+
+
+def card_balances():
+    """Har bir boshliq uchun joriy karta qoldig'i (hozircha = qabul
+    qilingan jami, sarflash mexanizmi qo'shilmagan)."""
+    received = card_received_subq()
+    rows = db.session.query(received.c.user_id, received.c.received).all()
+    return {user_id: to_money(amount) for user_id, amount in rows}
+
+
+def card_balance(user_id):
+    return card_balances().get(user_id, ZERO)
+
+
+def total_confirmed_handover_amount(channel):
+    """Kompaniya bo'yicha jami tasdiqlangan topshiriq summasi (kimga
+    tayinlanganidan qat'i nazar — tayinlanmagan, lekin admin tasdiqlagan
+    topshiriqlar ham hisobga kiradi). "Jami kartaga tushgan pul" kabi
+    umumiy kartochkalar uchun (2026-09-08)."""
+    return to_money(
+        db.session.query(func.coalesce(func.sum(CashHandover.amount), 0))
+        .filter(CashHandover.status == HANDOVER_CONFIRMED, CashHandover.channel == channel)
+        .scalar()
+    )
+
+
 def cash_source_totals():
     """CASH_SOURCE_OFFICE/CASH_SOURCE_OWNER dan har biriga qancha naqd
     xarajat qilinganini qaytaradi (jami, butun tarix bo'yicha).
 
-    Bu ikkovi "zaxira" emas — faqat xarajatni qoplash manbai, shuning uchun
-    balans emas, "jami sarflangan summa" hisoblanadi (2026-09-07,
-    foydalanuvchi qarori)."""
+    Bu — faqat xarajatni qoplash uchun sarflangan summa (balans emas).
+    OFIS uchun balansni `office_balance()` bilan hisoblang — u shu
+    summani `office_deposited_total()`dan ayiradi (2026-09-08)."""
     rows = (
         db.session.query(
             Expense.cash_source,
@@ -594,3 +644,20 @@ def cash_source_totals():
     for source, amount in rows:
         totals[source] = to_money(amount)
     return totals
+
+
+# ---- OFIS zaxirasini to'ldirish — 2026-09-08, foydalanuvchi qarori ----
+
+def office_deposited_total():
+    """Boshliq tomonidan OFIS zaxirasiga BUTUN TARIX bo'yicha kiritilgan
+    jami summa."""
+    return to_money(
+        db.session.query(func.coalesce(func.sum(CashDeposit.amount), 0)).scalar()
+    )
+
+
+def office_balance():
+    """OFIS zaxirasining joriy qoldig'i: kiritilgan jami minus shu
+    manbadan qilingan xarajatlar jami. Manfiy bo'lishi mumkin — bu holda
+    OFIS "qarzga" ishlagan (xarajat kiritilganidan ko'proq sarflangan)."""
+    return office_deposited_total() - cash_source_totals()[CASH_SOURCE_OFFICE]

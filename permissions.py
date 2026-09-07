@@ -53,8 +53,9 @@ PERMISSIONS = {
     "settings.manage",
     # "Pullar" — naqd pul topshirish nazorati (2026-09-07). money.view —
     # ro'yxat/balansni ko'rish; money.confirm — o'ziga topshirilgan pulni
-    # "qabul qildim" deb tasdiqlash.
-    "money.view", "money.confirm",
+    # "qabul qildim" deb tasdiqlash (endi naqd — xarajatchi, karta — boss).
+    # money.fund — OFIS zaxirasiga pul kiritish (2026-09-08, faqat boss/admin).
+    "money.view", "money.confirm", "money.fund",
 }
 
 ROLE_PERMISSIONS = {
@@ -101,8 +102,12 @@ ROLE_PERMISSIONS = {
         "reports.view", "reports.export",
         "managers.view",
         "hr.view", "hr.pay",
-        # Naqd pul qayerdaligini kuzatib borishi kerak — faqat ko'radi.
-        "money.view",
+        # Naqd pulni kuzatib boradi (ko'radi), karta to'lovlarini esa o'zi
+        # tasdiqlaydi — mijoz to'lovni Karta deb belgilasa, pul boshliqning
+        # shaxsiy kartasiga tushadi, shuni "qabul qildim" deb belgilaydi
+        # (2026-09-08, foydalanuvchi qarori). money.fund — OFIS zaxirasini
+        # to'ldirish huquqi.
+        "money.view", "money.confirm", "money.fund",
     },
 }
 

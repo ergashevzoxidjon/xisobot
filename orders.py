@@ -18,14 +18,16 @@ from models import (
     ClientPipelineCard, User, log_action, can_transition,
     ORDER_STATUSES, ALLOWED_TRANSITIONS, STATUS_CANCELLED, STATUS_PRODUCTION,
     STATUS_READY, ZERO, ORDER_PAYMENT_METHODS,
-    CashHandover, HANDOVER_PENDING, CASH_PAYMENT_METHOD,
+    CashHandover, HANDOVER_PENDING, CASH_PAYMENT_METHOD, CARD_PAYMENT_METHOD,
+    HANDOVER_CHANNEL_CASH, HANDOVER_CHANNEL_CARD,
+    StockMove, STOCK_IN, STOCK_OUT,
 )
 from notifications import notify_new_order, notify_payment
 from permissions import permission_required, has_perm
 from queries import eager_orders
 from utils import (
     ValidationError, parse_money, parse_int, parse_date, parse_text, parse_choice,
-    to_money, today_local, now_local, money_str,
+    to_money, today_local, now_local, money_str, qty_str,
 )
 
 orders_bp = Blueprint("orders", __name__, url_prefix="/buyurtmalar")
@@ -480,6 +482,7 @@ def order_detail(order_id):
         "orders/detail.html", order=o, payments=payments, statuses=allowed,
         order_payment_methods=ORDER_PAYMENT_METHODS,
         active_xarajatchi=_active_xarajatchi() if has_perm("orders.manage") else [],
+        active_boss=_active_boss() if has_perm("orders.manage") else [],
     )
 
 
@@ -572,20 +575,29 @@ def _active_xarajatchi():
     )
 
 
-def _resolve_handover_target(form):
-    """Naqd pul topshiriladigan ish boshqaruvchini aniqlaydi.
+def _active_boss():
+    """Karta to'lovi tasdiqlanadigan boshliqlar (2026-09-08)."""
+    return (
+        User.query.filter_by(role="boss", is_active_user=True)
+        .order_by(User.username).all()
+    )
 
-    Faol xarajatchi bitta bo'lsa — avtomatik shunga. Bir nechta bo'lsa —
-    formadagi `xarajatchi_id`dan (forma buni faqat shunday holatda
-    ko'rsatadi). Hech biri aniqlanmasa `None` — topshiriq tayinlanmagan
-    holda yoziladi, keyin admin "Pullar" bo'limida qo'lda tayinlaydi.
+
+def _resolve_handover_target(pool, form, field_name):
+    """Pul topshiriladigan foydalanuvchini aniqlaydi (naqd — xarajatchi,
+    karta — boshliq — chaqiruvchi mos `pool`ni beradi).
+
+    Mos rolda faol foydalanuvchi bitta bo'lsa — avtomatik shunga. Bir
+    nechta bo'lsa — formadagi `field_name`dan (forma buni faqat shunday
+    holatda ko'rsatadi). Hech biri aniqlanmasa `None` — topshiriq
+    tayinlanmagan holda yoziladi, keyin admin "Pullar" bo'limida qo'lda
+    tayinlaydi.
     """
-    active = _active_xarajatchi()
-    if len(active) == 1:
-        return active[0]
-    if len(active) > 1:
-        xid = form.get("xarajatchi_id", type=int)
-        return next((x for x in active if x.id == xid), None)
+    if len(pool) == 1:
+        return pool[0]
+    if len(pool) > 1:
+        target_id = form.get(field_name, type=int)
+        return next((x for x in pool if x.id == target_id), None)
     return None
 
 
@@ -636,12 +648,20 @@ def add_payment(order_id):
             )
             return redirect(url_for("orders.order_detail", order_id=order_id))
 
-    # Naqd pul kimga topshirilishini — bir nechta faol ish boshqaruvchi
+    # Naqd/karta pul kimga topshirilishini (kimga "topshirilishi" yoki
+    # kimning kartasiga tushishini) — bir nechta faol xarajatchi/boshliq
     # bo'lsa — oldindan aniqlaymiz (to'lovni bloklamaydi, faqat aniqlanmasa
-    # topshiriq tayinlanmagan holda yoziladi).
+    # topshiriq tayinlanmagan holda yoziladi). Karta — mijoz to'g'ridan-
+    # to'g'ri boshliqning shaxsiy kartasiga o'tkazadi, shuning uchun naqd
+    # kabi tasdiqlash talab qilinadi (2026-09-08, foydalanuvchi qarori).
+    handover_channel = None
     handover_target = None
     if payment_method == CASH_PAYMENT_METHOD:
-        handover_target = _resolve_handover_target(request.form)
+        handover_channel = HANDOVER_CHANNEL_CASH
+        handover_target = _resolve_handover_target(_active_xarajatchi(), request.form, "xarajatchi_id")
+    elif payment_method == CARD_PAYMENT_METHOD:
+        handover_channel = HANDOVER_CHANNEL_CARD
+        handover_target = _resolve_handover_target(_active_boss(), request.form, "boss_id")
 
     # Qarzdan ko'p to'lash mumkin — ortiqchasi mijozning avansi (zapas puli)
     # bo'lib qoladi. Faqat ogohlantiramiz, bloklamaymiz.
@@ -652,20 +672,22 @@ def add_payment(order_id):
     db.session.add(p)
     db.session.flush()
 
-    # Naqd to'lov — "Pullar" bo'limida ish boshqaruvchiga topshirish
-    # kerakligi avtomatik qayd etiladi (2026-09-07, foydalanuvchi qarori).
-    # Bu SOF QO'SHIMCHA kuzatuv — moliyaviy hisob-kitobga ta'sir qilmaydi.
-    if payment_method == CASH_PAYMENT_METHOD:
+    # Naqd/karta to'lov — "Pullar" bo'limida kimga topshirilgani/kimning
+    # kartasiga tushgani avtomatik qayd etiladi (2026-09-07/08, foydalanuvchi
+    # qarori). Bu SOF QO'SHIMCHA kuzatuv — moliyaviy hisob-kitobga ta'sir qilmaydi.
+    if handover_channel:
         db.session.add(CashHandover(
             payment_id=p.id, order_id=o.id, amount=amount,
             from_user_id=current_user.id,
             to_user_id=handover_target.id if handover_target else None,
             status=HANDOVER_PENDING,
+            channel=handover_channel,
         ))
         if not handover_target:
+            who = "ish boshqaruvchiga" if handover_channel == HANDOVER_CHANNEL_CASH else "boshliqqa"
             flash(
-                "Diqqat: naqd pul kimga topshirilgani aniqlanmadi — "
-                "«Pullar» bo'limida admin qo'lda tayinlashi kerak.", "warning",
+                f"Diqqat: pul kimga topshirilgani/kimning kartasiga tushgani aniqlanmadi — "
+                f"«Pullar» bo'limida admin qo'lda tayinlashi kerak ({who}).", "warning",
             )
 
     log_action(current_user, "payment", "order", o.id, f"{amount} so'm to'lov")
@@ -714,12 +736,42 @@ def delete_order(order_id):
         )
         return redirect(url_for("orders.order_detail", order_id=order_id))
 
+    # Bu buyurtmaga ombordan sarflangan (chiqim qilingan) mahsulotlar bo'lsa —
+    # buyurtma o'chirilganda ular avtomatik omborga qaytariladi (2026-09-07,
+    # foydalanuvchi qarori): ish boshqaruvchi xato buyurtmaga xarajat kiritib
+    # qo'yishi, keyin admin buyurtmani o'chirishi mumkin — bu holda mahsulot
+    # omborda "yo'qolib" qolmasligi kerak. Asl chiqim yozuvi tarix uchun
+    # saqlanadi, unga teng miqdorda qarshi KIRIM yoziladi (Material.quantity
+    # barcha kirim/chiqim yozuvlari yig'indisidan hisoblanadi).
+    returned = []
+    for mv in o.stock_moves:
+        if mv.kind != STOCK_OUT:
+            continue
+        db.session.add(StockMove(
+            material_id=mv.material_id, kind=STOCK_IN,
+            quantity=mv.quantity, unit_price=mv.unit_price,
+            moved_on=today_local(), order_id=o.id,
+            note=f"Buyurtma {o.order_number} o'chirilgani uchun omborga qaytarildi",
+            created_by=current_user.id,
+        ))
+        returned.append(f"{mv.material.name} {qty_str(mv.quantity)} {mv.material.unit}")
+
     o.is_deleted = True
     o.deleted_at = now_local()
     o.deleted_by = current_user.id
-    log_action(current_user, "delete", "order", o.id, f"{o.order_number} o'chirildi")
+    log_action(
+        current_user, "delete", "order", o.id,
+        f"{o.order_number} o'chirildi"
+        + (f" — omborga qaytarildi: {', '.join(returned)}" if returned else ""),
+    )
     db.session.commit()
-    flash(f"Buyurtma {o.order_number} o'chirildi. Kerak bo'lsa tiklash mumkin.", "success")
+    if returned:
+        flash(
+            f"Buyurtma {o.order_number} o'chirildi. {len(returned)} ta mahsulot "
+            f"omborga qaytarildi: {', '.join(returned)}.", "success",
+        )
+    else:
+        flash(f"Buyurtma {o.order_number} o'chirildi. Kerak bo'lsa tiklash mumkin.", "success")
     return redirect(url_for("orders.list_orders"))
 
 
@@ -728,12 +780,27 @@ def delete_order(order_id):
 @permission_required("orders.delete")
 def restore_order(order_id):
     o = Order.query.get_or_404(order_id)
+
+    # O'chirilganda ombordan sarflangan mahsulot qaytarilgan bo'lishi mumkin
+    # (yuqoridagi delete_order) — tiklanganda buni eslatamiz, chunki
+    # ishlab chiqarish davom etsa, xarajat qayta kiritilishi kerak bo'ladi.
+    had_returns = any(
+        mv.kind == STOCK_IN and mv.note and "o'chirilgani uchun omborga qaytarildi" in mv.note
+        for mv in o.stock_moves
+    )
+
     o.is_deleted = False
     o.deleted_at = None
     o.deleted_by = None
     log_action(current_user, "restore", "order", o.id, f"{o.order_number} tiklandi")
     db.session.commit()
     flash(f"Buyurtma {o.order_number} tiklandi.", "success")
+    if had_returns:
+        flash(
+            "Diqqat: bu buyurtma o'chirilganda ombordan sarflangan mahsulot "
+            "omborga qaytarilgan edi. Agar ishlab chiqarish davom etsa, "
+            "xarajatni qaytadan kiriting.", "warning",
+        )
     return redirect(url_for("orders.order_detail", order_id=order_id))
 
 

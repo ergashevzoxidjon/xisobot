@@ -3,15 +3,15 @@
 <div class="page-header">
   <div>
     <h3>Pullar</h3>
-    <div class="subtitle">Naqd pul nazorati — menejer to'lov qabul qilgach, ish boshqaruvchiga topshiradi va qabul qilinganini tasdiqlaydi</div>
+    <div class="subtitle">Naqd/karta pul nazorati — menejer to'lov qabul qilgach, naqd ish boshqaruvchiga topshiriladi, karta boshliqning kartasiga tushadi — ikkalasi ham shu yerda tasdiqlanadi</div>
   </div>
 </div>
 
-{% if my_received is not none or source_totals or my_balance is not none %}
-<div class="row g-3 mb-3">
+{% if my_received is not none or source_totals or office_info or my_balance is not none or card_total_received is not none %}
+<div class="row g-3 mb-3 flex-nowrap overflow-auto pb-1">
   {% if my_received is not none %}
-  <div class="col-sm-6 col-lg-3">
-    <div class="card p-3 stat-card">
+  <div class="col-6 col-md-4 col-lg" style="min-width:190px">
+    <div class="card p-3 stat-card h-100">
       <div class="stat-icon green"><i class="bi bi-cash-coin"></i></div>
       <div>
         <div class="stat-label">Jami qabul qilingan naqd pul</div>
@@ -20,9 +20,42 @@
     </div>
   </div>
   {% endif %}
+  {% if my_balance is not none %}
+  <div class="col-6 col-md-4 col-lg" style="min-width:190px">
+    <div class="card p-3 stat-card h-100">
+      <div class="stat-icon {% if my_balance > 0 %}green{% else %}slate{% endif %}"><i class="bi bi-wallet2"></i></div>
+      <div>
+        <div class="stat-label">Xozirda qolgan naqd pul</div>
+        <div class="stat-value num">{{ my_balance|uzs }}</div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+  {% if card_total_received is not none %}
+  <div class="col-6 col-md-4 col-lg" style="min-width:190px">
+    <div class="card p-3 stat-card h-100">
+      <div class="stat-icon blue"><i class="bi bi-credit-card"></i></div>
+      <div>
+        <div class="stat-label">Jami kartaga tushgan pul</div>
+        <div class="stat-value num">{{ card_total_received|uzs }}</div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+  {% if card_total_balance is not none %}
+  <div class="col-6 col-md-4 col-lg" style="min-width:190px">
+    <div class="card p-3 stat-card h-100">
+      <div class="stat-icon {% if card_total_balance > 0 %}blue{% else %}slate{% endif %}"><i class="bi bi-credit-card-2-back"></i></div>
+      <div>
+        <div class="stat-label">Xozirda qolgan karta puli</div>
+        <div class="stat-value num">{{ card_total_balance|uzs }}</div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
   {% for label, amount in (source_totals or {}).items() %}
-  <div class="col-sm-6 col-lg-3">
-    <div class="card p-3 stat-card">
+  <div class="col-6 col-md-4 col-lg" style="min-width:190px">
+    <div class="card p-3 stat-card h-100">
       <div class="stat-icon slate"><i class="bi bi-safe2"></i></div>
       <div>
         <div class="stat-label">{{ label }} — jami sarflangan</div>
@@ -31,15 +64,45 @@
     </div>
   </div>
   {% endfor %}
-  {% if my_balance is not none %}
-  <div class="col-sm-6 col-lg-3">
-    <div class="card p-3 stat-card">
-      <div class="stat-icon {% if my_balance > 0 %}green{% else %}slate{% endif %}"><i class="bi bi-wallet2"></i></div>
+  {% if office_info %}
+  <div class="col-6 col-md-4 col-lg" style="min-width:190px">
+    <div class="card p-3 stat-card h-100">
+      <div class="stat-icon {% if office_info.balance > 0 %}green{% elif office_info.balance < 0 %}red{% else %}slate{% endif %}">
+        <i class="bi bi-building"></i></div>
       <div>
-        <div class="stat-label">Xozirda qolgan naqd pul</div>
-        <div class="stat-value num">{{ my_balance|uzs }}</div>
+        <div class="stat-label">OFIS xisobidan — joriy qoldiq</div>
+        <div class="stat-value num {% if office_info.balance < 0 %}text-danger{% endif %}">{{ office_info.balance|uzs }}</div>
       </div>
     </div>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if office_info %}
+<div class="card p-3 mb-3">
+  <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+    <div>
+      <h6 class="fw-bold mb-1"><i class="bi bi-building me-1 text-muted"></i> OFIS zaxirasi</h6>
+      <div class="text-muted small">
+        Jami kiritilgan: <span class="fw-semibold">{{ office_info.deposited|uzs }}</span> so'm ·
+        Jami sarflangan: <span class="fw-semibold">{{ office_info.spent|uzs }}</span> so'm
+      </div>
+    </div>
+    {% if has_perm('money.fund') %}
+    <form method="post" action="{{ url_for('money.fund_office') }}" class="d-flex flex-wrap gap-2 no-print">
+      {{ csrf() }}
+      <input type="number" step="0.01" min="0.01" name="amount" class="form-control form-control-sm"
+             style="width:160px" placeholder="Summa" required>
+      <input type="text" name="note" class="form-control form-control-sm"
+             style="width:200px" placeholder="Izoh (ixtiyoriy)">
+      <button type="submit" class="btn btn-sm btn-success"><i class="bi bi-plus-lg"></i> OFISga qo'shish</button>
+    </form>
+    {% endif %}
+  </div>
+  {% if office_info.balance < 0 %}
+  <div class="alert alert-danger py-2 mb-0 small">
+    <i class="bi bi-exclamation-triangle"></i> OFIS zaxirasi manfiy — kiritilganidan ko'proq sarflangan.
   </div>
   {% endif %}
 </div>
@@ -64,6 +127,25 @@
 </div>
 {% endif %}
 
+{% if card_balance_rows %}
+<div class="card p-3 mb-3">
+  <h6 class="fw-bold mb-3"><i class="bi bi-credit-card me-1 text-muted"></i> Boshliqlar — joriy karta qoldig'i</h6>
+  <div class="table-responsive">
+  <table class="table table-sm mb-0">
+    <thead><tr><th>Boshliq</th><th class="text-end">Kartadagi pul</th></tr></thead>
+    <tbody>
+    {% for row in card_balance_rows %}
+    <tr>
+      <td>{{ row.user.display_name }}</td>
+      <td class="text-end num fw-semibold {% if row.balance > 0 %}text-success{% endif %}">{{ row.balance|uzs }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endif %}
+
 <div class="card p-3 mb-3">
   <h6 class="fw-bold mb-3"><i class="bi bi-hourglass-split me-1 text-muted"></i> Kutilmoqda — hali qabul qilinmagan</h6>
   {% if pending %}
@@ -71,13 +153,17 @@
   <table class="table table-sm">
     <thead>
       <tr>
-        <th>Buyurtma</th><th>Kimdan</th><th>Kimga</th>
+        <th>Turi</th><th>Buyurtma</th><th>Kimdan</th><th>Kimga</th>
         <th class="text-end">Summa</th><th>Sana</th><th></th>
       </tr>
     </thead>
     <tbody>
     {% for h in pending %}
     <tr>
+      <td>
+        {% if h.is_card %}<span class="badge bg-primary-subtle text-primary border border-primary-subtle"><i class="bi bi-credit-card"></i> Karta</span>
+        {% else %}<span class="badge bg-success-subtle text-success border border-success-subtle"><i class="bi bi-cash-coin"></i> Naqd</span>{% endif %}
+      </td>
       <td>
         {% if h.order %}<a href="{{ url_for('orders.order_detail', order_id=h.order.id) }}">{{ h.order.order_number }}</a>{% else %}-{% endif %}
       </td>
@@ -113,13 +199,17 @@
   <table class="table table-sm">
     <thead>
       <tr>
-        <th>Buyurtma</th><th>Kimdan</th><th>Kimga</th>
+        <th>Turi</th><th>Buyurtma</th><th>Kimdan</th><th>Kimga</th>
         <th class="text-end">Summa</th><th>Topshirilgan</th><th>Qabul qilingan</th><th></th>
       </tr>
     </thead>
     <tbody>
     {% for h in confirmed %}
     <tr>
+      <td>
+        {% if h.is_card %}<span class="badge bg-primary-subtle text-primary border border-primary-subtle"><i class="bi bi-credit-card"></i> Karta</span>
+        {% else %}<span class="badge bg-success-subtle text-success border border-success-subtle"><i class="bi bi-cash-coin"></i> Naqd</span>{% endif %}
+      </td>
       <td>
         {% if h.order %}<a href="{{ url_for('orders.order_detail', order_id=h.order.id) }}">{{ h.order.order_number }}</a>{% else %}-{% endif %}
       </td>
@@ -129,7 +219,7 @@
       <td class="text-muted small num">{{ h.created_at|date_uz }}</td>
       <td class="text-muted small num">{{ h.confirmed_at|date_uz }}</td>
       <td class="text-end no-print">
-        {% if current_user.role == 'xarajatchi' and h.to_user_id == current_user.id and has_perm('stock.manage') %}
+        {% if not h.is_card and current_user.role == 'xarajatchi' and h.to_user_id == current_user.id and has_perm('stock.manage') %}
         <a href="{{ url_for('stock.receive', order_id=h.order_id) }}" class="btn btn-sm btn-outline-primary">
           <i class="bi bi-box-seam"></i> Xarajat qilish</a>
         {% endif %}

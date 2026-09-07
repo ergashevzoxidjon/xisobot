@@ -584,10 +584,20 @@ HANDOVER_PENDING = "kutilmoqda"
 HANDOVER_CONFIRMED = "qabul qilindi"
 HANDOVER_STATUSES = [HANDOVER_PENDING, HANDOVER_CONFIRMED]
 
-# Faqat shu to'lov usulida kelgan pul naqd hisoblanadi va topshirish
-# talab qilinadi — boshqalari (Karta, Terminal, Dogovor ..., Birja)
-# bevosita bank/shartnoma hisobiga tushadi, jismonan topshirish shart emas.
+# Shu ikki to'lov usulida kelgan pul jismonan/hisobga "topshirilishi" kerak
+# va "Pullar" bo'limida tasdiqlash talab qiladi — qolganlari (Terminal,
+# Dogovor ..., Birja) bevosita bank/shartnoma hisobiga tushadi.
+# NAQD — menejer qabul qilgach, ish boshqaruvchiga (xarajatchi) jismonan
+# topshiradi. KARTA — mijoz boshliqning shaxsiy kartasiga o'tkazadi, boss
+# "qabul qildim" deb tasdiqlaydi (2026-09-08, foydalanuvchi qarori).
 CASH_PAYMENT_METHOD = "Naqd"
+CARD_PAYMENT_METHOD = "Karta"
+
+# CashHandover qaysi kanal orqali kelgani — kimga topshirilishi/tasdiqlanishi
+# shunga qarab farqlanadi (naqd -> xarajatchi, karta -> boss).
+HANDOVER_CHANNEL_CASH = "naqd"
+HANDOVER_CHANNEL_CARD = "karta"
+HANDOVER_CHANNELS = [HANDOVER_CHANNEL_CASH, HANDOVER_CHANNEL_CARD]
 
 # Ombor kirimida "Naqd to'landi" tanlansa, pul albatta BITTA manbadan
 # qoplanadi: yoki muayyan buyurtmaning topshirilgan puli (Expense.
@@ -604,8 +614,13 @@ CASH_SOURCE_LABELS = {
 
 
 class CashHandover(db.Model):
-    """Menejerdan ish boshqaruvchiga o'tkazilayotgan (yoki o'tkazilgan)
-    bitta naqd pul topshirig'i — har bir naqd to'lov uchun alohida yoziladi."""
+    """Menejerdan boshqasiga o'tkazilayotgan (yoki o'tkazilgan) bitta pul
+    topshirig'i — har bir naqd/karta to'lov uchun alohida yoziladi.
+
+    `channel` NAQD bo'lsa — `to_user_id` ish boshqaruvchi (xarajatchi),
+    KARTA bo'lsa — `to_user_id` boshliq (boss). Ikkalasida ham xuddi shu
+    "kutilmoqda -> qabul qildim" oqimi ishlaydi (2026-09-08, foydalanuvchi
+    qarori — avval faqat naqd uchun bo'lgan, endi karta ham qo'shildi)."""
     __tablename__ = "cash_handover"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -614,8 +629,11 @@ class CashHandover(db.Model):
     order_id = db.Column(db.Integer, db.ForeignKey("order.id"), nullable=False, index=True)
     amount = db.Column(MONEY, nullable=False)
     from_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), index=True)   # menejer
-    to_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), index=True)     # ish boshqaruvchi
+    to_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), index=True)     # xarajatchi yoki boss
     status = db.Column(db.String(20), default=HANDOVER_PENDING, nullable=False, index=True)
+    # Eski (2026-09-07 dan oldingi) yozuvlarda bo'sh bo'lishi mumkin —
+    # migratsiya ularni "naqd" deb belgilaydi (shu paytgacha faqat naqd bor edi).
+    channel = db.Column(db.String(10), default=HANDOVER_CHANNEL_CASH, nullable=False, index=True)
     confirmed_by = db.Column(db.Integer, db.ForeignKey("user.id"))
     confirmed_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=now_local)
@@ -631,6 +649,29 @@ class CashHandover(db.Model):
     @property
     def is_confirmed(self):
         return self.status == HANDOVER_CONFIRMED
+
+    @property
+    def is_card(self):
+        return self.channel == HANDOVER_CHANNEL_CARD
+
+
+class CashDeposit(db.Model):
+    """Boshliq (boss) tomonidan OFIS zaxirasiga qo'shilgan pul (2026-09-08,
+    foydalanuvchi qarori). Ish boshqaruvchi ombor kirimida "Naqd to'landi ->
+    OFIS xisobidan" tanlaganda sarflanadigan zaxira shu yerdan to'ladi —
+    OFIS balansi endi shu kiritmalar minus shu manbadan qilingan xarajatlar
+    sifatida hisoblanadi (avval faqat "jami sarflangan" ko'rsatilardi,
+    kiritish/to'ldirish umuman kuzatilmasdi). Zoxidjon (rahbar) shaxsiy
+    mablag'i cheklanmagan deb hisoblanadi — shu sabab faqat OFIS uchun."""
+    __tablename__ = "cash_deposit"
+
+    id = db.Column(db.Integer, primary_key=True)
+    amount = db.Column(MONEY, nullable=False)
+    note = db.Column(db.String(255))
+    created_at = db.Column(db.DateTime, default=now_local)
+    created_by = db.Column(db.Integer, db.ForeignKey("user.id"))
+
+    creator = db.relationship("User", foreign_keys=[created_by])
 
 
 class Expense(db.Model):

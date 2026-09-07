@@ -472,6 +472,13 @@ def main():
         # manba bo'yicha jami sarf ko'rsatiladi (2026-09-07). ---
         add_column("expense", "cash_source VARCHAR(20)", "cash_source")
 
+        # --- v18: Karta to'lovlari ham "Pullar" bo'limida boshliq tomonidan
+        # tasdiqlanadi (naqd — xarajatchi kabi). Eski yozuvlar (shu ustun
+        # qo'shilishidan oldingi) hammasi naqd edi — standart qiymat shuni
+        # ta'minlaydi. Boshliq OFIS zaxirasini to'ldirishi uchun yangi
+        # cash_deposit jadvali create_all bilan yaratiladi (2026-09-08). ---
+        add_column("cash_handover", "channel VARCHAR(10) DEFAULT 'naqd' NOT NULL", "channel")
+
         migrate_paid_amount()
         ensure_upload_folder(app)
 

@@ -96,7 +96,7 @@ ROLE_PERMISSIONS = {
               "managers.view", "managers.manage",
               "hr.view", "hr.manage", "hr.pay",
               "users.manage", "settings.manage",
-              "money.view", "money.confirm"},
+              "money.view", "money.confirm", "money.fund"},
     "menejer": {"orders.view", "orders.create", "orders.edit", "orders.manage",
                 "clients.view", "clients.create",
                 "managers.view",
@@ -112,7 +112,7 @@ ROLE_PERMISSIONS = {
              "reports.view", "reports.export",
              "managers.view",
              "hr.view", "hr.pay",
-             "money.view"},
+             "money.view", "money.confirm", "money.fund"},
 }
 ROLE_LABELS = {"admin": "Administrator", "menejer": "Menejer",
                "xarajatchi": "Ish boshqaruvchi", "boss": "Boss"}
@@ -231,9 +231,9 @@ order = SimpleNamespace(
     creator=user, payments=[payment], is_overdue=False, days_left=5,
     version=1, is_deleted=False, deleted_at=None, files=[order_file],
     items=[item_a, item_b], items_summary="Vizitka +1 ta",
-    expenses=[order_expense], expenses_total=Decimal("12000.00"),
-    direct_expenses=Decimal("12000.00"), stock_cost=Decimal("0.00"),
-    materials_used=[], profit=Decimal("38000.00"), cancel_reason=None,
+    expenses=[order_expense], expenses_total=Decimal("129000.00"),
+    direct_expenses=Decimal("12000.00"), stock_cost=Decimal("117000.00"),
+    materials_used=[], profit=Decimal("-79000.00"), cancel_reason=None,
 )
 overdue_order = SimpleNamespace(
     id=2, order_number="B-2026-0002", client=client, client_id=1, order_type="Banner",
@@ -250,10 +250,14 @@ overdue_order = SimpleNamespace(
     materials_used=[], profit=Decimal("500000.00"), cancel_reason=None,
 )
 move_out = SimpleNamespace(
-    id=2, material=material, kind="chiqim", quantity=Decimal("260.000"),
+    id=2, material=material, material_id=material.id, kind="chiqim", quantity=Decimal("260.000"),
     unit_price=Decimal("450.00"), moved_on=TODAY, order=order, note=None,
     creator=user, total=Decimal("117000.00"), signed_quantity=Decimal("-260.000"),
 )
+# `order` yuqorida e'lon qilingan, lekin `move_out` shundan keyin yaratiladi —
+# shu sabab ombordan sarflangan qatorni shu yerda orqaga bog'laymiz
+# (orders/detail.html'dagi tahrirlash/o'chirish tugmalarini sinash uchun).
+order.materials_used = [move_out]
 
 expense = SimpleNamespace(id=1, date=TODAY, category="ijara",
                           amount=Decimal("500000.00"), description="Ofis ijarasi",
@@ -289,19 +293,27 @@ months_rows = [
 audit = SimpleNamespace(id=1, created_at=datetime.now(), user=user, action="create",
                         entity="order", entity_id=1, detail="B-2026-0001 yaratildi")
 
-# ---- "Pullar" — naqd pul topshirish mocklari (2026-09-07) ----
+# ---- "Pullar" — naqd/karta pul topshirish mocklari (2026-09-07/08) ----
 xarajatchi_user = SimpleNamespace(id=6, username="xarajatchi1", full_name="Sherzod Yusupov",
                                   display_name="Sherzod Yusupov", role="xarajatchi",
                                   is_active_user=True)
+boss_user = SimpleNamespace(id=7, username="boss1", full_name="Zoxidjon Ergashev",
+                            display_name="Zoxidjon Ergashev", role="boss",
+                            is_active_user=True)
 handover_pending = SimpleNamespace(
-    id=1, amount=Decimal("50000.00"), status="kutilmoqda",
+    id=1, amount=Decimal("50000.00"), status="kutilmoqda", channel="naqd", is_card=False,
     from_user=user, from_user_id=1, to_user=xarajatchi_user, to_user_id=6,
     order=order, order_id=1, created_at=datetime.now(), confirmed_at=None,
 )
 handover_confirmed = SimpleNamespace(
-    id=2, amount=Decimal("100000.00"), status="qabul qilindi",
+    id=2, amount=Decimal("100000.00"), status="qabul qilindi", channel="naqd", is_card=False,
     from_user=user, from_user_id=1, to_user=xarajatchi_user, to_user_id=6,
     order=overdue_order, order_id=2, created_at=datetime.now(), confirmed_at=datetime.now(),
+)
+card_handover_pending = SimpleNamespace(
+    id=3, amount=Decimal("75000.00"), status="kutilmoqda", channel="karta", is_card=True,
+    from_user=user, from_user_id=1, to_user=boss_user, to_user_id=7,
+    order=order, order_id=1, created_at=datetime.now(), confirmed_at=None,
 )
 
 # ---- HR va Manager xisoboti mocklari (2026-08-29, foydalanuvchi qarori) ----
@@ -411,7 +423,7 @@ CONTEXTS = {
     "orders/detail.html": dict(order=order, payments=[payment],
                                statuses=["ishlab chiqarishda", "yetkazish uchun tayyor", "bekor qilindi"],
                                order_payment_methods=ORDER_PAYMENT_METHODS_TEST,
-                               active_xarajatchi=[]),
+                               active_xarajatchi=[], active_boss=[]),
     "orders/invoice.html": dict(order=order, today=TODAY, company=company),
     "orders/deleted.html": dict(orders=[order]),
     "clients/deleted.html": dict(clients=[client]),
@@ -439,6 +451,8 @@ CONTEXTS = {
                                payer_companies=["Marvel Creative MChJ", "MyPrint MChJ"]),
     "stock/detail.html": dict(material=material, moves=[move_in, move_out],
                               received=Decimal("225000.00"), used=Decimal("117000.00")),
+    "finance/stock_expense_form.html": dict(move=move_out, order=order,
+                                            materials=[material]),
     "suppliers/list.html": dict(suppliers=[supplier, supplier_no_debt], q="", show_all=False,
                                 total_debt=Decimal("420000.00"),
                                 top=[{"supplier": supplier, "purchased": Decimal("620000.00"), "count": 4},
@@ -548,12 +562,14 @@ CONTEXTS = {
     ),
     "managers/jurnal.html": dict(),
     "money/list.html": dict(
-        pending=[handover_pending], confirmed=[handover_confirmed],
+        pending=[handover_pending, card_handover_pending], confirmed=[handover_confirmed],
         my_balance=Decimal("100000.00"), my_received=Decimal("150000.00"),
         balance_rows=[{"user": xarajatchi_user, "balance": Decimal("100000.00")}],
-        source_totals={
-            "OFIS xisobidan": Decimal("50000.00"), "Zoxidjon xisobidan": Decimal("0.00"),
-        },
+        card_balance_rows=[{"user": boss_user, "balance": Decimal("75000.00")}],
+        card_total_received=Decimal("75000.00"), card_total_balance=Decimal("75000.00"),
+        source_totals={"Zoxidjon xisobidan": Decimal("0.00")},
+        office_info={"deposited": Decimal("200000.00"), "spent": Decimal("50000.00"),
+                    "balance": Decimal("150000.00")},
         can_confirm=True,
     ),
     "errors/error.html": dict(code=404, title="Topilmadi", message="Sahifa yo'q"),
@@ -637,7 +653,7 @@ PREPAID_CONTEXTS = {
                                statuses=["buyurtma yaratildi", "to'lov qilish jarayonida",
                                          "bekor qilindi"],
                                order_payment_methods=ORDER_PAYMENT_METHODS_TEST,
-                               active_xarajatchi=[]),
+                               active_xarajatchi=[], active_boss=[]),
     "orders/list.html": dict(orders=[prepaid_order],
                              pagination=FakePagination([prepaid_order], 1),
                              statuses=["buyurtma yaratildi", "to'lov qilish jarayonida",

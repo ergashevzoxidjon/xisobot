@@ -25,7 +25,7 @@ from queries import (
 from stock import consume, shortage
 from utils import (
     ValidationError, parse_money, parse_date, parse_text, parse_choice, parse_int,
-    parse_qty, to_money, today_local, month_bounds, money_str, qty_str, QTY_ZERO,
+    parse_qty, to_money, to_qty, today_local, month_bounds, money_str, qty_str, QTY_ZERO,
 )
 
 finance_bp = Blueprint("finance", __name__, url_prefix="/moliya")
@@ -415,6 +415,106 @@ def edit_expense(expense_id):
         return redirect(url_for("finance.expenses_list"))
 
     return _expense_page(selected_order=e.order, expense=e, form=None)
+
+
+# ---------- buyurtmaga ombordan chiqim sifatida yozilgan xarajatni tuzatish ----------
+# (2026-09-07, foydalanuvchi qarori): "Xarajat kiritish" buyurtma uchun
+# har doim ombordan mahsulot tanlashni talab qiladi (require_material=True,
+# yuqoridagi expense_rows_from_form) — shuning uchun bunday qatorlar
+# `Expense` emas, balki `StockMove(OUT)` sifatida yoziladi va yuqoridagi
+# edit_expense() ularga tegishli emas. Ish boshqaruvchi xato kiritsa,
+# to'g'irlay olishi uchun alohida route kerak.
+
+@finance_bp.route("/xarajatlar/ombor/<int:move_id>/tahrirlash", methods=["GET", "POST"])
+@login_required
+@permission_required("expenses.create")
+def edit_stock_expense(move_id):
+    move = StockMove.query.get_or_404(move_id)
+    if move.kind != STOCK_OUT or not move.order_id:
+        flash("Bu yozuvni bu yerdan tahrirlab bo'lmaydi.", "danger")
+        return redirect(url_for("finance.expenses_list"))
+    order = move.order
+    if order and order.is_deleted:
+        flash("O'chirilgan buyurtmaning xarajatini tahrirlab bo'lmaydi.", "danger")
+        return redirect(url_for("orders.order_detail", order_id=order.id))
+
+    if request.method == "POST":
+        try:
+            raw_material = (request.form.get("material_id") or "").strip()
+            material = db.session.get(Material, int(raw_material)) if raw_material.isdigit() else None
+            if material is None:
+                raise ValidationError("Mahsulot tanlanmagan.")
+            quantity = parse_qty(request.form.get("quantity"), "Soni", min_value=Decimal("0.001"))
+            unit_price = parse_money(request.form.get("unit_price"), "Narxi", min_value=Decimal("0.01"))
+            moved_on = parse_date(request.form.get("moved_on"), "Sana", required=False) or move.moved_on
+        except ValidationError as err:
+            flash(str(err), "danger")
+            return render_template("finance/stock_expense_form.html", move=move, order=order,
+                                   materials=materials_with_stock(only_active=True))
+
+        if moved_on > today_local():
+            flash("Sana kelajakda bo'lishi mumkin emas.", "danger")
+            return render_template("finance/stock_expense_form.html", move=move, order=order,
+                                   materials=materials_with_stock(only_active=True))
+
+        old_desc = f"{move.material.name}: {qty_str(move.quantity)} {move.material.unit} × {money_str(move.unit_price)}"
+
+        # Qoldiq yetarlimi — bu qatorning eski ta'sirini vaqtincha qaytarib
+        # hisoblaymiz (o'zi bilan taqqoslab, yolg'on yetishmovchilik chiqmasin).
+        if material.id == move.material_id:
+            available = material.quantity + to_qty(move.quantity)
+        else:
+            available = material.quantity
+        missing = to_qty(quantity) - available
+        if missing > QTY_ZERO:
+            flash(
+                f"«{material.name}»: omborda {qty_str(available)} {material.unit} bor, "
+                f"{qty_str(missing)} {material.unit} yetishmadi — qoldiq minusga o'tdi.",
+                "warning",
+            )
+
+        move.material_id = material.id
+        move.quantity = quantity
+        move.unit_price = unit_price
+        move.moved_on = moved_on
+
+        new_desc = f"{material.name}: {qty_str(quantity)} {material.unit} × {money_str(unit_price)}"
+        log_action(current_user, "update", "stock_out", move.id,
+                   f"{old_desc} -> {new_desc}" + (f" ({order.order_number})" if order else ""))
+        db.session.commit()
+        flash("Xarajat qatori yangilandi.", "success")
+        return redirect(url_for("orders.order_detail", order_id=order.id))
+
+    return render_template("finance/stock_expense_form.html", move=move, order=order,
+                           materials=materials_with_stock(only_active=True))
+
+
+@finance_bp.route("/xarajatlar/ombor/<int:move_id>/ochirish", methods=["POST"])
+@login_required
+@permission_required("expenses.create")
+def delete_stock_expense(move_id):
+    """Xato kiritilgan ombordan-chiqim xarajat qatorini butunlay o'chiradi.
+
+    Mahsulot avtomatik omborga qaytadi — qoldiq kirim/chiqim yozuvlari
+    yig'indisidan hisoblanadi, shuning uchun chiqim yozuvini o'chirish
+    qoldiqni ko'taradi (yangi kirim yozish shart emas)."""
+    move = StockMove.query.get_or_404(move_id)
+    if move.kind != STOCK_OUT or not move.order_id:
+        flash("Bu yozuvni bu yerdan o'chirib bo'lmaydi.", "danger")
+        return redirect(url_for("finance.expenses_list"))
+    order = move.order
+    if order and order.is_deleted:
+        flash("O'chirilgan buyurtmaning xarajatini o'chirib bo'lmaydi.", "danger")
+        return redirect(url_for("orders.order_detail", order_id=order.id))
+
+    desc = f"{move.material.name}: {qty_str(move.quantity)} {move.material.unit}"
+    log_action(current_user, "delete", "stock_out", move.id,
+               f"{desc}" + (f" ({order.order_number})" if order else "")
+               + " — xato xarajat qatori o'chirildi, mahsulot omborga qaytdi")
+    db.session.delete(move)
+    db.session.commit()
+    flash(f"Xarajat qatori o'chirildi — «{desc}» omborga qaytarildi.", "success")
+    return redirect(url_for("orders.order_detail", order_id=order.id) if order else url_for("finance.expenses_list"))
 
 
 # ---------- moliyaviy hisobot ----------
