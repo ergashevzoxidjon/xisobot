@@ -13,6 +13,8 @@ from extensions import db
 from models import (
     Order, Client, Payment, Material, StockMove,
     Supplier, SupplierPayment, Expense, EmployeeSalary, EmployeeAdvance,
+    CashHandover, HANDOVER_CONFIRMED,
+    CASH_SOURCE_OFFICE, CASH_SOURCE_OWNER,
     STATUS_CANCELLED, STATUS_DELIVERED, STOCK_IN,
 )
 from utils import to_money, ZERO
@@ -321,11 +323,18 @@ def total_supplier_debt():
 
 def manager_month_summary(user_id, start, end):
     """Bitta menejer uchun: shu oy davomida ishlagan mijozlari soni,
-    buyurtmalar summasi va soni — bitta so'rovda."""
-    row = (
+    buyurtmalar soni va — KPI uchun — TO'LANGAN summa (bitta so'rovda).
+
+    `total_sum` endi buyurtma summasi emas, `Payment.amount` yig'indisi,
+    `Payment.paid_on` shu oy ichida bo'lganlar bo'yicha (2026-09-07,
+    foydalanuvchi qarori — "KPI faqat aplata bo'lgan summani hisoblashi
+    kerak", hozirgi to'lov qilinmagan buyurtmalar ham hisoblanib ketardi).
+    Bu — loyihaning umumiy qoidasiga mos: tushum to'lov sanasi bo'yicha
+    hisoblanadi, buyurtma sanasi bo'yicha emas.
+    """
+    clients_count, order_count = (
         db.session.query(
             func.count(func.distinct(Order.client_id)),
-            func.coalesce(func.sum(Order.total_price), 0),
             func.count(Order.id),
         )
         .filter(
@@ -337,10 +346,22 @@ def manager_month_summary(user_id, start, end):
         )
         .one()
     )
-    clients_count, total_sum, order_count = row
+    paid_sum = (
+        db.session.query(func.coalesce(func.sum(Payment.amount), 0))
+        .select_from(Payment)
+        .join(Order, Order.id == Payment.order_id)
+        .filter(
+            Order.created_by == user_id,
+            Payment.paid_on >= start,
+            Payment.paid_on < end,
+            Order.status != STATUS_CANCELLED,
+            Order.is_deleted.is_(False),
+        )
+        .scalar()
+    )
     return {
         "clients_count": clients_count or 0,
-        "total_sum": to_money(total_sum),
+        "total_sum": to_money(paid_sum),
         "order_count": order_count or 0,
     }
 
@@ -348,13 +369,18 @@ def manager_month_summary(user_id, start, end):
 def all_managers_month_summary(start, end):
     """Har bir menejer (created_by) uchun shu oydagi statistika — bitta so'rov.
 
+    `total_sum` — shu oyda TO'LANGAN summa (`Payment.paid_on` bo'yicha),
+    buyurtma summasi emas (2026-09-07, foydalanuvchi qarori — KPI faqat
+    aplata bo'lgan summadan hisoblansin). `clients_count` — shu oyda
+    yaratilgan buyurtmalar bo'yicha (faoliyat ko'rsatkichi, pulga bog'liq
+    emas — o'zgarmadi).
+
     user_id -> {clients_count, total_sum} lug'atini qaytaradi.
     """
-    rows = (
+    client_rows = (
         db.session.query(
             Order.created_by,
             func.count(func.distinct(Order.client_id)),
-            func.coalesce(func.sum(Order.total_price), 0),
         )
         .filter(
             Order.created_at >= start,
@@ -366,10 +392,32 @@ def all_managers_month_summary(start, end):
         .group_by(Order.created_by)
         .all()
     )
-    return {
-        user_id: {"clients_count": count or 0, "total_sum": to_money(total)}
-        for user_id, count, total in rows
+    paid_rows = (
+        db.session.query(
+            Order.created_by,
+            func.coalesce(func.sum(Payment.amount), 0),
+        )
+        .select_from(Payment)
+        .join(Order, Order.id == Payment.order_id)
+        .filter(
+            Payment.paid_on >= start,
+            Payment.paid_on < end,
+            Order.status != STATUS_CANCELLED,
+            Order.is_deleted.is_(False),
+            Order.created_by.isnot(None),
+        )
+        .group_by(Order.created_by)
+        .all()
+    )
+
+    result = {
+        user_id: {"clients_count": count or 0, "total_sum": ZERO}
+        for user_id, count in client_rows
     }
+    for user_id, total in paid_rows:
+        result.setdefault(user_id, {"clients_count": 0, "total_sum": ZERO})
+        result[user_id]["total_sum"] = to_money(total)
+    return result
 
 
 def all_managers_total_clients():
@@ -437,3 +485,112 @@ def employees_month_payment_totals(start, end):
     for entry in out.values():
         entry["jami"] = entry["oylik"] + entry["avans"] + entry["kpi"]
     return out
+
+
+# ---------- "Pullar" — naqd pul topshirish (2026-09-07) ----------
+
+def cash_spent_subq():
+    """to_user_id (xarajatchi) -> shu foydalanuvchi O'Z qo'lidagi (o'ziga
+    topshirilgan) naqd puldan qilgan xarajatlari jami.
+
+    cash_source to'ldirilgan (OFIS/Zoxidjon zaxirasidan qoplangan) xarajatlar
+    bu yerga kirmaydi — chunki u pul xarajatchining o'z qo'lidan emas,
+    umumiy zaxiradan chiqqan va uning shaxsiy naqd qoldig'iga ta'sir
+    qilmasligi kerak (2026-09-07, foydalanuvchi qarori)."""
+    return (
+        db.session.query(
+            Expense.created_by.label("user_id"),
+            func.coalesce(func.sum(Expense.amount), 0).label("spent"),
+        )
+        .filter(Expense.payment_method == "naqd", Expense.is_paid.is_(True),
+                Expense.cash_source.is_(None))
+        .group_by(Expense.created_by)
+        .subquery()
+    )
+
+
+def cash_received_subq():
+    """to_user_id -> shu foydalanuvchiga tasdiqlangan (qabul qilingan)
+    naqd topshiriqlar jami."""
+    return (
+        db.session.query(
+            CashHandover.to_user_id.label("user_id"),
+            func.coalesce(func.sum(CashHandover.amount), 0).label("received"),
+        )
+        .filter(CashHandover.status == HANDOVER_CONFIRMED)
+        .group_by(CashHandover.to_user_id)
+        .subquery()
+    )
+
+
+def cash_balances():
+    """Har bir ish boshqaruvchi (xarajatchi) uchun joriy naqd qoldiq:
+    qabul qilingan topshiriqlar jami minus naqd xarajatlar jami.
+
+    user_id -> Decimal balans lug'atini qaytaradi (faqat kamida bitta
+    tasdiqlangan topshirig'i bo'lgan foydalanuvchilar uchun).
+    """
+    received = cash_received_subq()
+    spent = cash_spent_subq()
+    rows = (
+        db.session.query(
+            received.c.user_id,
+            received.c.received,
+            func.coalesce(spent.c.spent, 0),
+        )
+        .select_from(received)
+        .outerjoin(spent, spent.c.user_id == received.c.user_id)
+        .all()
+    )
+    return {
+        user_id: to_money(received_amt) - to_money(spent_amt)
+        for user_id, received_amt, spent_amt in rows
+    }
+
+
+def cash_balance(user_id):
+    """Bitta xarajatchi uchun joriy naqd qoldiq (qabul qilingan minus
+    sarflangan — hozir qo'lida qolgan summa)."""
+    return cash_balances().get(user_id, ZERO)
+
+
+def cash_received(user_id):
+    """Bitta xarajatchiga BUTUN TARIX bo'yicha jami qabul qilingan naqd pul
+    (bruto — hali sarflanganini ayirmasdan). "Jami qabul qilingan naqd
+    pul" kartochkasi uchun (2026-09-07)."""
+    received = cash_received_subq()
+    row = (
+        db.session.query(received.c.received)
+        .filter(received.c.user_id == user_id)
+        .first()
+    )
+    return to_money(row[0]) if row else ZERO
+
+
+def total_order_cash_on_hand():
+    """Barcha ish boshqaruvchilar qo'lidagi jami naqd qoldiq (kompaniya
+    bo'yicha)."""
+    return sum(cash_balances().values(), ZERO)
+
+
+def cash_source_totals():
+    """CASH_SOURCE_OFFICE/CASH_SOURCE_OWNER dan har biriga qancha naqd
+    xarajat qilinganini qaytaradi (jami, butun tarix bo'yicha).
+
+    Bu ikkovi "zaxira" emas — faqat xarajatni qoplash manbai, shuning uchun
+    balans emas, "jami sarflangan summa" hisoblanadi (2026-09-07,
+    foydalanuvchi qarori)."""
+    rows = (
+        db.session.query(
+            Expense.cash_source,
+            func.coalesce(func.sum(Expense.amount), 0),
+        )
+        .filter(Expense.cash_source.in_([CASH_SOURCE_OFFICE, CASH_SOURCE_OWNER]),
+                Expense.is_paid.is_(True))
+        .group_by(Expense.cash_source)
+        .all()
+    )
+    totals = {CASH_SOURCE_OFFICE: ZERO, CASH_SOURCE_OWNER: ZERO}
+    for source, amount in rows:
+        totals[source] = to_money(amount)
+    return totals

@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul
 title Xisobot - serverga yuborish
-cd /d "F:\AI\xisobot platformasi"
+cd /d "E:\AI\xisobot platformasi"
 
 echo.
 echo ============================================

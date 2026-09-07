@@ -15,6 +15,7 @@ import os
 import sys
 import tempfile
 from datetime import timedelta
+from decimal import Decimal
 
 APP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, APP)
@@ -47,13 +48,18 @@ from app import create_app
 from extensions import db
 from models import (
     User, Client, Employee, EmployeeSalary, EmployeeAdvance, Material,
-    ClientPipelineCard, ClientPipelineEvent, Order, Expense, Payment,
+    ClientPipelineCard, ClientPipelineEvent, Order, OrderItem, Expense, Payment,
     PAYMENT_KIND_OYLIK, PAYMENT_KIND_AVANS, PAYMENT_KIND_KPI,
     PIPELINE_STAGE_NEW, PIPELINE_STAGE_CONTACTED, PIPELINE_STAGE_PROPOSAL,
     PIPELINE_STAGE_WON, PIPELINE_STAGE_LOST,
-    ORDER_PAYMENT_METHODS,
+    ORDER_PAYMENT_METHODS, CashHandover, HANDOVER_PENDING, HANDOVER_CONFIRMED,
+    CASH_SOURCE_OFFICE, CASH_SOURCE_OWNER,
 )
-from utils import today_local
+from queries import (
+    manager_month_summary, all_managers_month_summary, cash_balance,
+    cash_received, cash_source_totals, total_order_cash_on_hand,
+)
+from utils import today_local, month_bounds
 
 app = create_app()
 app.config["WTF_CSRF_ENABLED"] = False
@@ -174,7 +180,7 @@ with app.test_client() as c:
         "row_location": ["B-3 raf"],
         "moved_on": today_local().isoformat(), "note": "",
         "supplier_name": "Smoke Taminotchi", "supplier_id": "",
-        "payment_method": "naqd",
+        "payment_method": "naqd", "cash_source": "ofis",
     }, follow_redirects=True)
     check("Ombor: kirim qilindi (200)", r.status_code == 200)
 
@@ -475,6 +481,240 @@ for role, uname in [("boss", "boss_t"), ("admin", "admin_t"),
               has_today == expected)
         check(f"Dashboard: {role} uchun tug'ilgan kun eslatmasi (ertaga) {'korinadi' if expected else 'yashirilgan'}",
               has_tomorrow == expected)
+
+# ---------------------------------------------------------------- 6. Pullar
+print("\n=== PULLAR: NAQD PUL TOPSHIRISH (2026-09-07) ===")
+with app.app_context():
+    handover_order = Order(order_number="B-2026-9001", client_id=client_id, created_by=mgr_id)
+    handover_order.items.append(OrderItem(
+        order_type="Smoke naqd", quantity=1, unit_price=Decimal("80000.00"),
+        total_price=Decimal("80000.00"), position=0,
+    ))
+    handover_order.recalc_from_items()
+    db.session.add(handover_order)
+    db.session.commit()
+    handover_order_id = handover_order.id
+
+with app.test_client() as c:
+    login(c, "mgr_t")
+    r = c.post(f"/buyurtmalar/{handover_order_id}/tolov", data={
+        "amount": "80000", "paid_on": today_local().isoformat(),
+        "payment_method": "Naqd",
+    }, follow_redirects=True)
+    check("Pullar: naqd to'lov qabul qilindi (200)", r.status_code == 200)
+
+with app.app_context():
+    handover = CashHandover.query.filter_by(order_id=handover_order_id).first()
+    check("Pullar: naqd to'lovda CashHandover avtomatik yaratildi", handover is not None)
+    check("Pullar: yangi topshiriq 'kutilmoqda' holatida",
+          bool(handover) and handover.status == HANDOVER_PENDING)
+    check("Pullar: topshiriq summasi to'g'ri", bool(handover) and handover.amount == 80000)
+    check("Pullar: bitta faol xarajatchi bo'lgani uchun avtomatik unga tayinlangan",
+          bool(handover) and handover.to_user_id == xar_id)
+    handover_id = handover.id if handover else None
+
+with app.test_client() as c:
+    login(c, "mgr_t")
+    r = c.get("/pullar/")
+    check("Pullar: menejer 'Pullar' sahifasini ko'ra oladi (money.view)", r.status_code == 200)
+    r2 = c.post(f"/pullar/{handover_id}/tasdiqlash", follow_redirects=True)
+    check("Pullar: menejerda money.confirm yo'q — tasdiqlay olmaydi (200, ruxsat yo'q)",
+          r2.status_code == 200)
+
+with app.app_context():
+    still_pending = db.session.get(CashHandover, handover_id)
+    check("Pullar: menejer urinishidan keyin ham hali 'kutilmoqda'",
+          still_pending.status == HANDOVER_PENDING)
+
+with app.test_client() as c:
+    login(c, "xar_t")
+    r = c.post(f"/pullar/{handover_id}/tasdiqlash", follow_redirects=True)
+    check("Pullar: ish boshqaruvchi qabul qilganini tasdiqladi (200)", r.status_code == 200)
+
+with app.app_context():
+    confirmed_h = db.session.get(CashHandover, handover_id)
+    check("Pullar: holat 'qabul qilindi'ga o'zgardi", confirmed_h.status == HANDOVER_CONFIRMED)
+    check("Pullar: confirmed_by yozildi", confirmed_h.confirmed_by == xar_id)
+    check("Pullar: ish boshqaruvchi balansi 80 000 (hali xarajat qilinmagan)",
+          cash_balance(xar_id) == 80000)
+
+# ---------------------------------------------------------------- 7. Atkaz sababi majburiy
+print("\n=== BUYURTMANI BEKOR QILISHDA MAJBURIY SABAB (2026-09-07) ===")
+with app.app_context():
+    cancel_order = Order(order_number="B-2026-9002", client_id=client_id, created_by=admin_id)
+    cancel_order.items.append(OrderItem(
+        order_type="Smoke atkaz", quantity=1, unit_price=Decimal("10000.00"),
+        total_price=Decimal("10000.00"), position=0,
+    ))
+    cancel_order.recalc_from_items()
+    db.session.add(cancel_order)
+    db.session.commit()
+    cancel_order_id = cancel_order.id
+
+with app.test_client() as c:
+    login(c, "admin_t")
+    r = c.post(f"/buyurtmalar/{cancel_order_id}/holat", data={"status": "bekor qilindi"},
+               follow_redirects=True)
+    check("Atkaz: sababsiz bekor qilish rad etiladi (200, flash)", r.status_code == 200)
+
+with app.app_context():
+    still_new = db.session.get(Order, cancel_order_id)
+    check("Atkaz: sababsiz urinishdan keyin holat o'zgarmadi",
+          still_new.status == "buyurtma yaratildi")
+    check("Atkaz: cancel_reason ham bo'sh qoldi", not still_new.cancel_reason)
+
+with app.test_client() as c:
+    login(c, "admin_t")
+    r = c.post(f"/buyurtmalar/{cancel_order_id}/holat", data={
+        "status": "bekor qilindi", "cancel_reason": "Mijoz voz kechdi, aplata bo'lmadi",
+    }, follow_redirects=True)
+    check("Atkaz: sabab bilan bekor qilindi (200)", r.status_code == 200)
+
+with app.app_context():
+    cancelled = db.session.get(Order, cancel_order_id)
+    check("Atkaz: holat 'bekor qilindi'ga o'zgardi", cancelled.status == "bekor qilindi")
+    check("Atkaz: sabab saqlandi",
+          cancelled.cancel_reason == "Mijoz voz kechdi, aplata bo'lmadi")
+
+# ---------------------------------------------------------------- 8. KPI faqat to'langan summa
+print("\n=== KPI: FAQAT TO'LANGAN SUMMA HISOBLANADI (2026-09-07) ===")
+with app.app_context():
+    # Bu oyda mgr_t allaqachon boshqa to'lovlar qilgan (masalan, 4b-bo'limdagi
+    # 5000 va 6-bo'limdagi 80000 naqd) — shuning uchun aniq son emas, balki
+    # "shu ikki buyurtmadan oldingi/keyingi farq"ni tekshiramiz.
+    start0, end0 = month_bounds(today_local().year, today_local().month)
+    baseline_summary = manager_month_summary(mgr_id, start0, end0)
+    baseline_total = baseline_summary["total_sum"]
+
+    unpaid_order = Order(order_number="B-2026-9003", client_id=client_id, created_by=mgr_id)
+    unpaid_order.items.append(OrderItem(
+        order_type="KPI to'lanmagan", quantity=1, unit_price=Decimal("200000.00"),
+        total_price=Decimal("200000.00"), position=0,
+    ))
+    unpaid_order.recalc_from_items()
+    paid_order2 = Order(order_number="B-2026-9004", client_id=client_id, created_by=mgr_id)
+    paid_order2.items.append(OrderItem(
+        order_type="KPI to'langan", quantity=1, unit_price=Decimal("100000.00"),
+        total_price=Decimal("100000.00"), position=0,
+    ))
+    paid_order2.recalc_from_items()
+    db.session.add_all([unpaid_order, paid_order2])
+    db.session.commit()
+    unpaid_order_id = unpaid_order.id
+    paid_order2_id = paid_order2.id
+
+with app.test_client() as c:
+    login(c, "mgr_t")
+    r = c.post(f"/buyurtmalar/{paid_order2_id}/tolov", data={
+        "amount": "100000", "paid_on": today_local().isoformat(),
+        "payment_method": "Karta",
+    }, follow_redirects=True)
+    check("KPI: bitta buyurtmaga to'lov kiritildi (200)", r.status_code == 200)
+
+with app.app_context():
+    start, end = month_bounds(today_local().year, today_local().month)
+    summary = manager_month_summary(mgr_id, start, end)
+    check("KPI: to'langan buyurtma (100 000) summaga qo'shildi, to'lanmagan (200 000) kirmadi",
+          summary["total_sum"] == baseline_total + 100000)
+    check("KPI: order_count hamon shu oydagi barcha (bekor qilinmagan) buyurtmalarni sanaydi",
+          summary["order_count"] >= 2)
+
+    all_stats = all_managers_month_summary(start, end)
+    check("KPI: all_managers_month_summary ham faqat to'langan summani beradi",
+          all_stats.get(mgr_id, {}).get("total_sum") == summary["total_sum"])
+
+# ---------------------------------------------------------------- 9. OFIS/Zoxidjon naqd manba
+print("\n=== OMBOR: NAQD XARAJAT MANBAI MAJBURIY — OFIS/ZOXIDJON (2026-09-07) ===")
+
+with app.app_context():
+    expense_count_before = Expense.query.count()
+    # Boshqa (masalan 3-bo'lim, admin_t) testlarda ham OFIS/Zoxidjon manbasi
+    # ishlatilgan bo'lishi mumkin — mutlaq son emas, FARQ tekshiriladi.
+    source_totals_before = cash_source_totals()
+
+def _kirim_data(qty, price, extra=None):
+    data = {
+        "row_material_id": [str(material_id)], "row_material_name": ["Smoke Qog'oz"],
+        "row_unit": ["list"], "row_quantity": [qty], "row_price": [price],
+        "row_location": [""],
+        "moved_on": today_local().isoformat(), "note": "",
+        "supplier_name": "Smoke OFIS Taminotchi", "supplier_id": "",
+    }
+    data.update(extra or {})
+    return data
+
+with app.test_client() as c:
+    login(c, "xar_t")
+    r = c.post("/ombor/kirim", data=_kirim_data("5", "1000", {"payment_method": "naqd"}),
+               follow_redirects=True)
+    check("Manba: naqd to'lovda manba tanlanmasa rad etiladi (200, flash)", r.status_code == 200)
+
+with app.app_context():
+    check("Manba: manbasiz urinishda Expense yozilmadi",
+          Expense.query.count() == expense_count_before)
+
+with app.test_client() as c:
+    login(c, "xar_t")
+    r = c.post("/ombor/kirim", data=_kirim_data(
+        "5", "1000", {"payment_method": "naqd", "cash_source": "ofis"}
+    ), follow_redirects=True)
+    check("Manba: OFIS manbasi bilan xarajat qabul qilindi (200)", r.status_code == 200)
+
+with app.app_context():
+    ofis_expense = (Expense.query.filter_by(cash_source=CASH_SOURCE_OFFICE)
+                     .order_by(Expense.id.desc()).first())
+    check("Manba: OFIS xarajati yozildi, cash_source='ofis'",
+          ofis_expense is not None and ofis_expense.cash_source == CASH_SOURCE_OFFICE)
+    check("Manba: OFIS xarajatida source_order_id bo'sh",
+          ofis_expense is not None and ofis_expense.source_order_id is None)
+    check("Manba: OFIS xarajati summasi to'g'ri (5000)",
+          ofis_expense is not None and ofis_expense.amount == 5000)
+
+with app.test_client() as c:
+    login(c, "xar_t")
+    r = c.post("/ombor/kirim", data=_kirim_data(
+        "3", "1000", {"payment_method": "naqd", "cash_source": "zoxidjon"}
+    ), follow_redirects=True)
+    check("Manba: Zoxidjon manbasi bilan xarajat qabul qilindi (200)", r.status_code == 200)
+
+with app.app_context():
+    zox_expense = (Expense.query.filter_by(cash_source=CASH_SOURCE_OWNER)
+                    .order_by(Expense.id.desc()).first())
+    check("Manba: Zoxidjon xarajati yozildi (3000)",
+          zox_expense is not None and zox_expense.amount == 3000)
+
+    totals = cash_source_totals()
+    check("Manba: cash_source_totals OFIS +5000 ni to'g'ri hisoblaydi",
+          totals[CASH_SOURCE_OFFICE] - source_totals_before[CASH_SOURCE_OFFICE] == 5000)
+    check("Manba: cash_source_totals Zoxidjon +3000 ni to'g'ri hisoblaydi",
+          totals[CASH_SOURCE_OWNER] - source_totals_before[CASH_SOURCE_OWNER] == 3000)
+
+    check("Manba: OFIS/Zoxidjon xarajati xarajatchining shaxsiy naqd balansiga ta'sir qilmaydi",
+          cash_balance(xar_id) == 80000)
+
+with app.test_client() as c:
+    login(c, "xar_t")
+    r = c.post("/ombor/kirim", data=_kirim_data(
+        "10", "1000", {"payment_method": "naqd", "cash_source": f"order:{handover_order_id}"}
+    ), follow_redirects=True)
+    check("Manba: buyurtma puli hisobidan xarajat qabul qilindi (200)", r.status_code == 200)
+
+with app.app_context():
+    order_expense = Expense.query.filter_by(source_order_id=handover_order_id).first()
+    check("Manba: buyurtma-bog'langan xarajat yozildi, cash_source bo'sh",
+          order_expense is not None and order_expense.cash_source is None)
+    check("Manba: bu xarajat xarajatchining shaxsiy naqd balansini kamaytiradi (80000-10000=70000)",
+          cash_balance(xar_id) == 70000)
+    check("Manba: total_order_cash_on_hand() barcha xarajatchilar balansi yig'indisi bilan mos",
+          total_order_cash_on_hand() == cash_balance(xar_id))
+    check("Manba: cash_received() bruto qabul qilingan (80000) — sarflashdan ta'sirlanmaydi",
+          cash_received(xar_id) == 80000)
+
+with app.test_client() as c:
+    login(c, "xar_t")
+    r = c.post("/ombor/kirim", data=_kirim_data("2", "1000", {"payment_method": "qarzga"}),
+               follow_redirects=True)
+    check("Manba: 'qarzga' to'lov holatida manba talab qilinmaydi (200)", r.status_code == 200)
 
 # ---------------------------------------------------------------- yakun
 os.remove(db_path)

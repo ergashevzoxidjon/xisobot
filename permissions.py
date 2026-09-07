@@ -51,6 +51,10 @@ PERMISSIONS = {
     "hr.view", "hr.manage", "hr.pay",
     "users.manage",
     "settings.manage",
+    # "Pullar" — naqd pul topshirish nazorati (2026-09-07). money.view —
+    # ro'yxat/balansni ko'rish; money.confirm — o'ziga topshirilgan pulni
+    # "qabul qildim" deb tasdiqlash.
+    "money.view", "money.confirm",
 }
 
 ROLE_PERMISSIONS = {
@@ -62,6 +66,9 @@ ROLE_PERMISSIONS = {
         "orders.view", "orders.create", "orders.edit", "orders.manage",
         "clients.view", "clients.create",
         "managers.view",
+        # o'zi topshirgan naqd pullarning holatini (kutilmoqda/qabul
+        # qilindi) kuzatib borishi uchun — tasdiqlay olmaydi, faqat ko'radi.
+        "money.view",
     },
     # Ish boshqaruvchi omborni yuritadi: mahsulot qabul qiladi va sarflaydi,
     # taminotchilar bilan ishlaydi (qarz-to'lov). Moliyaviy hisobot va
@@ -79,7 +86,11 @@ ROLE_PERMISSIONS = {
                    # kunlik mijozlar bilan ishlash jurnalini kuzatib borishi
                    # kerak (2026-08-29, foydalanuvchi qarori) — shu bilan
                    # birga sotuv/KPI hisobotini ham ko'radi (bitta ruxsat).
-                   "managers.view"},
+                   "managers.view",
+                   # "Pullar" — o'ziga topshirilgan naqd pulni qabul
+                   # qilganini tasdiqlaydi va xarajatga sarflaydi
+                   # (2026-09-07, foydalanuvchi qarori).
+                   "money.view", "money.confirm"},
     # Boss — korxona rahbari. Endi Buyurtmalar, Mijozlar, Taminotchilar va
     # Ombor bo'limlariga kirmaydi (2026-08-29, foydalanuvchi qarori) — faqat
     # hisobot, tahlil, menejerlar statistikasi va HR ro'yxatini ko'radi.
@@ -90,6 +101,8 @@ ROLE_PERMISSIONS = {
         "reports.view", "reports.export",
         "managers.view",
         "hr.view", "hr.pay",
+        # Naqd pul qayerdaligini kuzatib borishi kerak — faqat ko'radi.
+        "money.view",
     },
 }
 

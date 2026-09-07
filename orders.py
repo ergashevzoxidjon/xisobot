@@ -18,6 +18,7 @@ from models import (
     ClientPipelineCard, User, log_action, can_transition,
     ORDER_STATUSES, ALLOWED_TRANSITIONS, STATUS_CANCELLED, STATUS_PRODUCTION,
     STATUS_READY, ZERO, ORDER_PAYMENT_METHODS,
+    CashHandover, HANDOVER_PENDING, CASH_PAYMENT_METHOD,
 )
 from notifications import notify_new_order, notify_payment
 from permissions import permission_required, has_perm
@@ -478,6 +479,7 @@ def order_detail(order_id):
     return render_template(
         "orders/detail.html", order=o, payments=payments, statuses=allowed,
         order_payment_methods=ORDER_PAYMENT_METHODS,
+        active_xarajatchi=_active_xarajatchi() if has_perm("orders.manage") else [],
     )
 
 
@@ -535,12 +537,56 @@ def update_status(order_id):
         )
         return redirect(url_for("orders.order_detail", order_id=order_id))
 
+    # Bekor qilishda sabab majburiy (2026-09-07, foydalanuvchi qarori) —
+    # barcha jarayonlar tasdiqlanib, oxir-oqibat to'lovsiz atkaz bo'lib
+    # qolishi mumkin, shu holatlarda nima uchunligi yozib qo'yilsin.
+    cancel_reason = None
+    if new_status == STATUS_CANCELLED:
+        try:
+            cancel_reason = parse_text(
+                request.form.get("cancel_reason"), "Bekor qilish sababi",
+                required=True, max_length=500,
+            )
+        except ValidationError as e:
+            flash(str(e), "danger")
+            return redirect(url_for("orders.order_detail", order_id=order_id))
+
     old = o.status
     o.status = new_status
-    log_action(current_user, "status", "order", o.id, f"{old} -> {new_status}")
+    if new_status == STATUS_CANCELLED:
+        o.cancel_reason = cancel_reason
+    elif old == STATUS_CANCELLED:
+        # "bekor qilindi"dan qaytadan tiklanganda eski sabab endi ma'nosiz
+        o.cancel_reason = None
+    log_action(current_user, "status", "order", o.id, f"{old} -> {new_status}"
+               + (f" ({cancel_reason})" if cancel_reason else ""))
     db.session.commit()
     flash("Holat yangilandi.", "success")
     return redirect(url_for("orders.order_detail", order_id=order_id))
+
+
+def _active_xarajatchi():
+    return (
+        User.query.filter_by(role="xarajatchi", is_active_user=True)
+        .order_by(User.username).all()
+    )
+
+
+def _resolve_handover_target(form):
+    """Naqd pul topshiriladigan ish boshqaruvchini aniqlaydi.
+
+    Faol xarajatchi bitta bo'lsa — avtomatik shunga. Bir nechta bo'lsa —
+    formadagi `xarajatchi_id`dan (forma buni faqat shunday holatda
+    ko'rsatadi). Hech biri aniqlanmasa `None` — topshiriq tayinlanmagan
+    holda yoziladi, keyin admin "Pullar" bo'limida qo'lda tayinlaydi.
+    """
+    active = _active_xarajatchi()
+    if len(active) == 1:
+        return active[0]
+    if len(active) > 1:
+        xid = form.get("xarajatchi_id", type=int)
+        return next((x for x in active if x.id == xid), None)
+    return None
 
 
 @orders_bp.route("/<int:order_id>/tolov", methods=["POST"])
@@ -590,6 +636,13 @@ def add_payment(order_id):
             )
             return redirect(url_for("orders.order_detail", order_id=order_id))
 
+    # Naqd pul kimga topshirilishini — bir nechta faol ish boshqaruvchi
+    # bo'lsa — oldindan aniqlaymiz (to'lovni bloklamaydi, faqat aniqlanmasa
+    # topshiriq tayinlanmagan holda yoziladi).
+    handover_target = None
+    if payment_method == CASH_PAYMENT_METHOD:
+        handover_target = _resolve_handover_target(request.form)
+
     # Qarzdan ko'p to'lash mumkin — ortiqchasi mijozning avansi (zapas puli)
     # bo'lib qoladi. Faqat ogohlantiramiz, bloklamaymiz.
     p = Payment(
@@ -597,6 +650,24 @@ def add_payment(order_id):
         payment_method=payment_method, created_by=current_user.id,
     )
     db.session.add(p)
+    db.session.flush()
+
+    # Naqd to'lov — "Pullar" bo'limida ish boshqaruvchiga topshirish
+    # kerakligi avtomatik qayd etiladi (2026-09-07, foydalanuvchi qarori).
+    # Bu SOF QO'SHIMCHA kuzatuv — moliyaviy hisob-kitobga ta'sir qilmaydi.
+    if payment_method == CASH_PAYMENT_METHOD:
+        db.session.add(CashHandover(
+            payment_id=p.id, order_id=o.id, amount=amount,
+            from_user_id=current_user.id,
+            to_user_id=handover_target.id if handover_target else None,
+            status=HANDOVER_PENDING,
+        ))
+        if not handover_target:
+            flash(
+                "Diqqat: naqd pul kimga topshirilgani aniqlanmadi — "
+                "«Pullar» bo'limida admin qo'lda tayinlashi kerak.", "warning",
+            )
+
     log_action(current_user, "payment", "order", o.id, f"{amount} so'm to'lov")
     db.session.commit()
     notify_payment(o, amount)

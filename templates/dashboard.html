@@ -153,17 +153,6 @@
       </div>
     </div>
   </div>
-  {% if has_perm('reports.view') %}
-  <div class="col-sm-6 col-lg-4">
-    <div class="card p-3 stat-card">
-      <div class="stat-icon {% if supplier_debt %}red{% else %}slate{% endif %}"><i class="bi bi-wallet2"></i></div>
-      <div>
-        <div class="stat-label">Taminotchilarga qarzimiz</div>
-        <div class="stat-value num {% if supplier_debt %}text-danger{% endif %}">{{ supplier_debt|uzs }}</div>
-      </div>
-    </div>
-  </div>
-  {% endif %}
 </div>
 
 {% if has_perm('reports.view') %}

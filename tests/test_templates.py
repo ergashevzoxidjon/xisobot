@@ -25,7 +25,8 @@ fails = []
 
 # ---------------------------------------------------------------- 1. endpointlar
 ROUTE_FILES = ["auth.py", "main.py", "clients.py", "orders.py", "finance.py",
-               "stock.py", "suppliers.py", "settings.py", "managers.py", "hr.py"]
+               "stock.py", "suppliers.py", "settings.py", "managers.py", "hr.py",
+               "money.py"]
 endpoints = set()
 for fname in ROUTE_FILES:
     src = open(f"{APP}/{fname}").read()
@@ -94,20 +95,24 @@ ROLE_PERMISSIONS = {
               "reports.view", "reports.export",
               "managers.view", "managers.manage",
               "hr.view", "hr.manage", "hr.pay",
-              "users.manage", "settings.manage"},
+              "users.manage", "settings.manage",
+              "money.view", "money.confirm"},
     "menejer": {"orders.view", "orders.create", "orders.edit", "orders.manage",
                 "clients.view", "clients.create",
-                "managers.view"},
+                "managers.view",
+                "money.view"},
     "xarajatchi": {"expenses.view", "expenses.create", "orders.view", "orders.status",
                    "stock.view", "stock.manage",
                    "suppliers.view", "suppliers.manage",
                    "reports.view",
                    "hr.view", "hr.pay",
-                   "managers.view"},
+                   "managers.view",
+                   "money.view", "money.confirm"},
     "boss": {"expenses.view",
              "reports.view", "reports.export",
              "managers.view",
-             "hr.view", "hr.pay"},
+             "hr.view", "hr.pay",
+             "money.view"},
 }
 ROLE_LABELS = {"admin": "Administrator", "menejer": "Menejer",
                "xarajatchi": "Ish boshqaruvchi", "boss": "Boss"}
@@ -228,7 +233,7 @@ order = SimpleNamespace(
     items=[item_a, item_b], items_summary="Vizitka +1 ta",
     expenses=[order_expense], expenses_total=Decimal("12000.00"),
     direct_expenses=Decimal("12000.00"), stock_cost=Decimal("0.00"),
-    materials_used=[], profit=Decimal("38000.00"),
+    materials_used=[], profit=Decimal("38000.00"), cancel_reason=None,
 )
 overdue_order = SimpleNamespace(
     id=2, order_number="B-2026-0002", client=client, client_id=1, order_type="Banner",
@@ -242,7 +247,7 @@ overdue_order = SimpleNamespace(
     items=[], items_summary="Banner",
     expenses=[], expenses_total=Decimal("0.00"),
     direct_expenses=Decimal("0.00"), stock_cost=Decimal("0.00"),
-    materials_used=[], profit=Decimal("500000.00"),
+    materials_used=[], profit=Decimal("500000.00"), cancel_reason=None,
 )
 move_out = SimpleNamespace(
     id=2, material=material, kind="chiqim", quantity=Decimal("260.000"),
@@ -283,6 +288,21 @@ months_rows = [
 
 audit = SimpleNamespace(id=1, created_at=datetime.now(), user=user, action="create",
                         entity="order", entity_id=1, detail="B-2026-0001 yaratildi")
+
+# ---- "Pullar" — naqd pul topshirish mocklari (2026-09-07) ----
+xarajatchi_user = SimpleNamespace(id=6, username="xarajatchi1", full_name="Sherzod Yusupov",
+                                  display_name="Sherzod Yusupov", role="xarajatchi",
+                                  is_active_user=True)
+handover_pending = SimpleNamespace(
+    id=1, amount=Decimal("50000.00"), status="kutilmoqda",
+    from_user=user, from_user_id=1, to_user=xarajatchi_user, to_user_id=6,
+    order=order, order_id=1, created_at=datetime.now(), confirmed_at=None,
+)
+handover_confirmed = SimpleNamespace(
+    id=2, amount=Decimal("100000.00"), status="qabul qilindi",
+    from_user=user, from_user_id=1, to_user=xarajatchi_user, to_user_id=6,
+    order=overdue_order, order_id=2, created_at=datetime.now(), confirmed_at=datetime.now(),
+)
 
 # ---- HR va Manager xisoboti mocklari (2026-08-29, foydalanuvchi qarori) ----
 manager_user = SimpleNamespace(id=5, username="komila", full_name="Komila Ahmedova",
@@ -390,7 +410,8 @@ CONTEXTS = {
                              prefill=None, form=None),
     "orders/detail.html": dict(order=order, payments=[payment],
                                statuses=["ishlab chiqarishda", "yetkazish uchun tayyor", "bekor qilindi"],
-                               order_payment_methods=ORDER_PAYMENT_METHODS_TEST),
+                               order_payment_methods=ORDER_PAYMENT_METHODS_TEST,
+                               active_xarajatchi=[]),
     "orders/invoice.html": dict(order=order, today=TODAY, company=company),
     "orders/deleted.html": dict(orders=[order]),
     "clients/deleted.html": dict(clients=[client]),
@@ -411,7 +432,9 @@ CONTEXTS = {
     "stock/material_form.html": dict(material=None, form=None,
                                      units=["dona", "list", "kg"]),
     "stock/receive.html": dict(materials=[material], suppliers=[supplier, supplier_no_debt],
-                               preselected_id=None, today_date=TODAY, form=None,
+                               preselected_id=None, preselected_order_id=None,
+                               cash_handovers=[], cash_source_labels={"ofis": "OFIS xisobidan", "zoxidjon": "Zoxidjon xisobidan"},
+                               today_date=TODAY, form=None,
                                units=["dona", "list", "kg"],
                                payer_companies=["Marvel Creative MChJ", "MyPrint MChJ"]),
     "stock/detail.html": dict(material=material, moves=[move_in, move_out],
@@ -524,6 +547,15 @@ CONTEXTS = {
         stage_colors=PIPELINE_STAGE_COLORS_TEST, can_manage=True,
     ),
     "managers/jurnal.html": dict(),
+    "money/list.html": dict(
+        pending=[handover_pending], confirmed=[handover_confirmed],
+        my_balance=Decimal("100000.00"), my_received=Decimal("150000.00"),
+        balance_rows=[{"user": xarajatchi_user, "balance": Decimal("100000.00")}],
+        source_totals={
+            "OFIS xisobidan": Decimal("50000.00"), "Zoxidjon xisobidan": Decimal("0.00"),
+        },
+        can_confirm=True,
+    ),
     "errors/error.html": dict(code=404, title="Topilmadi", message="Sahifa yo'q"),
 }
 
@@ -598,13 +630,14 @@ prepaid_order = SimpleNamespace(
     items=[item_a], items_summary="Banner",
     expenses=[], expenses_total=Decimal("0.00"),
     direct_expenses=Decimal("0.00"), stock_cost=Decimal("0.00"),
-    materials_used=[], profit=Decimal("70000.00"),
+    materials_used=[], profit=Decimal("70000.00"), cancel_reason=None,
 )
 PREPAID_CONTEXTS = {
     "orders/detail.html": dict(order=prepaid_order, payments=[payment],
                                statuses=["buyurtma yaratildi", "to'lov qilish jarayonida",
                                          "bekor qilindi"],
-                               order_payment_methods=ORDER_PAYMENT_METHODS_TEST),
+                               order_payment_methods=ORDER_PAYMENT_METHODS_TEST,
+                               active_xarajatchi=[]),
     "orders/list.html": dict(orders=[prepaid_order],
                              pagination=FakePagination([prepaid_order], 1),
                              statuses=["buyurtma yaratildi", "to'lov qilish jarayonida",
@@ -647,16 +680,16 @@ EXPECTED_MENU = {
     # "Telegram" 2026-09-05'da foydalanuvchi so'rovi bilan qaytarildi.
     "admin": ["Bosh sahifa", "Buyurtmalar", "Mijozlar", "Ombor", "Taminotchilar", "Manager xisoboti",
               "Mijozlar bilan ishlash",
-              "Xarajatlar", "Moliyaviy hisobot", "Tahlil", "Taminotchi qarzlari", "HR",
+              "Pullar", "Xarajatlar", "Moliyaviy hisobot", "Tahlil", "Taminotchi qarzlari", "HR",
               "Buyurtma turlari", "Telegram",
               "O'chirilgan buyurtmalar", "O'chirilgan mijozlar",
               "Foydalanuvchilar", "Harakatlar jurnali"],
     "menejer": ["Bosh sahifa", "Buyurtmalar", "Mijozlar", "Manager xisoboti",
-                "Mijozlar bilan ishlash"],
+                "Mijozlar bilan ishlash", "Pullar"],
     "xarajatchi": ["Bosh sahifa", "Buyurtmalar", "Ombor", "Taminotchilar", "Manager xisoboti",
                    "Mijozlar bilan ishlash",
-                   "Xarajatlar", "Moliyaviy hisobot", "Tahlil", "Taminotchi qarzlari", "HR"],
-    "boss": ["Bosh sahifa", "Manager xisoboti", "Mijozlar bilan ishlash", "Xarajatlar",
+                   "Pullar", "Xarajatlar", "Moliyaviy hisobot", "Tahlil", "Taminotchi qarzlari", "HR"],
+    "boss": ["Bosh sahifa", "Manager xisoboti", "Mijozlar bilan ishlash", "Pullar", "Xarajatlar",
              "Moliyaviy hisobot", "Tahlil", "Taminotchi qarzlari", "HR"],
 }
 for role, perms in ROLE_PERMISSIONS.items():

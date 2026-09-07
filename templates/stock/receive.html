@@ -16,6 +16,7 @@
 {% set posted_supplier_name = form.get('supplier_name', '') if form and form.get is defined else '' %}
 {% set posted_payment_method = form.get('payment_method', 'naqd') if form and form.get is defined else 'naqd' %}
 {% set posted_paid_via = form.get('paid_via', '') if form and form.get is defined else '' %}
+{% set posted_cash_source = form.get('cash_source', '') if form and form.get is defined else (('order:' ~ preselected_order_id) if preselected_order_id else '') %}
 
 {% set rows = [] %}
 {% if posted_material_names %}
@@ -195,6 +196,23 @@
         {% endfor %}
       </div>
       <div class="form-text">Xisobotda tashkilotlar bo'yicha alohida ko'rinadi.</div>
+    </div>
+
+    <div id="cashSourceBlock" class="mt-3">
+      <label class="form-label">Naqd pul qaysi manbadan qoplanmoqda</label>
+      <select class="form-select" name="cash_source" id="cashSourceSelect">
+        <option value="">— tanlang —</option>
+        {% for h in cash_handovers %}
+        <option value="order:{{ h.order_id }}" {% if posted_cash_source == 'order:' ~ h.order_id %}selected{% endif %}>
+          {{ h.order.order_number if h.order else '?' }} — {{ h.amount|uzs }} so'm
+          {% if h.order and h.order.client %}({{ h.order.client.name }}){% endif %}
+        </option>
+        {% endfor %}
+        {% for key, label in cash_source_labels.items() %}
+        <option value="{{ key }}" {% if posted_cash_source == key %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <div class="form-text">Naqd pul topshirilgan buyurtma puli hisobidanmi, yoki OFIS/Zoxidjon zaxirasidanmi — majburiy tanlanadi (hisob-kitobga ta'sir qilmaydi, faqat izlanish uchun).</div>
     </div>
   </div>
 
@@ -444,9 +462,15 @@ document.querySelectorAll('.supplier-chip').forEach(btn => {
 /* ---------------- to'lov usuli: perechisleniye bo'lsa tashkilot so'raladi ---------------- */
 
 const paidViaBlock = document.getElementById('paidViaBlock');
+const cashSourceBlock = document.getElementById('cashSourceBlock');
+const cashSourceSelect = document.getElementById('cashSourceSelect');
 function syncPaidVia() {
   const checked = document.querySelector('input[name="payment_method"]:checked');
-  paidViaBlock.style.display = (checked && checked.value === 'perechisleniye') ? '' : 'none';
+  const isTransfer = checked && checked.value === 'perechisleniye';
+  const isCash = checked && checked.value === 'naqd';
+  paidViaBlock.style.display = isTransfer ? '' : 'none';
+  cashSourceBlock.style.display = isCash ? '' : 'none';
+  cashSourceSelect.required = isCash;
 }
 document.querySelectorAll('input[name="payment_method"]').forEach(r => {
   r.addEventListener('change', syncPaidVia);

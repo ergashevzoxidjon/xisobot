@@ -354,6 +354,11 @@ class Order(db.Model):
     is_deleted = db.Column(db.Boolean, default=False, nullable=False, index=True)
     deleted_at = db.Column(db.DateTime)
     deleted_by = db.Column(db.Integer, db.ForeignKey("user.id"))
+    # Bekor qilish sababi — "bekor qilindi" holatiga o'tkazishda majburiy
+    # (2026-09-07, foydalanuvchi qarori): barcha jarayonlar tasdiqlanib,
+    # oxir-oqibat to'lovsiz atkaz bo'lib qolishi mumkin — shu holatlarda
+    # sabab yozilishi shart bo'lsin.
+    cancel_reason = db.Column(db.Text)
 
     creator = db.relationship("User", foreign_keys=[created_by])
     payments = db.relationship(
@@ -567,6 +572,67 @@ class Payment(db.Model):
     creator = db.relationship("User", foreign_keys=[created_by])
 
 
+# ---------- "Pullar" — naqd pul topshirish nazorati (2026-09-07) ----------
+# Menejer naqd to'lov qabul qilganda, pul ish boshqaruvchiga (xarajatchi)
+# jismonan topshiriladi. Shu topshiriqni tizimda kuzatish uchun: menejer
+# to'lov kiritganda avtomatik yoziladi (kutilmoqda), ish boshqaruvchi
+# qabul qilganini tasdiqlaydi — shundan keyingina o'sha pulni xarajatga
+# (asosan ombor to'ldirishga) sarflay boshlaydi. Bu — sof QO'SHIMCHA
+# kuzatuv qatlami: to'lov kiritilgan zahoti (hozirgidek) moliyaviy
+# hisob-kitobga kiraveradi, shu jadval hech narsani o'zgartirmaydi.
+HANDOVER_PENDING = "kutilmoqda"
+HANDOVER_CONFIRMED = "qabul qilindi"
+HANDOVER_STATUSES = [HANDOVER_PENDING, HANDOVER_CONFIRMED]
+
+# Faqat shu to'lov usulida kelgan pul naqd hisoblanadi va topshirish
+# talab qilinadi — boshqalari (Karta, Terminal, Dogovor ..., Birja)
+# bevosita bank/shartnoma hisobiga tushadi, jismonan topshirish shart emas.
+CASH_PAYMENT_METHOD = "Naqd"
+
+# Ombor kirimida "Naqd to'landi" tanlansa, pul albatta BITTA manbadan
+# qoplanadi: yoki muayyan buyurtmaning topshirilgan puli (Expense.
+# source_order_id), yoki ikkita umumiy zaxiradan biri — OFIS kassasi yoki
+# Zoxidjon (rahbar) shaxsan qoplagan pul. Bu ikkovi uchun "kirim" (to'ldirish)
+# alohida yozilmaydi — faqat shu manbadan qancha sarflangani hisoblanadi
+# (2026-09-07, foydalanuvchi qarori). Manba tanlash MAJBURIY.
+CASH_SOURCE_OFFICE = "ofis"
+CASH_SOURCE_OWNER = "zoxidjon"
+CASH_SOURCE_LABELS = {
+    CASH_SOURCE_OFFICE: "OFIS xisobidan",
+    CASH_SOURCE_OWNER: "Zoxidjon xisobidan",
+}
+
+
+class CashHandover(db.Model):
+    """Menejerdan ish boshqaruvchiga o'tkazilayotgan (yoki o'tkazilgan)
+    bitta naqd pul topshirig'i — har bir naqd to'lov uchun alohida yoziladi."""
+    __tablename__ = "cash_handover"
+
+    id = db.Column(db.Integer, primary_key=True)
+    payment_id = db.Column(db.Integer, db.ForeignKey("payment.id"),
+                           nullable=False, unique=True, index=True)
+    order_id = db.Column(db.Integer, db.ForeignKey("order.id"), nullable=False, index=True)
+    amount = db.Column(MONEY, nullable=False)
+    from_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), index=True)   # menejer
+    to_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), index=True)     # ish boshqaruvchi
+    status = db.Column(db.String(20), default=HANDOVER_PENDING, nullable=False, index=True)
+    confirmed_by = db.Column(db.Integer, db.ForeignKey("user.id"))
+    confirmed_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=now_local)
+
+    payment = db.relationship("Payment", backref=db.backref(
+        "handover", uselist=False, cascade="all, delete-orphan"
+    ))
+    order = db.relationship("Order", foreign_keys=[order_id])
+    from_user = db.relationship("User", foreign_keys=[from_user_id])
+    to_user = db.relationship("User", foreign_keys=[to_user_id])
+    confirmer = db.relationship("User", foreign_keys=[confirmed_by])
+
+    @property
+    def is_confirmed(self):
+        return self.status == HANDOVER_CONFIRMED
+
+
 class Expense(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     category = db.Column(db.String(50), default="ofis xarajatlari", nullable=False, index=True)
@@ -589,10 +655,20 @@ class Expense(db.Model):
     # payment_method="perechisleniye" bo'lganda — qaysi tashkilot hisobidan
     # to'langani (PAYER_COMPANIES dan biri).
     paid_via = db.Column(db.String(150))
+    # Bu xarajat qaysi mijoz buyurtmasining (naqd) to'lovi hisobidan
+    # qilingani — "Pullar" bo'limidagi izlanish uchun, ixtiyoriy, hisob-
+    # kitobga ta'sir qilmaydi (2026-09-07, foydalanuvchi qarori).
+    source_order_id = db.Column(db.Integer, db.ForeignKey("order.id"), index=True)
+    # "Naqd to'landi" xarajat source_order_id orqali emas, OFIS yoki
+    # Zoxidjon (rahbar) zaxirasidan qoplangan bo'lsa — shu yerda
+    # CASH_SOURCE_OFFICE/CASH_SOURCE_OWNER yoziladi. Ikkalasi bir vaqtda
+    # to'lmaydi. Naqd bo'lmagan xarajatlarda bo'sh (2026-09-07).
+    cash_source = db.Column(db.String(20))
 
     creator = db.relationship("User", foreign_keys=[created_by])
     order = db.relationship("Order", backref="expenses", foreign_keys=[order_id])
     supplier = db.relationship("Supplier", backref="expenses", foreign_keys=[supplier_id])
+    source_order = db.relationship("Order", foreign_keys=[source_order_id])
 
 
 class Material(db.Model):

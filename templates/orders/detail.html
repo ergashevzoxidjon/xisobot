@@ -138,8 +138,13 @@
         <span class="text-muted small mx-1">→</span>
         {% for s in statuses %}
         {% if s != order.status %}
-        <form method="post" action="{{ url_for('orders.update_status', order_id=order.id) }}" class="d-inline"
-              {% if s == 'bekor qilindi' %}onsubmit="return confirm('Buyurtma bekor qilinsinmi?')"{% endif %}>
+        {% if s == 'bekor qilindi' %}
+        <button type="button" class="btn btn-outline-{{ s|status_color }} rounded-pill btn-sm status-switch-btn"
+                data-bs-toggle="modal" data-bs-target="#cancelOrderModal">
+          <i class="bi {{ s|status_icon }} me-1"></i>{{ s }}
+        </button>
+        {% else %}
+        <form method="post" action="{{ url_for('orders.update_status', order_id=order.id) }}" class="d-inline">
           {{ csrf() }}
           <input type="hidden" name="status" value="{{ s }}">
           <button class="btn btn-outline-{{ s|status_color }} rounded-pill btn-sm status-switch-btn">
@@ -147,10 +152,46 @@
           </button>
         </form>
         {% endif %}
+        {% endif %}
         {% endfor %}
         {% endif %}
       </div>
       <div class="form-text mt-2">Kerakli holatni bosing — darhol yangilanadi.</div>
+    </div>
+
+    {% if 'bekor qilindi' in statuses %}
+    <div class="modal fade" id="cancelOrderModal" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <form method="post" action="{{ url_for('orders.update_status', order_id=order.id) }}">
+            {{ csrf() }}
+            <input type="hidden" name="status" value="bekor qilindi">
+            <div class="modal-header">
+              <h5 class="modal-title">Buyurtmani bekor qilish</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <p class="mb-3">Buyurtma {{ order.order_number }} bekor qilinsinmi?</p>
+              <label class="form-label mb-1">Bekor qilish sababi</label>
+              <input class="form-control" name="cancel_reason" maxlength="500" required
+                     placeholder="Masalan: mijoz voz kechdi, aplata bo'lmadi">
+              <div class="form-text">Sabab majburiy — keyinchalik nima uchun atkaz bo'lganini bilish uchun.</div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Yopish</button>
+              <button class="btn btn-danger"><i class="bi bi-x-circle"></i> Bekor qilish</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+    {% endif %}
+
+    {% if order.status == 'bekor qilindi' and order.cancel_reason %}
+    <div class="card p-4 mt-3">
+      <h6 class="fw-bold mb-2 text-danger"><i class="bi bi-x-circle me-1"></i> Bekor qilish sababi</h6>
+      <p class="mb-0">{{ order.cancel_reason }}</p>
     </div>
     {% endif %}
 
@@ -245,7 +286,7 @@
             <button type="submit" class="btn btn-success w-100"><i class="bi bi-plus-lg"></i> Qo'shish</button>
           </div>
           <div class="col-sm-7">
-            <select name="payment_method" class="form-select" required>
+            <select name="payment_method" id="paymentMethodSelect" class="form-select" required>
               <option value="" disabled selected>To'lov usuli — tanlang</option>
               {% for pm in order_payment_methods %}
               <option value="{{ pm }}">{{ pm }}</option>
@@ -255,6 +296,16 @@
           <div class="col-sm-5">
             <input type="text" name="note" class="form-control" placeholder="Izoh (ixtiyoriy)">
           </div>
+          {% if active_xarajatchi|length > 1 %}
+          <div class="col-sm-12" id="xarajatchiBlock" hidden>
+            <select name="xarajatchi_id" class="form-select">
+              <option value="" disabled selected>Naqd pul kimga topshiriladi?</option>
+              {% for x in active_xarajatchi %}
+              <option value="{{ x.id }}">{{ x.display_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          {% endif %}
         </div>
         <div class="form-text mt-2">
           {% if order.remaining > 0 %}
@@ -264,6 +315,9 @@
             Buyurtma to'liq to'langan, ustiga {{ order.overpaid|uzs }} so'm avans bor.
           {% else %}
             Buyurtma to'liq to'langan. Yangi summa avans sifatida yoziladi.
+          {% endif %}
+          {% if active_xarajatchi %}
+            Naqd to'lov tanlansa, «Pullar» bo'limida ish boshqaruvchiga topshirilgani qayd etiladi.
           {% endif %}
         </div>
       </form>
@@ -347,4 +401,22 @@
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var methodSelect = document.getElementById('paymentMethodSelect');
+  var block = document.getElementById('xarajatchiBlock');
+  if (!methodSelect || !block) return;
+  var select = block.querySelector('select');
+  function sync() {
+    var isCash = methodSelect.value === 'Naqd';
+    block.hidden = !isCash;
+    if (select) select.required = isCash;
+  }
+  methodSelect.addEventListener('change', sync);
+  sync();
+})();
+</script>
 {% endblock %}

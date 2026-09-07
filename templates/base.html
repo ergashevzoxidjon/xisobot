@@ -418,8 +418,13 @@ a{ text-decoration:none; }
       </a>
       {% endif %}
 
-      {% if has_perm('expenses.view') or has_perm('reports.view') %}
+      {% if has_perm('expenses.view') or has_perm('reports.view') or has_perm('money.view') %}
       <div class="sidebar-section">Moliya</div>
+      {% endif %}
+      {% if has_perm('money.view') %}
+      <a href="{{ url_for('money.list_handovers') }}" class="{% if request.endpoint and request.endpoint.startswith('money.') %}active{% endif %}">
+        <i class="bi bi-cash-coin"></i> Pullar
+      </a>
       {% endif %}
       {% if has_perm('expenses.view') %}
       <a href="{{ url_for('finance.expenses_list') }}" class="{% if request.endpoint in ['finance.expenses_list', 'finance.new_expense', 'finance.edit_expense'] %}active{% endif %}">

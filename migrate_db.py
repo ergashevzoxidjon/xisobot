@@ -390,6 +390,12 @@ def main():
         add_column("client", "is_deleted BOOLEAN DEFAULT 0 NOT NULL", "is_deleted")
         add_column("client", "deleted_at DATETIME", "deleted_at")
 
+        # --- v16'dan oldinga ko'chirildi: "order.cancel_reason" ustuni shu
+        # yerda, ERTAROQ qo'shilishi SHART — pastdagi migrate_order_items()
+        # Order modelini ORM orqali (barcha ustunlari bilan) o'qiydi, va agar
+        # bu ustun bazada hali yo'q bo'lsa, "no such column" xatosi beradi. ---
+        add_column("order", "cancel_reason TEXT", "cancel_reason")
+
         # --- v4: ko'p qatorli buyurtma va buyurtmaga bog'langan xarajat ---
         add_column("expense", "order_id INTEGER", "order_id")
         migrate_order_items()
@@ -453,6 +459,18 @@ def main():
         # ko'radi (2026-09-03, foydalanuvchi qarori). Eski mijozlarda
         # bo'sh qoladi (kim qo'shgani noma'lum). ---
         add_column("client", "created_by INTEGER", "created_by")
+
+        # --- v16: "Pullar" — naqd pul topshirish nazorati (cash_handover
+        # jadvali create_all bilan yaratiladi) va buyurtmani bekor
+        # qilishda majburiy sabab (2026-09-07, foydalanuvchi qarori).
+        # ("order.cancel_reason" yuqorida, migrate_order_items()'dan OLDIN
+        # qo'shiladi — sabab yuqoridagi izohda.) ---
+        add_column("expense", "source_order_id INTEGER", "source_order_id")
+
+        # --- v17: naqd xarajat OFIS yoki Zoxidjon (rahbar) zaxirasidan
+        # qoplangan bo'lsa shu yerda belgilanadi — "Pullar" bo'limida
+        # manba bo'yicha jami sarf ko'rsatiladi (2026-09-07). ---
+        add_column("expense", "cash_source VARCHAR(20)", "cash_source")
 
         migrate_paid_amount()
         ensure_upload_folder(app)

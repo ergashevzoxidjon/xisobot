@@ -26,6 +26,8 @@ from models import (
     Material, StockMove, Expense, Order, Supplier, log_action,
     STOCK_IN, STOCK_OUT, STOCK_UNITS, STOCK_EXPENSE_CATEGORY, ZERO,
     PAYMENT_CASH, PAYMENT_TRANSFER, PAYER_COMPANIES,
+    CashHandover, HANDOVER_CONFIRMED,
+    CASH_SOURCE_OFFICE, CASH_SOURCE_OWNER, CASH_SOURCE_LABELS,
 )
 from permissions import permission_required
 from queries import materials_with_stock
@@ -355,6 +357,30 @@ def receive():
             flash(str(e), "danger")
             return _receive_page(form=request.form)
 
+        # "Naqd to'landi" tanlansa, pul albatta BITTA manbadan qoplanadi:
+        # muayyan buyurtmaning topshirilgan puli, yoki OFIS/Zoxidjon umumiy
+        # zaxirasi — tanlash MAJBURIY (2026-09-07, foydalanuvchi qarori).
+        # Boshqa to'lov holatlarida (perechisleniye/qarzga) bu tegishli emas.
+        source_order_id = None
+        cash_source = None
+        if payment_choice == PAYMENT_CASH:
+            raw_source = (request.form.get("cash_source") or "").strip()
+            if not raw_source:
+                flash("Naqd to'lov qaysi manbadan qoplanganini tanlang.", "danger")
+                return _receive_page(form=request.form)
+            if raw_source in (CASH_SOURCE_OFFICE, CASH_SOURCE_OWNER):
+                cash_source = raw_source
+            elif raw_source.startswith("order:") and raw_source[6:].isdigit():
+                order_id = int(raw_source[6:])
+                if order_id in _allowed_source_order_ids(current_user):
+                    source_order_id = order_id
+                else:
+                    flash("Tanlangan buyurtma puli sizga tegishli emas yoki topilmagan.", "danger")
+                    return _receive_page(form=request.form)
+            else:
+                flash("Noto'g'ri manba tanlandi.", "danger")
+                return _receive_page(form=request.form)
+
         if moved_on > today_local():
             flash("Kirim sanasi kelajakda bo'lishi mumkin emas.", "danger")
             return _receive_page(form=request.form)
@@ -381,6 +407,8 @@ def receive():
                 is_paid=is_paid,
                 payment_method=payment_method,
                 paid_via=paid_via,
+                source_order_id=source_order_id,
+                cash_source=cash_source,
                 created_by=current_user.id,
             )
             db.session.add(expense)
@@ -416,13 +444,33 @@ def receive():
     return _receive_page(form=None)
 
 
+def _confirmed_handovers_for(user):
+    """Foydalanuvchi naqd manba sifatida tanlashi mumkin bo'lgan tasdiqlangan
+    topshiriqlar — admin istalganini, boshqalar faqat o'zinikini."""
+    query = CashHandover.query.filter_by(status=HANDOVER_CONFIRMED)
+    if user.role != "admin":
+        query = query.filter_by(to_user_id=user.id)
+    return query.order_by(CashHandover.confirmed_at.desc()).limit(20).all()
+
+
+def _allowed_source_order_ids(user):
+    return {h.order_id for h in _confirmed_handovers_for(user)}
+
+
 def _receive_page(form):
     preselected = request.args.get("material_id", type=int)
+    # "Pullar" bo'limidan "Xarajat qilish" tugmasi bosilsa shu naqd
+    # topshiriqning buyurtmasi oldindan tanlanadi (2026-09-07).
+    preselected_order_id = request.args.get("order_id", type=int)
+    cash_handovers = _confirmed_handovers_for(current_user)
     return render_template(
         "stock/receive.html",
         materials=materials_with_stock(only_active=True),
         suppliers=Supplier.query.filter_by(is_active=True).order_by(Supplier.name).all(),
         preselected_id=preselected,
+        preselected_order_id=preselected_order_id,
+        cash_handovers=cash_handovers,
+        cash_source_labels=CASH_SOURCE_LABELS,
         today_date=today_local(),
         units=STOCK_UNITS,
         payer_companies=PAYER_COMPANIES,

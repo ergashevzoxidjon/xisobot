@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h3>Pullar</h3>
+    <div class="subtitle">Naqd pul nazorati — menejer to'lov qabul qilgach, ish boshqaruvchiga topshiradi va qabul qilinganini tasdiqlaydi</div>
+  </div>
+</div>
+
+{% if my_received is not none or source_totals or my_balance is not none %}
+<div class="row g-3 mb-3">
+  {% if my_received is not none %}
+  <div class="col-sm-6 col-lg-3">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon green"><i class="bi bi-cash-coin"></i></div>
+      <div>
+        <div class="stat-label">Jami qabul qilingan naqd pul</div>
+        <div class="stat-value num">{{ my_received|uzs }}</div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+  {% for label, amount in (source_totals or {}).items() %}
+  <div class="col-sm-6 col-lg-3">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon slate"><i class="bi bi-safe2"></i></div>
+      <div>
+        <div class="stat-label">{{ label }} — jami sarflangan</div>
+        <div class="stat-value num">{{ amount|uzs }}</div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+  {% if my_balance is not none %}
+  <div class="col-sm-6 col-lg-3">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon {% if my_balance > 0 %}green{% else %}slate{% endif %}"><i class="bi bi-wallet2"></i></div>
+      <div>
+        <div class="stat-label">Xozirda qolgan naqd pul</div>
+        <div class="stat-value num">{{ my_balance|uzs }}</div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if balance_rows %}
+<div class="card p-3 mb-3">
+  <h6 class="fw-bold mb-3"><i class="bi bi-people me-1 text-muted"></i> Ish boshqaruvchilar — joriy naqd qoldiq</h6>
+  <div class="table-responsive">
+  <table class="table table-sm mb-0">
+    <thead><tr><th>Ish boshqaruvchi</th><th class="text-end">Qo'lidagi naqd pul</th></tr></thead>
+    <tbody>
+    {% for row in balance_rows %}
+    <tr>
+      <td>{{ row.user.display_name }}</td>
+      <td class="text-end num fw-semibold {% if row.balance > 0 %}text-success{% endif %}">{{ row.balance|uzs }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endif %}
+
+<div class="card p-3 mb-3">
+  <h6 class="fw-bold mb-3"><i class="bi bi-hourglass-split me-1 text-muted"></i> Kutilmoqda — hali qabul qilinmagan</h6>
+  {% if pending %}
+  <div class="table-responsive">
+  <table class="table table-sm">
+    <thead>
+      <tr>
+        <th>Buyurtma</th><th>Kimdan</th><th>Kimga</th>
+        <th class="text-end">Summa</th><th>Sana</th><th></th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for h in pending %}
+    <tr>
+      <td>
+        {% if h.order %}<a href="{{ url_for('orders.order_detail', order_id=h.order.id) }}">{{ h.order.order_number }}</a>{% else %}-{% endif %}
+      </td>
+      <td>{{ h.from_user.display_name if h.from_user else '-' }}</td>
+      <td>
+        {% if h.to_user %}{{ h.to_user.display_name }}
+        {% else %}<span class="badge bg-warning-subtle text-warning-emphasis border">Tayinlanmagan</span>{% endif %}
+      </td>
+      <td class="text-end num fw-semibold">{{ h.amount|uzs }}</td>
+      <td class="text-muted small num">{{ h.created_at|date_uz }}</td>
+      <td class="text-end no-print">
+        {% if can_confirm and (current_user.role == 'admin' or h.to_user_id == current_user.id) %}
+        <form method="post" action="{{ url_for('money.confirm_handover', handover_id=h.id) }}" class="d-inline">
+          {{ csrf() }}
+          <button class="btn btn-sm btn-success"><i class="bi bi-check-lg"></i> Qabul qildim</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <div class="empty-state py-4"><i class="bi bi-check2-circle"></i><p>Kutilayotgan pul yo'q</p></div>
+  {% endif %}
+</div>
+
+<div class="card p-3">
+  <h6 class="fw-bold mb-3"><i class="bi bi-clock-history me-1 text-muted"></i> Qabul qilingan</h6>
+  {% if confirmed %}
+  <div class="table-responsive">
+  <table class="table table-sm">
+    <thead>
+      <tr>
+        <th>Buyurtma</th><th>Kimdan</th><th>Kimga</th>
+        <th class="text-end">Summa</th><th>Topshirilgan</th><th>Qabul qilingan</th><th></th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for h in confirmed %}
+    <tr>
+      <td>
+        {% if h.order %}<a href="{{ url_for('orders.order_detail', order_id=h.order.id) }}">{{ h.order.order_number }}</a>{% else %}-{% endif %}
+      </td>
+      <td>{{ h.from_user.display_name if h.from_user else '-' }}</td>
+      <td>{{ h.to_user.display_name if h.to_user else '-' }}</td>
+      <td class="text-end num fw-semibold text-success">{{ h.amount|uzs }}</td>
+      <td class="text-muted small num">{{ h.created_at|date_uz }}</td>
+      <td class="text-muted small num">{{ h.confirmed_at|date_uz }}</td>
+      <td class="text-end no-print">
+        {% if current_user.role == 'xarajatchi' and h.to_user_id == current_user.id and has_perm('stock.manage') %}
+        <a href="{{ url_for('stock.receive', order_id=h.order_id) }}" class="btn btn-sm btn-outline-primary">
+          <i class="bi bi-box-seam"></i> Xarajat qilish</a>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <div class="empty-state py-4"><i class="bi bi-cash-coin"></i><p>Hali qabul qilingan pul yo'q</p></div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -249,7 +249,10 @@ def user_delete(user_id):
     yaratgan buyurtma, to'lov, xarajat va ombor yozuvlari QOLADI, faqat
     "kim kiritgan" havolasi bo'shatiladi, aks holda baza buzilardi.
     """
-    from models import Order, Payment, Expense, OrderFile, StockMove, AuditLog, SupplierPayment
+    from models import (
+        Order, Payment, Expense, OrderFile, StockMove, AuditLog, SupplierPayment,
+        CashHandover,
+    )
 
     u = User.query.get_or_404(user_id)
 
@@ -274,6 +277,9 @@ def user_delete(user_id):
     StockMove.query.filter_by(created_by=u.id).update({"created_by": None})
     SupplierPayment.query.filter_by(created_by=u.id).update({"created_by": None})
     AuditLog.query.filter_by(user_id=u.id).update({"user_id": None})
+    CashHandover.query.filter_by(from_user_id=u.id).update({"from_user_id": None})
+    CashHandover.query.filter_by(to_user_id=u.id).update({"to_user_id": None})
+    CashHandover.query.filter_by(confirmed_by=u.id).update({"confirmed_by": None})
 
     # jurnalga yozuv o'chirilgandan keyin ham qolsin
     log_action(current_user, "delete", "user", u.id, f"{username} butunlay o'chirildi")
