@@ -30,7 +30,7 @@ from models import (
     CASH_SOURCE_OFFICE, CASH_SOURCE_OWNER, CASH_SOURCE_LABELS,
 )
 from permissions import permission_required
-from queries import materials_with_stock
+from queries import materials_with_stock, cash_balance
 from suppliers import supplier_from_form
 from utils import (
     ValidationError, parse_text, parse_money, parse_qty, parse_date, parse_choice,
@@ -389,6 +389,30 @@ def receive():
         # to'lov holati bilan yoziladi — mahsulotlar kabi bo'lakma-bo'lak emas
         is_paid = payment_choice != "qarzga"
         payment_method = payment_choice if is_paid else None
+
+        precomputed_total = to_money(
+            sum((d["quantity"] * d["unit_price"] for d in rows), Decimal("0"))
+        )
+
+        # Shaxsiy naqd (buyurtma puli) — OFIS/Zoxidjon zaxirasidan farqli
+        # o'laroq bu haqiqiy jismoniy naqd pul, qo'lida yo'q pulni sarflab
+        # bo'lmaydi. Qoldiq -ga o'tib ketishining OLDI OLINADI (2026-09-16,
+        # foydalanuvchi so'rovi) — OFIS/Zoxidjon zaxirasi esa qasddan
+        # "qarzga" ishlashi mumkin, shuning uchun bu tekshiruv faqat
+        # source_order_id (shaxsiy naqd) holatida qo'llanadi.
+        if payment_choice == PAYMENT_CASH and cash_source is None:
+            available = cash_balance(current_user.id)
+            if precomputed_total > available:
+                shortfall = precomputed_total - available
+                flash(
+                    "Qo'lingizdagi naqd pul yetarli emas: hozir qo'lingizda "
+                    f"{money_str(available)} so'm bor, bu kirim uchun "
+                    f"{money_str(precomputed_total)} so'm kerak (yetishmayapti: "
+                    f"{money_str(shortfall)} so'm). Naqd qoldiq minusga o'tishi "
+                    "mumkin emas — summani kamaytiring yoki manba sifatida "
+                    "OFIS/Zoxidjon zaxirasini tanlang.", "danger",
+                )
+                return _receive_page(form=request.form)
 
         total = ZERO
         for data in rows:

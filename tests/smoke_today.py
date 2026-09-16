@@ -710,6 +710,23 @@ with app.app_context():
     check("Manba: cash_received() bruto qabul qilingan (80000) — sarflashdan ta'sirlanmaydi",
           cash_received(xar_id) == 80000)
 
+with app.app_context():
+    expense_count_before_over = Expense.query.count()
+
+with app.test_client() as c:
+    login(c, "xar_t")
+    r = c.post("/ombor/kirim", data=_kirim_data(
+        "100", "1000", {"payment_method": "naqd", "cash_source": f"order:{handover_order_id}"}
+    ), follow_redirects=True)
+    check("Manba: qolganidan (70000) ko'p naqd sarflash rad etiladi, qoldiq -ga o'tmaydi (200, flash)",
+          r.status_code == 200)
+
+with app.app_context():
+    check("Manba: qoldiqdan ko'p urinishda yangi Expense yozilmadi",
+          Expense.query.count() == expense_count_before_over)
+    check("Manba: xarajatchi balansi -ga o'tmadi (hamon 70000)",
+          cash_balance(xar_id) == 70000)
+
 with app.test_client() as c:
     login(c, "xar_t")
     r = c.post("/ombor/kirim", data=_kirim_data("2", "1000", {"payment_method": "qarzga"}),
