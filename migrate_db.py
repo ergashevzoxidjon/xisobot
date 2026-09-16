@@ -479,6 +479,14 @@ def main():
         # cash_deposit jadvali create_all bilan yaratiladi (2026-09-08). ---
         add_column("cash_handover", "channel VARCHAR(10) DEFAULT 'naqd' NOT NULL", "channel")
 
+        # --- v19: taminotchini yumshoq o'chirish — client.is_deleted bilan
+        # bir xil naqsh (2026-09-16, foydalanuvchi so'rovi): ro'yxatlarda
+        # yashiriladi, xarid/to'lov tarixi saqlanib qoladi, keyin tiklash
+        # mumkin. Qarzdorlik bo'lsa ham o'chirishga ruxsat beriladi (admin
+        # avval alohida tasdiqlaydi) — client'dan farqli, bloklanmaydi. ---
+        add_column("supplier", "is_deleted BOOLEAN DEFAULT 0 NOT NULL", "is_deleted")
+        add_column("supplier", "deleted_at DATETIME", "deleted_at")
+
         migrate_paid_amount()
         ensure_upload_folder(app)
 

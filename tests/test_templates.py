@@ -91,7 +91,7 @@ ROLE_PERMISSIONS = {
               "clients.view", "clients.create", "clients.delete",
               "expenses.view", "expenses.create",
               "stock.view", "stock.manage", "stock.adjust",
-              "suppliers.view", "suppliers.manage",
+              "suppliers.view", "suppliers.manage", "suppliers.delete",
               "reports.view", "reports.export",
               "managers.view", "managers.manage",
               "hr.view", "hr.manage", "hr.pay",
@@ -207,12 +207,13 @@ order_expense = SimpleNamespace(id=2, date=TODAY, category="xomashyo",
 
 supplier = SimpleNamespace(
     id=1, name="Andijon Qog'oz MChJ", phone="+998901112233", address="Andijon",
-    note="Ofset qog'oz yetkazadi", is_active=True,
+    note="Ofset qog'oz yetkazadi", is_active=True, is_deleted=False, deleted_at=None,
     purchase_count=4, total_purchased=Decimal("620000.00"),
     total_paid=Decimal("200000.00"), debt=Decimal("420000.00"), credit=Decimal("0.00"),
 )
 supplier_no_debt = SimpleNamespace(
     id=2, name="Toshkent Plyonka", phone="", address="", note="", is_active=True,
+    is_deleted=False, deleted_at=None,
     purchase_count=1, total_purchased=Decimal("50000.00"),
     total_paid=Decimal("50000.00"), debt=Decimal("0.00"), credit=Decimal("0.00"),
 )
@@ -469,6 +470,7 @@ CONTEXTS = {
     "suppliers/form.html": dict(supplier=None, form=None),
     "suppliers/detail.html": dict(supplier=supplier, purchases=[supplier_purchase],
                                   payments=[supplier_payment]),
+    "suppliers/deleted.html": dict(suppliers=[supplier]),
     "finance/report.html": dict(
         year=2026, months=months_rows,
         total_income=Decimal("48000000.00"), total_expense=Decimal("31000000.00"),
@@ -709,7 +711,7 @@ EXPECTED_MENU = {
               "Mijozlar bilan ishlash",
               "Pullar", "Xarajatlar", "Moliyaviy hisobot", "Tahlil", "Taminotchi qarzlari", "HR",
               "Buyurtma turlari", "Telegram",
-              "O'chirilgan buyurtmalar", "O'chirilgan mijozlar",
+              "O'chirilgan buyurtmalar", "O'chirilgan mijozlar", "O'chirilgan taminotchilar",
               "Foydalanuvchilar", "Harakatlar jurnali"],
     "menejer": ["Bosh sahifa", "Buyurtmalar", "Mijozlar", "Manager xisoboti",
                 "Mijozlar bilan ishlash", "Pullar"],
@@ -797,6 +799,12 @@ checks = [
      "xarajatchi taminotchi qo'sha oladi"),
     ("xarajatchi", "suppliers/detail.html", "To'lov qilish", True,
      "xarajatchi taminotchiga to'lov qila oladi"),
+    ("admin", "suppliers/detail.html", "/_/suppliers.delete_supplier", True,
+     "admin taminotchini o'chira oladi"),
+    ("xarajatchi", "suppliers/detail.html", "/_/suppliers.delete_supplier", False,
+     "xarajatchi taminotchini o'chira olmaydi (faqat admin)"),
+    ("boss", "suppliers/detail.html", "/_/suppliers.delete_supplier", False,
+     "boss taminotchini o'chira olmaydi"),
     ("admin", "stock/detail.html", "Qoldiq/narxni tuzatish", True,
      "admin ombordagi mahsulot qoldig'i/narxini tuzata oladi"),
     ("xarajatchi", "stock/detail.html", "Qoldiq/narxni tuzatish", False,

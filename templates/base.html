@@ -474,6 +474,11 @@ a{ text-decoration:none; }
         <i class="bi bi-person-x"></i> O'chirilgan mijozlar
       </a>
       {% endif %}
+      {% if has_perm('suppliers.delete') %}
+      <a href="{{ url_for('suppliers.deleted_suppliers') }}" class="{% if request.endpoint == 'suppliers.deleted_suppliers' %}active{% endif %}">
+        <i class="bi bi-truck"></i> O'chirilgan taminotchilar
+      </a>
+      {% endif %}
       {% if has_perm('users.manage') %}
       <a href="{{ url_for('auth.users_list') }}" class="{% if request.endpoint and request.endpoint.startswith('auth.user') %}active{% endif %}">
         <i class="bi bi-person-gear"></i> Foydalanuvchilar

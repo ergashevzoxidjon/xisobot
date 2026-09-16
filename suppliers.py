@@ -7,6 +7,12 @@ kirim (Expense) formasida "qarzga olindi" belgilansa, o'sha summa
 taminotchi balansiga qo'shiladi. Bu yerdagi to'lov mijoz to'lovi kabi
 alohida yoziladi va umumiy balansni kamaytiradi — aniq bir kirimga
 "yopiladi" deb bog'lanmaydi (oddiy joriy hisob, mijoz balansi kabi).
+
+O'chirish (suppliers.delete, faqat admin, 2026-09-16): yumshoq o'chirish
+— clients.delete kabi ro'yxatlardan yashiradi va tiklash imkonini
+qoldiradi, lekin qarzdorlik bo'lsa ham bloklamaydi (clients.delete'dan
+farqli) — shablonda alohida checkbox bilan qayta tasdiqlangandan keyin
+o'chiriladi.
 """
 
 from decimal import Decimal
@@ -21,7 +27,7 @@ from models import Supplier, SupplierPayment, Expense, log_action
 from permissions import permission_required
 from queries import suppliers_with_stats, top_suppliers
 from utils import (
-    ValidationError, parse_text, parse_money, parse_date, today_local, money_str, ZERO,
+    ValidationError, parse_text, parse_money, parse_date, today_local, now_local, money_str, ZERO,
 )
 
 suppliers_bp = Blueprint("suppliers", __name__, url_prefix="/taminotchilar")
@@ -45,12 +51,14 @@ def supplier_from_form(form):
     raw_id = (form.get("supplier_id") or "").strip()
     if raw_id.isdigit():
         supplier = db.session.get(Supplier, int(raw_id))
-        if supplier and supplier.is_active:
+        if supplier and supplier.is_active and not supplier.is_deleted:
             return supplier
 
     name = parse_text(form.get("supplier_name"), "Taminotchi", required=True, max_length=150)
 
-    existing = Supplier.query.filter(Supplier.name.ilike(name)).first()
+    existing = Supplier.query.filter(
+        Supplier.name.ilike(name), Supplier.is_deleted.is_(False)
+    ).first()
     if existing:
         return existing
 
@@ -88,7 +96,7 @@ def list_suppliers():
 def search_suppliers():
     """Ombor kirimi formasidagi jonli qidiruv uchun — JSON qaytaradi."""
     q = (request.args.get("q") or "").strip()
-    query = Supplier.query.filter(Supplier.is_active.is_(True))
+    query = Supplier.query.filter(Supplier.is_active.is_(True), Supplier.is_deleted.is_(False))
     if q:
         query = query.filter(Supplier.name.ilike(f"%{q}%"))
     rows = query.order_by(Supplier.name).limit(8).all()
@@ -214,3 +222,62 @@ def delete_payment(payment_id):
     db.session.commit()
     flash("To'lov yozuvi o'chirildi.", "success")
     return redirect(url_for("suppliers.supplier_detail", supplier_id=supplier_id))
+
+
+# ---------- taminotchini o'chirish (yumshoq) ----------
+
+@suppliers_bp.route("/<int:supplier_id>/ochirish", methods=["POST"])
+@login_required
+@permission_required("suppliers.delete")
+def delete_supplier(supplier_id):
+    """Taminotchini ro'yxatlardan yashiradi (keyin tiklash mumkin).
+
+    Mijozdan farqli — qarzdorlik bo'lsa ham o'chirishga ruxsat beriladi,
+    lekin avval (shablonda checkbox orqali) alohida qayta tasdiqlash
+    talab qilinadi: `confirm_debt=1` kelmasa, o'chirilmaydi va qarz
+    summasi bilan ogohlantirib qaytariladi (2026-09-16, foydalanuvchi
+    so'rovi — "qarzdorlik summasi bo'lsa u bilan o'chirilayotganini
+    qayta so'rab o'chirsin").
+    """
+    s = Supplier.query.get_or_404(supplier_id)
+
+    if s.debt > ZERO and request.form.get("confirm_debt") != "1":
+        flash(
+            f"«{s.name}»ga {money_str(s.debt)} so'm qarzimiz bor. "
+            "Qarzdorlik bilan birga o'chirish uchun tasdiqlang.",
+            "danger",
+        )
+        return redirect(url_for("suppliers.supplier_detail", supplier_id=supplier_id))
+
+    debt_note = f" (qarzdorlik {money_str(s.debt)} so'm bilan o'chirildi)" if s.debt > ZERO else ""
+    s.is_deleted = True
+    s.deleted_at = now_local()
+    log_action(current_user, "delete", "supplier", s.id, s.name + debt_note)
+    db.session.commit()
+    flash(f"«{s.name}» o'chirildi. Kerak bo'lsa tiklash mumkin.", "success")
+    return redirect(url_for("suppliers.list_suppliers"))
+
+
+@suppliers_bp.route("/<int:supplier_id>/tiklash", methods=["POST"])
+@login_required
+@permission_required("suppliers.delete")
+def restore_supplier(supplier_id):
+    s = Supplier.query.get_or_404(supplier_id)
+    s.is_deleted = False
+    s.deleted_at = None
+    log_action(current_user, "restore", "supplier", s.id, s.name)
+    db.session.commit()
+    flash(f"«{s.name}» tiklandi.", "success")
+    return redirect(url_for("suppliers.supplier_detail", supplier_id=s.id))
+
+
+@suppliers_bp.route("/ochirilganlar")
+@login_required
+@permission_required("suppliers.delete")
+def deleted_suppliers():
+    suppliers = (
+        Supplier.query.filter(Supplier.is_deleted.is_(True))
+        .order_by(Supplier.deleted_at.desc())
+        .all()
+    )
+    return render_template("suppliers/deleted.html", suppliers=suppliers)

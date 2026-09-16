@@ -248,6 +248,12 @@ class Supplier(db.Model):
     note = db.Column(db.String(255))
     is_active = db.Column(db.Boolean, default=True, nullable=False, index=True)
     created_at = db.Column(db.DateTime, default=now_local)
+    # Yumshoq o'chirish — Client bilan bir xil naqsh (2026-09-16, foydalanuvchi
+    # so'rovi): ro'yxatlarda yashiriladi, lekin xarid/to'lov tarixi saqlanib
+    # qoladi va keyin tiklash mumkin. is_active'dan mustaqil — u shunchaki
+    # "hozir faol/arxiv" belgisi, bu esa "o'chirilgan/o'chirilmagan".
+    is_deleted = db.Column(db.Boolean, default=False, nullable=False, index=True)
+    deleted_at = db.Column(db.DateTime)
 
     # SQL agregat orqali oldindan hisoblangan (queries.suppliers_with_stats)
     _stats = None

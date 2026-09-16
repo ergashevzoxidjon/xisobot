@@ -258,7 +258,7 @@ def suppliers_with_stats(q="", only_active=True):
     purchases = supplier_purchase_subq()
     paid = supplier_paid_subq()
 
-    query = Supplier.query
+    query = Supplier.query.filter(Supplier.is_deleted.is_(False))
     if only_active:
         query = query.filter(Supplier.is_active.is_(True))
     if q:
@@ -295,7 +295,7 @@ def top_suppliers(limit=5):
     rows = (
         db.session.query(Supplier, purchases.c.purchased, purchases.c.purchase_count)
         .join(purchases, purchases.c.supplier_id == Supplier.id)
-        .filter(Supplier.is_active.is_(True))
+        .filter(Supplier.is_active.is_(True), Supplier.is_deleted.is_(False))
         .order_by(purchases.c.purchased.desc())
         .limit(limit)
         .all()

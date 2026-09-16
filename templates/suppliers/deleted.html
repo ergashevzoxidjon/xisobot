@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h3>O'chirilgan taminotchilar</h3>
+    <div class="subtitle">Bu yozuvlar ro'yxatlarda va qidiruvda ko'rinmaydi, lekin saqlanib turibdi</div>
+  </div>
+  <a href="{{ url_for('suppliers.list_suppliers') }}" class="btn btn-outline-secondary">
+    <i class="bi bi-arrow-left"></i> Taminotchilarga qaytish</a>
+</div>
+
+<div class="card p-3">
+{% if suppliers %}
+<div class="table-responsive">
+<table class="table table-hover">
+<thead><tr><th>Nomi</th><th>Telefon</th><th class="text-end">Qarzi</th><th>O'chirilgan</th><th></th></tr></thead>
+<tbody>
+{% for s in suppliers %}
+<tr role="button" onclick="window.location='{{ url_for('suppliers.supplier_detail', supplier_id=s.id) }}'" class="text-muted">
+  <td class="fw-semibold">{{ s.name }}</td>
+  <td>{{ s.phone or "-" }}</td>
+  <td class="text-end num">
+    {% if s.debt > 0 %}<span class="text-danger">{{ s.debt|uzs }}</span>{% else %}-{% endif %}
+  </td>
+  <td class="num small">{{ s.deleted_at|datetime_uz }}</td>
+  <td class="text-end no-print">
+    <form method="post" action="{{ url_for('suppliers.restore_supplier', supplier_id=s.id) }}" class="d-inline"
+          onclick="event.stopPropagation()">
+      {{ csrf() }}
+      <button class="btn btn-sm btn-outline-success"><i class="bi bi-arrow-counterclockwise"></i> Tiklash</button>
+    </form>
+  </td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% else %}
+<div class="empty-state"><i class="bi bi-trash"></i><p>O'chirilgan taminotchi yo'q</p></div>
+{% endif %}
+</div>
+{% endblock %}

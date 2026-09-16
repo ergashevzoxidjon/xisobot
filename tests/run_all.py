@@ -18,6 +18,7 @@ TESTS = [
     ("test_templates.py", "Shablonlar, endpointlar, CSRF, rollar"),
     ("test_routes_audit.py", "Route himoyasi va kod auditi"),
     ("smoke_today.py", "Haqiqiy Flask+DB oqimlari (HR turkumlari, ombor joylashuvi, menejer jurnali)"),
+    ("scenario_supplier_delete.py", "Taminotchini o'chirish/tiklash — qarzdorlikni qayta tasdiqlash"),
 ]
 
 failed = []

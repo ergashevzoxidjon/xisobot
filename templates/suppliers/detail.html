@@ -15,11 +15,37 @@
       {% endif %}
     </div>
   </div>
+  <div class="d-flex gap-2">
   {% if has_perm('suppliers.manage') %}
   <a href="{{ url_for('suppliers.edit_supplier', supplier_id=supplier.id) }}" class="btn btn-outline-secondary">
     <i class="bi bi-pencil"></i> Tahrirlash</a>
   {% endif %}
+  {% if has_perm('suppliers.delete') and not supplier.is_deleted %}
+    {% if supplier.debt > 0 %}
+    <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteSupplierModal">
+      <i class="bi bi-trash"></i></button>
+    {% else %}
+    <form method="post" action="{{ url_for('suppliers.delete_supplier', supplier_id=supplier.id) }}" class="d-inline"
+          onsubmit="return confirm('«{{ supplier.name }}» o\'chirilsinmi? Keyin tiklash mumkin.')">
+      {{ csrf() }}
+      <button class="btn btn-outline-danger"><i class="bi bi-trash"></i></button>
+    </form>
+    {% endif %}
+  {% endif %}
+  </div>
 </div>
+
+{% if supplier.is_deleted %}
+<div class="alert alert-secondary no-print d-flex justify-content-between align-items-center">
+  <span><i class="bi bi-trash"></i> Bu taminotchi o'chirilgan ({{ supplier.deleted_at|datetime_uz }}) — ro'yxatlarda ko'rinmaydi.</span>
+  {% if has_perm('suppliers.delete') %}
+  <form method="post" action="{{ url_for('suppliers.restore_supplier', supplier_id=supplier.id) }}">
+    {{ csrf() }}
+    <button class="btn btn-sm btn-outline-success"><i class="bi bi-arrow-counterclockwise"></i> Tiklash</button>
+  </form>
+  {% endif %}
+</div>
+{% endif %}
 
 <div class="row g-3 mb-3">
   <div class="col-sm-6 col-lg-3">
@@ -154,4 +180,34 @@
     </div>
   </div>
 </div>
+
+{% if has_perm('suppliers.delete') and not supplier.is_deleted and supplier.debt > 0 %}
+<div class="modal fade" id="deleteSupplierModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="post" action="{{ url_for('suppliers.delete_supplier', supplier_id=supplier.id) }}">
+        {{ csrf() }}
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-exclamation-triangle text-danger me-1"></i> Qarzdorlik bilan o'chirish</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p><strong>«{{ supplier.name }}»</strong>ga hozircha <strong class="text-danger num">{{ supplier.debt|uzs }} so'm</strong> qarzimiz bor.</p>
+          <p class="text-muted small">Taminotchini o'chirsangiz ham, qarz va xarid tarixi saqlanib qoladi — kerak bo'lsa keyin tiklashingiz mumkin.</p>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="confirm_debt" value="1" id="confirmDebt" required>
+            <label class="form-check-label" for="confirmDebt">
+              Ha, qarzdorlik borligini bilaman, baribir o'chirmoqchiman
+            </label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Bekor qilish</button>
+          <button type="submit" class="btn btn-danger"><i class="bi bi-trash"></i> O'chirish</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
 {% endblock %}

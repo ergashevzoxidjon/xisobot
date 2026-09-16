@@ -46,6 +46,13 @@ PERMISSIONS = {
     # shuning uchun faqat admin (2026-09-03, foydalanuvchi qarori).
     "stock.adjust",
     "suppliers.view", "suppliers.manage",
+    # Taminotchini o'chirish (yumshoq — ro'yxatlardan yashiriladi, keyin
+    # tiklash mumkin, xuddi clients.delete kabi) — faqat admin (2026-09-16,
+    # foydalanuvchi so'rovi). clients.delete'dan farqi: qarzdorlik bo'lsa
+    # ham o'chirishga ruxsat beriladi, lekin avval alohida checkbox bilan
+    # qayta tasdiqlash talab qilinadi (route: suppliers.delete_supplier);
+    # qarz va xarid tarixi saqlanib qoladi, tiklaganda yana ko'rinadi.
+    "suppliers.delete",
     "reports.view", "reports.export",
     "managers.view", "managers.manage",
     "hr.view", "hr.manage", "hr.pay",
