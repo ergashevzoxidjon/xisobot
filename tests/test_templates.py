@@ -96,7 +96,7 @@ ROLE_PERMISSIONS = {
               "managers.view", "managers.manage",
               "hr.view", "hr.manage", "hr.pay",
               "users.manage", "settings.manage",
-              "money.view", "money.confirm", "money.fund"},
+              "money.view", "money.confirm", "money.fund", "money.adjust"},
     "menejer": {"orders.view", "orders.create", "orders.edit", "orders.manage",
                 "clients.view", "clients.create",
                 "managers.view",
@@ -314,6 +314,10 @@ card_handover_pending = SimpleNamespace(
     id=3, amount=Decimal("75000.00"), status="kutilmoqda", channel="karta", is_card=True,
     from_user=user, from_user_id=1, to_user=boss_user, to_user_id=7,
     order=order, order_id=1, created_at=datetime.now(), confirmed_at=None,
+)
+office_deposit = SimpleNamespace(
+    id=1, amount=Decimal("200000.00"), note="Kassa to'ldirish", created_at=datetime.now(),
+    creator=boss_user,
 )
 
 # ---- HR va Manager xisoboti mocklari (2026-08-29, foydalanuvchi qarori) ----
@@ -570,6 +574,7 @@ CONTEXTS = {
         source_totals={"Zoxidjon xisobidan": Decimal("0.00")},
         office_info={"deposited": Decimal("200000.00"), "spent": Decimal("50000.00"),
                     "balance": Decimal("150000.00")},
+        office_deposits=[office_deposit],
         can_confirm=True,
     ),
     "errors/error.html": dict(code=404, title="Topilmadi", message="Sahifa yo'q"),

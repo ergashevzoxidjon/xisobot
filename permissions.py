@@ -55,7 +55,11 @@ PERMISSIONS = {
     # ro'yxat/balansni ko'rish; money.confirm — o'ziga topshirilgan pulni
     # "qabul qildim" deb tasdiqlash (endi naqd — xarajatchi, karta — boss).
     # money.fund — OFIS zaxirasiga pul kiritish (2026-09-08, faqat boss/admin).
-    "money.view", "money.confirm", "money.fund",
+    # money.adjust — OFIS zaxirasiga xato kiritilgan summani/izohni tuzatish
+    # (2026-09-16, foydalanuvchi so'rovi) — faqat admin (stock.adjust kabi:
+    # to'g'ridan-to'g'ri tuzatish, boss o'ziga xato kiritgan bo'lsa ham
+    # o'zi o'zgartira olmaydi, faqat admin orqali to'g'irlanadi).
+    "money.view", "money.confirm", "money.fund", "money.adjust",
 }
 
 ROLE_PERMISSIONS = {

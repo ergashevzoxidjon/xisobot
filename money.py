@@ -25,6 +25,9 @@ Ruxsatlar:
 - money.confirm — faqat o'ziga tegishli topshiriqni tasdiqlaydi
                    (admin — istalganini). Naqd — xarajatchi, karta — boss.
 - money.fund    — OFIS zaxirasiga pul kiritadi (boss/admin).
+- money.adjust  — OFIS zaxirasiga xato kiritilgan summani/izohni tuzatadi
+                   (faqat admin) — boshliq xato summa kiritib qo'ysa shu
+                   yerdan to'g'irlanadi (2026-09-16, foydalanuvchi so'rovi).
 """
 
 from decimal import Decimal
@@ -122,6 +125,7 @@ def list_handovers():
     # qoladi (2026-09-08).
     source_totals = None
     office_info = None
+    office_deposits = None
     if current_user.role in ("admin", "boss", "xarajatchi"):
         totals = cash_source_totals()
         source_totals = {
@@ -134,6 +138,11 @@ def list_handovers():
             "spent": totals[CASH_SOURCE_OFFICE],
             "balance": deposited - totals[CASH_SOURCE_OFFICE],
         }
+        # Xato kiritilgan summani admin tuzata olishi uchun har bir
+        # kiritmani alohida ko'rsatamiz (2026-09-16, foydalanuvchi so'rovi).
+        office_deposits = (
+            CashDeposit.query.order_by(CashDeposit.created_at.desc()).limit(100).all()
+        )
 
     return render_template(
         "money/list.html",
@@ -142,6 +151,7 @@ def list_handovers():
         balance_rows=balance_rows, card_balance_rows=card_balance_rows,
         card_total_received=card_total_received, card_total_balance=card_total_balance,
         source_totals=source_totals, office_info=office_info,
+        office_deposits=office_deposits,
         can_confirm=current_user.role in ("admin", "xarajatchi", "boss"),
     )
 
@@ -192,4 +202,40 @@ def fund_office():
     )
     db.session.commit()
     flash(f"OFIS zaxirasiga {money_str(amount)} so'm qo'shildi.", "success")
+    return redirect(url_for("money.list_handovers"))
+
+
+@money_bp.route("/ofis/<int:deposit_id>/tuzatish", methods=["POST"])
+@login_required
+@permission_required("money.adjust")
+def adjust_deposit(deposit_id):
+    """OFIS zaxirasiga xato summa/izoh kiritilgan bo'lsa, admin to'g'irlaydi
+    (2026-09-16, foydalanuvchi so'rovi) — masalan, boshliq OFISga pul
+    qo'shayotganda xato summa kiritib qo'ysa, u o'zi o'zgartira olmaydi
+    (money.fund — faqat qo'shadi), shu yerdan admin tuzatadi. stock.adjust
+    kabi — to'g'ridan-to'g'ri tuzatish, eski/yangi qiymat log qilinadi."""
+    d = CashDeposit.query.get_or_404(deposit_id)
+
+    try:
+        new_amount = parse_money(request.form.get("amount"), "Summa", min_value=Decimal("0.01"))
+        new_note = parse_text(request.form.get("note"), "Izoh", required=False, max_length=255)
+    except ValidationError as e:
+        flash(str(e), "danger")
+        return redirect(url_for("money.list_handovers"))
+
+    changes = []
+    if new_amount != d.amount:
+        changes.append(f"summa {money_str(d.amount)} -> {money_str(new_amount)}")
+        d.amount = new_amount
+    if (new_note or "") != (d.note or ""):
+        changes.append(f"izoh «{d.note or '-'}» -> «{new_note or '-'}»")
+        d.note = new_note
+
+    if not changes:
+        flash("O'zgarish yo'q — qiymatlar allaqachon shunday.", "info")
+        return redirect(url_for("money.list_handovers"))
+
+    log_action(current_user, "adjust", "cash_deposit", d.id, ", ".join(changes))
+    db.session.commit()
+    flash("OFIS zaxirasi yozuvi tuzatildi: " + ", ".join(changes) + ".", "success")
     return redirect(url_for("money.list_handovers"))
