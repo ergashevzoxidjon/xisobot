@@ -196,6 +196,59 @@
 </div>
 {% endif %}
 
+{% if cash_expenses is not none %}
+<div class="card p-3 mb-3">
+  <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+    <h6 class="fw-bold mb-0"><i class="bi bi-cash-stack me-1 text-muted"></i>
+      {% if current_user.role == 'xarajatchi' %}Naqd pulni qayerga sarfladim{% else %}Naqd xarajatlar — qayerga sarflandi{% endif %}
+    </h6>
+    {% if cash_expenses %}
+    <a class="small text-decoration-none no-print" data-bs-toggle="collapse" href="#cashExpensesList" role="button">
+      <i class="bi bi-clock-history"></i> Ro'yxat ({{ cash_expenses|length }})
+    </a>
+    {% endif %}
+  </div>
+  {% if cash_expenses %}
+  <div class="collapse" id="cashExpensesList">
+    <div class="table-responsive">
+      <table class="table table-sm mb-0">
+        <thead>
+          <tr>
+            <th>Sana</th><th>Kim</th><th>Turkum</th><th>Tavsif</th>
+            <th class="text-end">Summa</th><th class="no-print"></th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for e in cash_expenses %}
+        <tr>
+          <td class="text-muted small num">{{ e.date|date_uz }}</td>
+          <td class="small">{{ e.creator.display_name if e.creator else '-' }}</td>
+          <td><span class="badge bg-secondary"><i class="bi {{ e.category|category_icon }} me-1"></i>{{ e.category }}</span></td>
+          <td class="text-muted small">
+            {{ e.description or '-' }}
+            {% if e.supplier %}<div style="font-size:.75rem">{{ e.supplier.name }}</div>{% endif %}
+            {% if e.order %}<a href="{{ url_for('orders.order_detail', order_id=e.order.id) }}" style="font-size:.75rem">{{ e.order.order_number }}</a>{% endif %}
+          </td>
+          <td class="text-end num fw-semibold text-danger">{{ e.amount|uzs }}</td>
+          <td class="text-end no-print">
+            {% if current_user.role == 'admin' %}
+            <a href="{{ url_for('finance.edit_expense', expense_id=e.id) }}" class="btn btn-sm btn-outline-secondary py-0 px-1" title="Tuzatish">
+              <i class="bi bi-pencil"></i>
+            </a>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% else %}
+  <div class="empty-state py-3"><i class="bi bi-cash-stack"></i><p class="mb-0">Hali naqd xarajat yo'q</p></div>
+  {% endif %}
+</div>
+{% endif %}
+
 {% if card_balance_rows %}
 <div class="card p-3 mb-3">
   <h6 class="fw-bold mb-3"><i class="bi bi-credit-card me-1 text-muted"></i> Boshliqlar — joriy karta qoldig'i</h6>

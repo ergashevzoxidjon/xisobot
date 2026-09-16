@@ -18,6 +18,15 @@ Shuningdek boshliq OFIS zaxirasiga pul kiritishi (to'ldirishi) mumkin —
 ish boshqaruvchi ombor kirimida "Naqd to'landi -> OFIS xisobidan"
 tanlaganda shu zaxiradan sarflanadi.
 
+Ish boshqaruvchi "qabul qildim" deganidan keyin naqd pul qayerga
+sarflanganini ham shu sahifada kuzatish mumkin (2026-09-16, foydalanuvchi
+so'rovi) — o'zining qo'lidagi naqddan (OFIS/Zoxidjon zaxirasidan emas)
+qilingan xarajatlar ro'yxati (`cash_spent_subq()` bilan bir xil filtr).
+Xarajatchi faqat o'zinikini, admin/boss — hammasini ko'radi. Tuzatish
+havolasi (mavjud `finance.edit_expense`ga) faqat adminga ko'rinadi — boss
+faqat ko'radi (xarajatchi ham bu yerdan tahrirlamaydi, o'zining odatdagi
+Xarajatlar sahifasidan qiladi).
+
 Ruxsatlar:
 - money.view    — menejer (o'zi topshirganlari), xarajatchi (o'ziga
                    tegishli naqd + balansi), boss (o'ziga tegishli karta +
@@ -34,13 +43,14 @@ from decimal import Decimal
 
 from flask import Blueprint, render_template, redirect, url_for, flash, request
 from flask_login import login_required, current_user
+from sqlalchemy.orm import joinedload
 
 from extensions import db
 from models import (
     CashHandover, HANDOVER_PENDING, HANDOVER_CONFIRMED, User, ZERO, log_action,
     CASH_SOURCE_LABELS, CASH_SOURCE_OFFICE,
     HANDOVER_CHANNEL_CASH, HANDOVER_CHANNEL_CARD,
-    CashDeposit,
+    CashDeposit, Expense,
 )
 from permissions import permission_required
 from queries import (
@@ -144,6 +154,29 @@ def list_handovers():
             CashDeposit.query.order_by(CashDeposit.created_at.desc()).limit(100).all()
         )
 
+    # Ish boshqaruvchi qabul qilgan naqd pulni qayerga sarflaganini kuzatish
+    # (2026-09-16, foydalanuvchi so'rovi) — faqat o'z qo'lidagi naqddan
+    # qilingan xarajatlar (`cash_spent_subq()` bilan bir xil filtr; OFIS/
+    # Zoxidjon zaxirasidan qoplanganlar bu yerga kirmaydi — ular OFIS
+    # tarixida alohida ko'rinadi).
+    cash_expenses = None
+    cash_expenses_query = Expense.query.options(
+        joinedload(Expense.creator), joinedload(Expense.order), joinedload(Expense.supplier),
+    ).filter(
+        Expense.payment_method == "naqd", Expense.is_paid.is_(True),
+        Expense.cash_source.is_(None),
+    )
+    if current_user.role == "xarajatchi":
+        cash_expenses = (
+            cash_expenses_query.filter(Expense.created_by == current_user.id)
+            .order_by(Expense.date.desc(), Expense.id.desc()).limit(100).all()
+        )
+    elif current_user.role in ("admin", "boss"):
+        cash_expenses = (
+            cash_expenses_query.order_by(Expense.date.desc(), Expense.id.desc())
+            .limit(100).all()
+        )
+
     return render_template(
         "money/list.html",
         pending=pending, confirmed=confirmed,
@@ -152,6 +185,7 @@ def list_handovers():
         card_total_received=card_total_received, card_total_balance=card_total_balance,
         source_totals=source_totals, office_info=office_info,
         office_deposits=office_deposits,
+        cash_expenses=cash_expenses,
         can_confirm=current_user.role in ("admin", "xarajatchi", "boss"),
     )
 

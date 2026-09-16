@@ -319,6 +319,11 @@ office_deposit = SimpleNamespace(
     id=1, amount=Decimal("200000.00"), note="Kassa to'ldirish", created_at=datetime.now(),
     creator=boss_user,
 )
+cash_expense = SimpleNamespace(
+    id=1, date=TODAY, creator=xarajatchi_user, category="xomashyo",
+    description="Qog'oz sotib olindi", supplier=None, order=None,
+    amount=Decimal("50000.00"),
+)
 
 # ---- HR va Manager xisoboti mocklari (2026-08-29, foydalanuvchi qarori) ----
 manager_user = SimpleNamespace(id=5, username="komila", full_name="Komila Ahmedova",
@@ -575,6 +580,7 @@ CONTEXTS = {
         office_info={"deposited": Decimal("200000.00"), "spent": Decimal("50000.00"),
                     "balance": Decimal("150000.00")},
         office_deposits=[office_deposit],
+        cash_expenses=[cash_expense],
         can_confirm=True,
     ),
     "errors/error.html": dict(code=404, title="Topilmadi", message="Sahifa yo'q"),
