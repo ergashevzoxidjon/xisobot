@@ -1084,6 +1084,10 @@ class EmployeeAdvance(db.Model):
     kind = db.Column(db.String(20), default=PAYMENT_KIND_AVANS, nullable=False, index=True)
     amount = db.Column(MONEY, nullable=False)
     paid_on = db.Column(db.Date, default=today_local, nullable=False, index=True)
+    # Qaysi oy uchun berilgani (oldingi oy puli keyingi oyda to'lanishi mumkin) —
+    # hisob-kitob paid_on emas, shu davr bo'yicha yuritiladi.
+    period_year = db.Column(db.Integer, index=True)
+    period_month = db.Column(db.Integer, index=True)
     note = db.Column(db.String(255))
     expense_id = db.Column(db.Integer, db.ForeignKey("expense.id"), index=True)
     created_at = db.Column(db.DateTime, default=now_local)
@@ -1091,6 +1095,12 @@ class EmployeeAdvance(db.Model):
 
     creator = db.relationship("User", foreign_keys=[created_by])
     expense = db.relationship("Expense", foreign_keys=[expense_id])
+
+    @property
+    def period_label(self):
+        if not self.period_year or not self.period_month:
+            return ""
+        return f"{self.period_month:02d}.{self.period_year}"
 
     @property
     def kind_label(self):

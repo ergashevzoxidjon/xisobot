@@ -130,6 +130,24 @@ def migrate_paid_amount():
     print(f"✓ {moved} ta eski to'lov payment jadvaliga ko'chirildi")
 
 
+def migrate_advance_period():
+    """Davri belgilanmagan employee_advance yozuvlariga paid_on oyini qo'yadi."""
+    if "employee_advance" not in existing_tables():
+        return
+    rows = db.session.execute(text(
+        "SELECT id, paid_on FROM employee_advance WHERE period_year IS NULL OR period_month IS NULL"
+    )).fetchall()
+    for adv_id, paid_on in rows:
+        year, month = int(str(paid_on)[:4]), int(str(paid_on)[5:7])
+        db.session.execute(
+            text("UPDATE employee_advance SET period_year = :y, period_month = :m WHERE id = :id"),
+            {"y": year, "m": month, "id": adv_id},
+        )
+    db.session.commit()
+    if rows:
+        print(f"✓ {len(rows)} ta xodim to'lovi uchun davr (oy) to'ldirildi")
+
+
 def drop_legacy_material():
     """Eski (olib tashlangan) ombor modulidan qolgan jadvallarni tozalaydi.
 
@@ -486,6 +504,13 @@ def main():
         # avval alohida tasdiqlaydi) — client'dan farqli, bloklanmaydi. ---
         add_column("supplier", "is_deleted BOOLEAN DEFAULT 0 NOT NULL", "is_deleted")
         add_column("supplier", "deleted_at DATETIME", "deleted_at")
+
+        # --- v20: xodimga berilgan summa qaysi oy uchun ekanini tanlash
+        # (oldingi oy puli keyingi oyda to'lanishi mumkin). Eski yozuvlar
+        # to'lov sanasi oyiga o'tkaziladi. ---
+        add_column("employee_advance", "period_year INTEGER", "period_year")
+        add_column("employee_advance", "period_month INTEGER", "period_month")
+        migrate_advance_period()
 
         migrate_paid_amount()
         ensure_upload_folder(app)

@@ -84,8 +84,7 @@ def list_employees():
         .all()
     )
     salary_totals = employees_month_salary_totals(year, month)
-    start, end = month_bounds(year, month)
-    payment_totals = employees_month_payment_totals(start, end)
+    payment_totals = employees_month_payment_totals(year, month)
 
     rows = []
     total_salary = ZERO
@@ -182,11 +181,10 @@ def employee_detail(employee_id):
         salary_row = EmployeeSalary.query.filter_by(employee_id=emp.id, year=year, month=m).first()
         salary = to_money(salary_row.amount) if salary_row else ZERO
 
-        start, end = month_bounds(year, m)
         payments = (
             EmployeeAdvance.query.filter(
                 EmployeeAdvance.employee_id == emp.id,
-                EmployeeAdvance.paid_on >= start, EmployeeAdvance.paid_on < end,
+                EmployeeAdvance.period_year == year, EmployeeAdvance.period_month == m,
             )
             .order_by(EmployeeAdvance.paid_on.desc(), EmployeeAdvance.id.desc())
             .all()
@@ -210,9 +208,23 @@ def employee_detail(employee_id):
             "kpi_remaining": (kpi_calc - paid_kpi) if kpi_calc is not None else None,
         })
 
+    # "Qaysi oy uchun" ro'yxati: oxirgi 12 oy + keyingi oy (yangidan eskiga)
+    period_options = []
+    py, pm = today.year, today.month
+    pm += 1
+    if pm > 12:
+        py, pm = py + 1, 1
+    for _ in range(14):
+        period_options.append({"value": f"{py}-{pm:02d}", "label": f"{UZ_MONTHS[pm - 1]} {py}"})
+        pm -= 1
+        if pm < 1:
+            py, pm = py - 1, 12
+
     return render_template(
         "hr/detail.html",
+        period_options=period_options, current_period=f"{today.year}-{today.month:02d}",
         employee=emp, year=year, months=months, today=today,
+        uz_months=UZ_MONTHS,
         total_salary_year=total_salary_year, total_given_year=total_given_year,
         payment_kinds=PAYMENT_KINDS, payment_kind_labels=PAYMENT_KIND_LABELS,
         can_manage=has_perm("hr.manage"), can_pay=has_perm("hr.pay"),
@@ -262,6 +274,17 @@ def add_advance(employee_id):
         amount = parse_money(request.form.get("amount"), "Summa", min_value=Decimal("0.01"))
         paid_on = parse_date(request.form.get("paid_on"), "Sana", required=False) or today_local()
         note = parse_text(request.form.get("note"), "Izoh", required=False, max_length=255)
+        # "Qaysi oy uchun" — bo'sh qoldirilsa to'lov sanasi oyi olinadi
+        raw_period = (request.form.get("period") or "").strip()
+        if raw_period:
+            try:
+                period_year, period_month = (int(x) for x in raw_period.split("-"))
+            except ValueError:
+                raise ValidationError("Qaysi oy uchun ekani noto'g'ri tanlandi.")
+            if not (2000 <= period_year <= 2100 and 1 <= period_month <= 12):
+                raise ValidationError("Qaysi oy uchun ekani noto'g'ri tanlandi.")
+        else:
+            period_year, period_month = None, None
     except ValidationError as e:
         flash(str(e), "danger")
         return redirect(url_for("hr.employee_detail", employee_id=employee_id))
@@ -270,13 +293,17 @@ def add_advance(employee_id):
         flash("Sana kelajakda bo'lishi mumkin emas.", "danger")
         return redirect(url_for("hr.employee_detail", employee_id=employee_id))
 
+    if period_year is None:
+        period_year, period_month = paid_on.year, paid_on.month
+
     kind_label = PAYMENT_KIND_LABELS[kind]
+    period_text = f"{UZ_MONTHS[period_month - 1]} {period_year}"
 
     # pul chiqdi — umumiy xarajat hisobotida ham ko'rinishi uchun "ish haqi"
     # turkumida Expense yoziladi (ombor kirimi bilan bir xil mantiq)
     expense = Expense(
         category=SALARY_EXPENSE_CATEGORY, amount=amount,
-        description=f"{kind_label}: {emp.full_name}" + (f" — {note}" if note else ""),
+        description=f"{kind_label}: {emp.full_name} ({period_text} uchun)" + (f" — {note}" if note else ""),
         date=paid_on, is_paid=True, created_by=current_user.id,
     )
     db.session.add(expense)
@@ -284,14 +311,15 @@ def add_advance(employee_id):
 
     advance = EmployeeAdvance(
         employee_id=emp.id, kind=kind, amount=amount, paid_on=paid_on, note=note,
+        period_year=period_year, period_month=period_month,
         expense_id=expense.id, created_by=current_user.id,
     )
     db.session.add(advance)
     log_action(current_user, "create", "employee_advance", emp.id,
-               f"{emp.full_name}: {money_str(amount)} so'm ({kind_label})")
+               f"{emp.full_name}: {money_str(amount)} so'm ({kind_label}, {period_text} uchun)")
     db.session.commit()
-    flash(f"{emp.full_name}ga {money_str(amount)} so'm ({kind_label}) yozildi.", "success")
-    return redirect(url_for("hr.employee_detail", employee_id=employee_id, year=paid_on.year))
+    flash(f"{emp.full_name}ga {money_str(amount)} so'm ({kind_label}, {period_text} uchun) yozildi.", "success")
+    return redirect(url_for("hr.employee_detail", employee_id=employee_id, year=period_year))
 
 
 @hr_bp.route("/avans/<int:advance_id>/ochirish", methods=["POST"])
@@ -300,7 +328,7 @@ def add_advance(employee_id):
 def delete_advance(advance_id):
     advance = EmployeeAdvance.query.get_or_404(advance_id)
     employee_id = advance.employee_id
-    year = advance.paid_on.year
+    year = advance.period_year or advance.paid_on.year
 
     if advance.expense_id:
         expense = db.session.get(Expense, advance.expense_id)

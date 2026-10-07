@@ -449,23 +449,23 @@ def employees_month_salary_totals(year, month):
     return {employee_id: to_money(amount) for employee_id, amount in rows}
 
 
-def employees_month_advance_totals(start, end):
-    """Har bir xodim uchun shu oy davomida berilgan JAMI summa (barcha turkumlar) — bitta so'rov."""
+def employees_month_advance_totals(year, month):
+    """Har bir xodim uchun shu OY UCHUN berilgan JAMI summa (barcha turkumlar) — bitta so'rov."""
     rows = (
         db.session.query(
             EmployeeAdvance.employee_id,
             func.coalesce(func.sum(EmployeeAdvance.amount), 0),
         )
-        .filter(EmployeeAdvance.paid_on >= start, EmployeeAdvance.paid_on < end)
+        .filter(EmployeeAdvance.period_year == year, EmployeeAdvance.period_month == month)
         .group_by(EmployeeAdvance.employee_id)
         .all()
     )
     return {employee_id: to_money(total) for employee_id, total in rows}
 
 
-def employees_month_payment_totals(start, end):
-    """Har bir xodim uchun shu oy davomida TURKUM bo'yicha (oylik/avans/kpi)
-    berilgan summalar — bitta so'rov. Natija:
+def employees_month_payment_totals(year, month):
+    """Har bir xodim uchun shu OY UCHUN TURKUM bo'yicha (oylik/avans/kpi)
+    berilgan summalar (qachon to'langanidan qat'i nazar) — bitta so'rov. Natija:
     {employee_id: {"oylik": Decimal, "avans": Decimal, "kpi": Decimal, "jami": Decimal}}
     """
     rows = (
@@ -474,7 +474,7 @@ def employees_month_payment_totals(start, end):
             EmployeeAdvance.kind,
             func.coalesce(func.sum(EmployeeAdvance.amount), 0),
         )
-        .filter(EmployeeAdvance.paid_on >= start, EmployeeAdvance.paid_on < end)
+        .filter(EmployeeAdvance.period_year == year, EmployeeAdvance.period_month == month)
         .group_by(EmployeeAdvance.employee_id, EmployeeAdvance.kind)
         .all()
     )

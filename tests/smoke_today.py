@@ -154,6 +154,33 @@ with app.app_context():
     check("HR: Expense tavsifida turkum nomi bor (Avans/KPI/Oylik)",
           descs == ["Avans", "KPI", "Oylik"])
 
+# Oldingi oy uchun to'lov: sana bugun, lekin davr — oldingi oy
+with app.test_client() as c:
+    login(c, "admin_t")
+    t = today_local()
+    py, pm = (t.year, t.month - 1) if t.month > 1 else (t.year - 1, 12)
+    c.post(f"/hr/{emp_id}/avans",
+           data={"kind": "oylik", "amount": "700000", "paid_on": t.isoformat(),
+                 "period": f"{py}-{pm:02d}", "note": ""},
+           follow_redirects=True)
+    bad = c.post(f"/hr/{emp_id}/avans",
+                 data={"kind": "oylik", "amount": "1", "paid_on": t.isoformat(), "period": "xx-99"},
+                 follow_redirects=True)
+    check("HR: noto'g'ri davr rad etiladi (200)", bad.status_code == 200)
+
+with app.app_context():
+    from queries import employees_month_payment_totals
+    t = today_local()
+    py, pm = (t.year, t.month - 1) if t.month > 1 else (t.year - 1, 12)
+    prev = employees_month_payment_totals(py, pm).get(emp_id, {})
+    cur = employees_month_payment_totals(t.year, t.month).get(emp_id, {})
+    check("HR: oldingi oy uchun oylik 700 000 shu oyga yozildi", prev.get("oylik") == 700000)
+    check("HR: joriy oy hisobiga oldingi oy puli qo'shilmadi", cur.get("oylik") == 2000000)
+    check("HR: davr ko'rsatilmasa to'lov sanasi oyi olinadi",
+          EmployeeAdvance.query.filter_by(employee_id=emp_id, kind="kpi").first().period_month == t.month)
+    exp_desc = Expense.query.filter(Expense.description.like("%uchun)%")).count()
+    check("HR: Expense tavsifida davr ko'rsatilgan", exp_desc >= 4)
+
 # Boss ham to'lov kirita olishi kerak (2026-08-29, foydalanuvchi qarori)
 with app.test_client() as c:
     login(c, "boss_t")

@@ -69,7 +69,7 @@
 {% if can_pay %}
 <div class="card p-3 mb-3">
   <h6 class="fw-bold mb-2"><i class="bi bi-cash-coin me-1 text-muted"></i> Ishchiga berilayotgan summa</h6>
-  <div class="form-text mb-2">Turkumni tanlang, so'ng summani kiriting — bir oyda bir necha marta berilishi mumkin, har biri alohida yoziladi.</div>
+  <div class="form-text mb-2">Turkumni va qaysi oy uchun ekanini tanlang (oldingi oy puli keyingi oyda berilishi mumkin), so'ng summani kiriting — bir oy uchun bir necha marta berilishi mumkin, har biri alohida yoziladi.</div>
   <form method="post" action="{{ url_for('hr.add_advance', employee_id=employee.id) }}" class="row g-2 align-items-end">
     {{ csrf() }}
     <div class="col-12">
@@ -86,18 +86,26 @@
       </div>
     </div>
     <div class="col-sm-3">
+      <label class="form-label mb-1">Qaysi oy uchun</label>
+      <select name="period" class="form-select">
+        {% for o in period_options %}
+        <option value="{{ o.value }}" {% if o.value == current_period %}selected{% endif %}>{{ o.label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-sm-3">
       <label class="form-label mb-1">Summa</label>
       <input type="number" step="0.01" min="0.01" name="amount" class="form-control" required placeholder="500000">
     </div>
     <div class="col-sm-3">
-      <label class="form-label mb-1">Sana</label>
+      <label class="form-label mb-1">To'langan sana</label>
       <input type="date" name="paid_on" class="form-control" max="{{ today.isoformat() }}" value="{{ today.isoformat() }}">
     </div>
-    <div class="col-sm-4">
+    <div class="col-sm-3">
       <label class="form-label mb-1">Izoh</label>
       <input name="note" class="form-control" maxlength="255" placeholder="Ixtiyoriy">
     </div>
-    <div class="col-sm-2">
+    <div class="col-sm-3 offset-sm-9">
       <button class="btn btn-primary w-100"><i class="bi bi-check-lg"></i> Berish</button>
     </div>
   </form>
@@ -157,7 +165,7 @@
             <div class="small">
               <span class="badge {% if p.kind == 'oylik' %}bg-primary{% elif p.kind == 'kpi' %}bg-success{% else %}bg-warning text-dark{% endif %}">{{ p.kind_label }}</span>
               <span class="num fw-semibold">{{ p.amount|uzs }}</span>
-              <span class="text-muted">· {{ p.paid_on|date_uz }}</span>
+              <span class="text-muted">· to'langan: {{ p.paid_on|date_uz }}</span>
               {% if p.note %}<span class="text-muted">· {{ p.note }}</span>{% endif %}
             </div>
             {% if can_pay %}
