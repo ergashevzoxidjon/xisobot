@@ -561,7 +561,14 @@ def report():
 
     # To'lov usuli / korxonalar bo'yicha tushum — alohida blok
     # (2026-08-30, foydalanuvchi qarori).
-    income_totals = income_by_method(start, end)
+    # Faqat shu blok uchun oy tanlash mumkin (bo'sh = butun yil).
+    income_month = request.args.get("income_month", 0, type=int)
+    if 1 <= income_month <= 12:
+        i_start, i_end = _month_bounds(year, income_month)
+    else:
+        income_month = 0
+        i_start, i_end = start, end
+    income_totals = income_by_method(i_start, i_end)
     income_total_all = sum((row["total"] for row in income_totals), ZERO)
     income_company_total = sum(
         (row["total"] for row in income_totals if row["is_company"]), ZERO
@@ -575,6 +582,7 @@ def report():
         manager_rows=manager_rows,
         supplier_debt_total=supplier_debt_total,
         income_totals=income_totals,
+        income_month=income_month,
         income_total_all=income_total_all,
         income_company_total=income_company_total,
         income_today_total_all=income_today_total_all,

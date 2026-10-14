@@ -103,16 +103,27 @@
 {% endif %}
 
 {# ---------------- 1c. TO'LOV USULLARI / KORXONALAR BO'YICHA TUSHUM (2026-08-30) ---------------- #}
-{% if income_totals %}
-<div class="card p-4 mb-3">
+{% set uz_months = ['', 'Yanvar','Fevral','Mart','Aprel','May','Iyun','Iyul','Avgust','Sentabr','Oktabr','Noyabr','Dekabr'] %}
+{% if income_totals or income_month %}
+<div class="card p-4 mb-3" id="korxona-tushum">
   <div class="d-flex justify-content-between align-items-start flex-wrap gap-1 mb-1">
     <h6 class="fw-bold mb-0"><i class="bi bi-bank me-1 text-muted"></i> Korxonalar bo'yicha tushum</h6>
     <div class="text-end">
       <div class="text-muted small">shartnoma (korxona) orqali: <span class="fw-semibold">{{ income_company_total|uzs }}</span> so'm</div>
+      <div class="text-muted small">jami: <span class="fw-semibold">{{ income_total_all|uzs }}</span> so'm</div>
       <div class="text-muted small">bugungi kun: <span class="fw-semibold text-success">{{ income_today_total_all|uzs }}</span> so'm</div>
     </div>
   </div>
-  <div class="chart-note mb-3">To'lov qaysi usul yoki shartnoma (korxona) orqali qilingani — {{ year }}-yil, to'lov sanasi bo'yicha.</div>
+  <form method="get" action="#korxona-tushum" class="mb-2">
+    <input type="hidden" name="year" value="{{ year }}">
+    <select name="income_month" class="form-select d-inline-block" style="width:auto;min-width:190px;padding-right:2.5rem" onchange="this.form.submit()">
+      <option value="0">Butun yil</option>
+      {% for i in range(1, 13) %}
+      <option value="{{ i }}" {% if i == income_month %}selected{% endif %}>{{ uz_months[i] }}</option>
+      {% endfor %}
+    </select>
+  </form>
+  <div class="chart-note mb-3">To'lov qaysi usul yoki shartnoma (korxona) orqali qilingani — {{ year }}-yil{% if income_month %}, {{ uz_months[income_month]|lower }} oyi{% endif %}, to'lov sanasi bo'yicha.</div>
   <div style="overflow-x:auto">
     <table class="table table-sm mb-0">
       <thead><tr><th>To'lov usuli</th><th class="text-end">Summa</th><th class="text-end">Bugungi tushum</th><th class="text-end">Ulush</th></tr></thead>
