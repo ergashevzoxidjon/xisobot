@@ -12,8 +12,22 @@
   </div>
 </div>
 
+{% set uz_months = ['', 'Yanvar','Fevral','Mart','Aprel','May','Iyun','Iyul','Avgust','Sentabr','Oktabr','Noyabr','Dekabr'] %}
+{% set tab_args = {'q': q, 'status': status, 'manager_id': manager_id or ''} %}
+<div class="d-flex flex-wrap gap-2 mb-3">
+  <a href="{{ url_for('orders.list_orders', month='', **tab_args) }}"
+     class="btn btn-sm {{ 'btn-primary' if not month else 'btn-outline-secondary' }}">Barchasi</a>
+  {% for y, m, c in month_tabs %}
+  {% set key = '%04d-%02d'|format(y, m) %}
+  <a href="{{ url_for('orders.list_orders', month=key, **tab_args) }}"
+     class="btn btn-sm {{ 'btn-primary' if month == key else 'btn-outline-secondary' }}">
+    {{ uz_months[m] }} {{ y }} <span class="badge bg-light text-dark ms-1">{{ c }}</span></a>
+  {% endfor %}
+</div>
+
 <div class="card p-3 mb-3">
   <form method="get" class="row g-2 align-items-center">
+    <input type="hidden" name="month" value="{{ month }}">
     <div class="col-md-5">
       <div class="input-group">
         <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
@@ -42,7 +56,7 @@
     <div class="col-md-auto">
       <button class="btn btn-outline-primary"><i class="bi bi-funnel"></i> Filtrlash</button>
       {% if q or status or manager_id %}
-      <a href="{{ url_for('orders.list_orders') }}" class="btn btn-link text-muted">Tozalash</a>
+      <a href="{{ url_for('orders.list_orders', month=month) }}" class="btn btn-link text-muted">Tozalash</a>
       {% endif %}
     </div>
   </form>
@@ -110,7 +124,7 @@
 </tbody>
 </table>
 </div>
-{{ pager(pagination, 'orders.list_orders', {'q': q, 'status': status, 'manager_id': manager_id or ''}) }}
+{{ pager(pagination, 'orders.list_orders', {'q': q, 'status': status, 'manager_id': manager_id or '', 'month': month}) }}
 {% else %}
 <div class="empty-state"><i class="bi bi-receipt"></i><p>Buyurtma topilmadi</p></div>
 {% endif %}

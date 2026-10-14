@@ -117,7 +117,7 @@
           <tr>
             <th style="width:34px"></th>
             <th style="min-width:180px">Turi</th>
-            <th style="min-width:170px">Izoh</th>
+            <th style="min-width:170px">Texnik parametr</th>
             <th style="width:100px" class="text-end">Miqdor</th>
             <th style="width:140px" class="text-end">Birlik narxi</th>
             <th style="width:150px" class="text-end">Summa</th>
@@ -130,8 +130,8 @@
             <td class="row-num">{{ loop.index }}</td>
             <td data-label="Turi"><input class="form-control item-type" name="item_type" required
                        placeholder="Vizitka, banner..." value="{{ row.order_type }}"></td>
-            <td data-label="Izoh"><input class="form-control item-desc" name="item_description"
-                       placeholder="o'lcham, rang..." value="{{ row.description or '' }}"></td>
+            <td data-label="Texnik parametr"><input class="form-control item-desc" name="item_description" required
+                       placeholder="o'lcham, rang, qog'oz..." value="{{ row.description or '' }}"></td>
             <td data-label="Miqdor"><input type="number" class="form-control text-end item-qty" name="item_quantity"
                        min="1" required value="{{ row.quantity }}"></td>
             <td data-label="Narxi"><input type="number" step="0.01" min="0" class="form-control text-end item-price"
@@ -218,7 +218,7 @@ function makeRow() {
   tr.innerHTML = `
     <td class="row-num"></td>
     <td data-label="Turi"><input class="form-control item-type" name="item_type" required placeholder="Vizitka, banner..."></td>
-    <td data-label="Izoh"><input class="form-control item-desc" name="item_description" placeholder="o'lcham, rang..."></td>
+    <td data-label="Texnik parametr"><input class="form-control item-desc" name="item_description" required placeholder="o'lcham, rang, qog'oz..."></td>
     <td data-label="Miqdor"><input type="number" class="form-control text-end item-qty" name="item_quantity" min="1" required value="1"></td>
     <td data-label="Narxi"><input type="number" step="0.01" min="0" class="form-control text-end item-price" name="item_unit_price" required value="0"></td>
     <td data-label="Summa" class="text-end num fw-semibold item-total">0.00</td>
