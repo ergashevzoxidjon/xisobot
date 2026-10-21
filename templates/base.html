@@ -488,13 +488,13 @@ a{ text-decoration:none; }
       </a>
       {% endif %}
       {# Xisoblovchi — tashqi ilova (2026-10-21, foydalanuvchi qarori): admin va
-         ish boshqaruvchi ?rol=admin bilan, menejer va boss oddiy manzil bilan #}
+         ish boshqaruvchi ?rol=admin, menejer va boss ?rol=menejer bilan #}
       {% if current_user.role in ('admin', 'xarajatchi') %}
       <a href="https://xisoblovchi.mylogo.uz/?rol=admin" target="_blank" rel="noopener">
         <i class="bi bi-calculator"></i> Xisoblovchi
       </a>
       {% elif current_user.role in ('menejer', 'boss') %}
-      <a href="https://xisoblovchi.mylogo.uz/" target="_blank" rel="noopener">
+      <a href="https://xisoblovchi.mylogo.uz/?rol=menejer" target="_blank" rel="noopener">
         <i class="bi bi-calculator"></i> Xisoblovchi
       </a>
       {% endif %}
