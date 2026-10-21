@@ -487,6 +487,17 @@ a{ text-decoration:none; }
         <i class="bi bi-journal-text"></i> Harakatlar jurnali
       </a>
       {% endif %}
+      {# Xisoblovchi — tashqi ilova (2026-10-21, foydalanuvchi qarori): admin va
+         ish boshqaruvchi ?rol=admin bilan, menejer va boss oddiy manzil bilan #}
+      {% if current_user.role in ('admin', 'xarajatchi') %}
+      <a href="https://xisoblovchi.mylogo.uz/?rol=admin" target="_blank" rel="noopener">
+        <i class="bi bi-calculator"></i> Xisoblovchi
+      </a>
+      {% elif current_user.role in ('menejer', 'boss') %}
+      <a href="https://xisoblovchi.mylogo.uz/" target="_blank" rel="noopener">
+        <i class="bi bi-calculator"></i> Xisoblovchi
+      </a>
+      {% endif %}
     </nav>
     <div class="sidebar-user">
       <div class="avatar">{{ current_user.display_name[0]|upper }}</div>
