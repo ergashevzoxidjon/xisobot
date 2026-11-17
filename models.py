@@ -65,6 +65,11 @@ EXPENSE_ORDER_CATEGORY = "buyurtma"
 EXPENSE_CATEGORIES = ["ijara", "ish haqi", "kommunal", "transport", "xomashyo",
                       "jihoz", "soliq", EXPENSE_ORDER_CATEGORY, "ofis xarajatlari"]
 
+# Xarajat formasidagi "Taksi" qatori shu turkumga yoziladi va pul OFIS
+# kassasidan chiqadi (2026-11-17, foydalanuvchi qarori — alohida "taksi"
+# turkumi emas, mavjud "transport" bilan birga ko'rinadi).
+TAXI_EXPENSE_CATEGORY = "transport"
+
 # Formada qo'lda tanlanadigan va filtrlanadigan turkumlar — "buyurtma"
 # bundan mustasno: u avtomatik qo'yiladi, foydalanuvchi tanlamaydi/filtrlamaydi.
 GENERAL_EXPENSE_CATEGORIES = [c for c in EXPENSE_CATEGORIES if c != EXPENSE_ORDER_CATEGORY]

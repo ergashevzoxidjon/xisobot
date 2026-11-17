@@ -14,15 +14,16 @@ from extensions import db
 from models import (
     Expense, Order, OrderItem, Payment, Client, Material, StockMove, log_action,
     EXPENSE_CATEGORIES, GENERAL_EXPENSE_CATEGORIES, EXPENSE_ORDER_CATEGORY,
-    STATUS_CANCELLED, STOCK_OUT, ZERO, PAYMENT_TRANSFER,
-    ORDER_PAYMENT_COMPANY_METHODS,
+    STATUS_CANCELLED, STOCK_OUT, ZERO, PAYMENT_TRANSFER, PAYMENT_CASH,
+    ORDER_PAYMENT_COMPANY_METHODS, CASH_SOURCE_OFFICE, TAXI_EXPENSE_CATEGORY,
+    Supplier, STOCK_UNITS, CASH_SOURCE_LABELS, PAYER_COMPANIES,
 )
 from permissions import permission_required, has_perm
 from queries import (
     top_debtors, eager_orders, materials_with_stock,
     suppliers_with_stats, all_managers_month_summary,
 )
-from stock import consume, shortage
+from stock import consume, shortage, _confirmed_handovers_for
 from utils import (
     ValidationError, parse_money, parse_date, parse_text, parse_choice, parse_int,
     parse_qty, to_money, to_qty, today_local, month_bounds, money_str, qty_str, QTY_ZERO,
@@ -146,7 +147,7 @@ def parse_expense_order(form):
     return order
 
 
-def expense_rows_from_form(form, require_material=False):
+def expense_rows_from_form(form, require_material=False, allow_empty=False):
     """Formadagi xarajat qatorlarini o'qiydi: mahsulot, soni, narxi.
 
     Jami avtomatik hisoblanadi (soni × narxi). Qator ombordagi mahsulotga
@@ -175,7 +176,10 @@ def expense_rows_from_form(form, require_material=False):
         qty_text = cell(quantities, index)
         price_text = cell(prices, index)
 
-        if not raw_id and not description and not qty_text and not price_text:
+        # Faqat "soni" (standart 1) to'ldirilgan qator — bo'sh qator: forma
+        # har doim bitta qatorni soni=1 bilan ochadi, taksi yolg'iz
+        # kiritilganda u xato bermasligi kerak.
+        if not raw_id and not description and not price_text:
             continue
 
         row = index + 1
@@ -208,9 +212,48 @@ def expense_rows_from_form(form, require_material=False):
             "amount": to_money(quantity * unit_price),
         })
 
-    if not rows:
+    if not rows and not allow_empty:
         raise ValidationError("Kamida bitta xarajat qatorini to'ldiring.")
     return rows
+
+
+def taxi_from_form(form):
+    """Xarajat formasidagi "Taksi" qatori (2026-11-17, foydalanuvchi so'rovi).
+
+    Ilgari taksi pulini yozish uchun "Taksi"ni ombor mahsuloti qilib, avval
+    kirim, keyin chiqim qilishga to'g'ri kelardi. Endi belgi qo'yiladi,
+    nechta qatnov va bittasining narxi yoziladi — omborga tegmaydi.
+    Belgi qo'yilmagan bo'lsa `None` qaytaradi.
+    """
+    if form.get("taxi_enabled") != "1":
+        return None
+    count = parse_int(form.get("taxi_count") or "1", "Taksi, soni", min_value=1)
+    unit_price = parse_money(form.get("taxi_price"), "Taksi, narxi",
+                             min_value=Decimal("0.01"))
+    return {"count": count, "unit_price": unit_price,
+            "amount": to_money(unit_price * count)}
+
+
+def record_taxi(taxi, order, exp_date):
+    """Taksi xarajatini yozadi: "transport" turkumi, pul OFIS kassasidan.
+
+    Buyurtmaga bog'langan bo'lsa o'sha buyurtma tannarxiga ham kiradi
+    (`Order.direct_expenses`), hisobotda esa "transport" turkumida ko'rinadi.
+    OFIS balansi (`queries.office_balance`) shu yozuvni avtomatik ayiradi.
+    """
+    e = Expense(
+        category=TAXI_EXPENSE_CATEGORY, amount=taxi["amount"],
+        description=f"Taksi — {taxi['count']} ta × {money_str(taxi['unit_price'])} so'm",
+        date=exp_date, order_id=order.id if order else None,
+        is_paid=True, payment_method=PAYMENT_CASH, cash_source=CASH_SOURCE_OFFICE,
+        created_by=current_user.id,
+    )
+    db.session.add(e)
+    db.session.flush()
+    log_action(current_user, "create", "expense", e.id,
+               f"taksi — {taxi['amount']} (OFIS)"
+               + (f" ({order.order_number})" if order else ""))
+    return e
 
 
 def stock_shortages(rows):
@@ -305,8 +348,11 @@ def new_expense():
         try:
             order = parse_expense_order(request.form)
             category = expense_category(request.form, order)
-            # Buyurtma xarajatida mahsulot faqat ombordan olinadi
-            rows = expense_rows_from_form(request.form, require_material=order is not None)
+            taxi = taxi_from_form(request.form)
+            # Buyurtma xarajatida mahsulot faqat ombordan olinadi. Taksi
+            # belgilangan bo'lsa, mahsulot qatorlari bo'sh qolishi mumkin.
+            rows = expense_rows_from_form(request.form, require_material=order is not None,
+                                          allow_empty=taxi is not None)
             exp_date = parse_date(request.form.get("date"), "Sana", required=False) or today_local()
         except ValidationError as e:
             flash(str(e), "danger")
@@ -341,6 +387,10 @@ def new_expense():
                 direct += 1
             total += data["amount"]
 
+        if taxi:
+            record_taxi(taxi, order, exp_date)
+            total += taxi["amount"]
+
         db.session.commit()
         for message in warnings:
             flash(message, "warning")
@@ -350,13 +400,15 @@ def new_expense():
             parts.append(f"{from_stock} ta mahsulot ombordan sarflandi")
         if direct:
             parts.append(f"{direct} ta xarajat yozildi")
+        if taxi:
+            parts.append(f"taksi {money_str(taxi['amount'])} so'm OFIS kassasidan")
         summary = ", ".join(parts) + f" — jami {money_str(total)} so'm."
 
         if order:
             flash(f"{order.order_number}: {summary}", "success")
             return redirect(url_for("orders.order_detail", order_id=order.id))
         flash(summary[0].upper() + summary[1:], "success")
-        if from_stock and not direct:
+        if from_stock and not direct and not taxi:
             return redirect(url_for("stock.list_materials"))
         return redirect(url_for("finance.expenses_list"))
 
@@ -374,12 +426,27 @@ def new_expense():
 
 
 def _expense_page(selected_order, expense, form):
-    """Xarajat formasi — ombordagi mahsulotlar ro'yxati bilan."""
+    """Xarajat formasi — o'ng tomonda ombordagi mahsulotlar ustuni bilan.
+
+    `stock.manage` ruxsati bo'lsa, formadan chiqmasdan omborga tezkor kirim
+    qilish oynasi uchun kerakli ro'yxatlar ham beriladi (2026-11-17).
+    """
+    quick = {}
+    if has_perm("stock.manage"):
+        quick = dict(
+            units=STOCK_UNITS,
+            suppliers=Supplier.query.filter_by(is_active=True, is_deleted=False)
+                                    .order_by(Supplier.name).all(),
+            cash_handovers=_confirmed_handovers_for(current_user),
+            cash_source_labels=CASH_SOURCE_LABELS,
+            payer_companies=PAYER_COMPANIES,
+        )
     return render_template(
         "finance/expense_form.html",
         categories=GENERAL_EXPENSE_CATEGORIES,
         materials=materials_with_stock(only_active=True),
         selected_order=selected_order, expense=expense, form=form,
+        quick_receive=bool(quick), **quick,
     )
 
 
@@ -561,7 +628,14 @@ def report():
 
     # To'lov usuli / korxonalar bo'yicha tushum — alohida blok
     # (2026-08-30, foydalanuvchi qarori).
-    income_totals = income_by_method(start, end)
+    # Faqat shu blok uchun oy tanlash mumkin (bo'sh = butun yil).
+    income_month = request.args.get("income_month", 0, type=int)
+    if 1 <= income_month <= 12:
+        i_start, i_end = _month_bounds(year, income_month)
+    else:
+        income_month = 0
+        i_start, i_end = start, end
+    income_totals = income_by_method(i_start, i_end)
     income_total_all = sum((row["total"] for row in income_totals), ZERO)
     income_company_total = sum(
         (row["total"] for row in income_totals if row["is_company"]), ZERO
@@ -575,6 +649,7 @@ def report():
         manager_rows=manager_rows,
         supplier_debt_total=supplier_debt_total,
         income_totals=income_totals,
+        income_month=income_month,
         income_total_all=income_total_all,
         income_company_total=income_company_total,
         income_today_total_all=income_today_total_all,

@@ -45,6 +45,10 @@ PERMISSIONS = {
     # kirim/chiqimdan farqli, moliyaviy izsiz o'tkaziladigan operatsiya,
     # shuning uchun faqat admin (2026-09-03, foydalanuvchi qarori).
     "stock.adjust",
+    # Mahsulotni kirim/chiqim tarixi bilan birga butunlay o'chirish — faqat
+    # admin (2026-11-17, foydalanuvchi so'rovi). Kirimda yozilgan pul
+    # (Expense) qoladi; route: stock.delete_material.
+    "stock.delete",
     "suppliers.view", "suppliers.manage",
     # Taminotchini o'chirish (yumshoq — ro'yxatlardan yashiriladi, keyin
     # tiklash mumkin, xuddi clients.delete kabi) — faqat admin (2026-09-16,

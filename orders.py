@@ -1,4 +1,6 @@
 import os
+import re
+from datetime import datetime
 import uuid
 from decimal import Decimal
 
@@ -7,7 +9,7 @@ from flask import (
     current_app, send_from_directory, jsonify,
 )
 from flask_login import login_required, current_user
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload, selectinload
 from werkzeug.utils import secure_filename
@@ -100,8 +102,8 @@ def _items_from_form(form):
                 name, f"{row}-qator, buyurtma turi", required=True, max_length=100
             ),
             "description": parse_text(
-                _at(descriptions, index), f"{row}-qator, izoh",
-                required=False, max_length=500,
+                _at(descriptions, index), f"{row}-qator, texnik parametr",
+                required=True, max_length=500,
             ),
             "quantity": quantity,
             "unit_price": unit_price,
@@ -199,6 +201,37 @@ def list_orders():
         query = query.filter(Order.created_by == current_user.id)
     elif manager_id:
         query = query.filter(Order.created_by == manager_id)
+
+    # Oylar bo'yicha bo'limlar: har oy alohida tab. Standart — joriy oy;
+    # qidiruv berilganda esa hamma oylar bo'yicha qidiriladi.
+    month_rows = (
+        query.with_entities(
+            func.extract("year", Order.created_at),
+            func.extract("month", Order.created_at),
+            func.count(Order.id),
+        )
+        .group_by(func.extract("year", Order.created_at), func.extract("month", Order.created_at))
+        .all()
+    )
+    month_tabs = sorted(
+        ((int(y), int(m), c) for y, m, c in month_rows if y and m), reverse=True
+    )
+    month = request.args.get("month")
+    if month is None:
+        month = "" if q else now_local().strftime("%Y-%m")
+        # Joriy oyda hali buyurtma bo'lmasa — oxirgi buyurtmali oyni ko'rsatamiz
+        if month and month_tabs and not any(f"{y:04d}-{m:02d}" == month for y, m, _ in month_tabs):
+            month = f"{month_tabs[0][0]:04d}-{month_tabs[0][1]:02d}"
+    month_start = None
+    if re.fullmatch(r"\d{4}-\d{2}", month or ""):
+        y, m = int(month[:4]), int(month[5:])
+        if 1 <= m <= 12:
+            month_start = datetime(y, m, 1)
+            nxt = datetime(y + (m == 12), m % 12 + 1, 1)
+            query = query.filter(Order.created_at >= month_start, Order.created_at < nxt)
+    if month_start is None:
+        month = ""
+
     if status and status in ORDER_STATUSES:
         query = query.filter(Order.status == status)
     if q:
@@ -231,6 +264,8 @@ def list_orders():
         q=q,
         managers=managers,
         manager_id=manager_id,
+        month=month,
+        month_tabs=month_tabs,
     )
 
 

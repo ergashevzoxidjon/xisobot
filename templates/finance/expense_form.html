@@ -6,6 +6,9 @@
 {% set posted_descs = form.getlist('expense_description') if form and form.getlist is defined else [] %}
 {% set posted_qtys = form.getlist('expense_quantity') if form and form.getlist is defined else [] %}
 {% set posted_prices = form.getlist('expense_unit_price') if form and form.getlist is defined else [] %}
+{% set posted_taxi = (form.get('taxi_enabled') == '1') if form and form.get is defined else false %}
+{% set posted_taxi_count = form.get('taxi_count', '1') if form and form.get is defined else '1' %}
+{% set posted_taxi_price = form.get('taxi_price', '') if form and form.get is defined else '' %}
 
 {% set rows = [] %}
 {% if posted_descs or posted_prices %}
@@ -22,6 +25,42 @@
                           'quantity': '1', 'price': expense.amount}) %}
 {% endif %}
 
+{% block head_extra %}
+<style>
+/* O'ng ustun: ombordagi mahsulotlar (2026-11-17) — uzun, qidiriladigan ro'yxat */
+.stock-side{ position:sticky; top:1rem; display:flex; flex-direction:column;
+  max-height:calc(100vh - 2rem); overflow:hidden; }
+.stock-side-head{ padding:1rem 1rem .6rem; border-bottom:1px solid #eef1f5; }
+.stock-side-list{ flex:1 1 auto; overflow-y:auto; padding:.35rem; min-height:160px; }
+.stock-side-foot{ padding:.6rem 1rem .9rem; border-top:1px solid #eef1f5; }
+.stock-pick{ display:flex; flex-direction:column; align-items:stretch; gap:.1rem; width:100%;
+  text-align:left; background:none; border:1px solid transparent; border-radius:9px;
+  padding:.45rem .65rem; color:inherit; }
+.stock-pick + .stock-pick{ margin-top:2px; }
+.stock-pick:hover, .stock-pick:focus-visible{ background:var(--primary-soft); border-color:#fecaca; outline:none; }
+.stock-pick:active{ transform:scale(.99); }
+.stock-pick-name{ font-weight:600; font-size:.88rem; line-height:1.25; }
+.stock-pick-meta{ display:flex; justify-content:space-between; gap:.5rem;
+  font-size:.75rem; color:#64748b; font-variant-numeric:tabular-nums; }
+.stock-pick.low .stock-pick-qty{ color:#b45309; font-weight:600; }
+.stock-pick.empty .stock-pick-qty{ color:#dc2626; font-weight:600; }
+.stock-pick.just-added{ border-color:#86efac; background:#f0fdf4; }
+.stock-side-empty{ padding:1.25rem .75rem; text-align:center; color:#64748b; font-size:.85rem; }
+@media (max-width:1199.98px){
+  .stock-side{ position:static; max-height:none; }
+  .stock-side-list{ max-height:340px; }
+}
+
+/* Taksi qatori — belgi + soni × narxi */
+.taxi-row{ display:flex; align-items:center; flex-wrap:wrap; gap:.6rem 1rem;
+  margin-top:1rem; padding:.6rem .85rem; border:1px dashed #cbd5e1; border-radius:10px; }
+.taxi-row.on{ border-style:solid; border-color:#fde68a; background:#fffbeb; }
+.taxi-fields{ display:none; align-items:center; gap:.4rem; }
+.taxi-row.on .taxi-fields{ display:flex; }
+.taxi-note{ margin-left:auto; font-size:.75rem; color:#64748b; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="page-header">
   <div>
@@ -33,7 +72,9 @@
   </div>
 </div>
 
-<div class="card p-4" style="max-width:1000px">
+<div class="row g-3 align-items-start">
+<div class="col-12 col-xl-8" id="expenseMainCol">
+<div class="card p-4">
 <form method="post" id="expenseForm">
   {{ csrf() }}
 
@@ -119,32 +160,15 @@
         <div class="hint" id="materialHint">Soni × narxi = jami. Buyurtma xarajatida mahsulot ombordan olinadi.</div>
         <div class="hint" id="generalHint" style="display:none">Bu turkum uchun sarflangan summani yozing — omborga aloqasi yo'q.</div>
       </div>
-      <a href="{{ url_for('stock.receive') }}" class="btn btn-sm btn-outline-secondary ms-auto no-print"
-         id="receiveShortcutBtn">
+      {% if quick_receive %}
+      <button type="button" class="btn btn-sm btn-outline-secondary ms-auto no-print" id="receiveShortcutBtn">
         <i class="bi bi-box-arrow-in-down"></i> Omborga kirim
-      </a>
+      </button>
+      {% endif %}
     </div>
 
-    <div id="materialChipsBlock">
-      {% if materials %}
-      <div class="mb-3">
-        <div class="d-flex flex-wrap gap-2" id="materialChips">
-          {% for m in materials[:12] %}
-          <button type="button" class="btn btn-outline-primary btn-sm quick-type material-chip"
-                  data-id="{{ m.id }}" data-name="{{ m.name }}" data-price="{{ m.last_price }}">
-            {{ m.name }}
-            <span class="price">{{ m.quantity|qty }} {{ m.unit }} · {{ m.last_price|uzs }}</span>
-          </button>
-          {% endfor %}
-        </div>
-        <div class="form-text">Ombordagi mahsulot — bosing, bo'sh qatorga nomi va narxi qo'yiladi.</div>
-      </div>
-      {% else %}
-      <div class="alert alert-light border py-2 mb-3 small">
-        <i class="bi bi-box-seam"></i> Omborda mahsulot yo'q.
-        <a href="{{ url_for('stock.new_material') }}">Avval mahsulot qo'shing</a>, so'ng kirim qiling.
-      </div>
-      {% endif %}
+    <div class="alert alert-success py-2 small d-none" id="quickReceiveDone" role="status">
+      <i class="bi bi-check-circle"></i> <span></span>
     </div>
 
     <div style="overflow-x:auto">
@@ -199,6 +223,28 @@
     <button type="button" class="btn btn-outline-primary btn-sm mt-3" id="addExpenseRow">
       <i class="bi bi-plus-lg"></i> Qator qo'shish
     </button>
+
+    {# Taksi — omborsiz, pul OFIS kassasidan, hisobotda "transport" turkumi #}
+    <div class="taxi-row {% if posted_taxi %}on{% endif %}" id="taxiBlock">
+      <div class="form-check form-switch m-0">
+        <input class="form-check-input" type="checkbox" role="switch" name="taxi_enabled"
+               value="1" id="taxiEnabled" {% if posted_taxi %}checked{% endif %}>
+        <label class="form-check-label fw-semibold" for="taxiEnabled">
+          <i class="bi bi-taxi-front me-1"></i>Taksi</label>
+      </div>
+      <div class="taxi-fields" id="taxiFields">
+        <input type="number" step="1" min="1" class="form-control form-control-sm text-end"
+               name="taxi_count" id="taxiCount" value="{{ posted_taxi_count }}"
+               aria-label="Taksi soni" style="width:76px">
+        <span class="text-muted small">ta ×</span>
+        <input type="number" step="0.01" min="0.01" class="form-control form-control-sm text-end"
+               name="taxi_price" id="taxiPrice" value="{{ posted_taxi_price }}"
+               placeholder="narxi" aria-label="Bitta taksi narxi" style="width:130px">
+        <span class="text-muted small">=</span>
+        <span class="fw-semibold num" id="taxiLine">0,00</span>
+      </div>
+      <span class="taxi-note">OFIS kassasidan · «Transport» turkumida</span>
+    </div>
     {% endif %}
   </div>
 
@@ -223,6 +269,157 @@
   </div>
 </form>
 </div>
+</div>
+
+{# ---------------- O'NG USTUN: OMBORDAGI MAHSULOTLAR ---------------- #}
+<div class="col-12 col-xl-4" id="stockPanelCol">
+  <div class="card stock-side">
+    <div class="stock-side-head">
+      <div class="d-flex align-items-center gap-2">
+        <i class="bi bi-box-seam text-muted"></i>
+        <h6 class="mb-0 fw-bold">Ombordagi mahsulotlar</h6>
+        <span class="badge bg-light text-muted border ms-auto" id="stockCount">{{ materials|length }}</span>
+      </div>
+      <div class="input-group input-group-sm mt-2">
+        <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
+        <input type="search" class="form-control" id="stockFilter" autocomplete="off"
+               placeholder="Mahsulot nomi..." aria-label="Mahsulot qidirish">
+      </div>
+      <div class="form-text mb-0">Bosing — mahsulot bo'sh qatorga tushadi.</div>
+    </div>
+    <div class="stock-side-list" id="stockList">
+      {% for m in materials %}
+      <button type="button" class="stock-pick {% if m.quantity <= 0 %}empty{% elif m.is_low %}low{% endif %}"
+              data-id="{{ m.id }}" data-name="{{ m.name }}" data-price="{{ m.last_price }}">
+        <span class="stock-pick-name">{{ m.name }}</span>
+        <span class="stock-pick-meta">
+          <span class="stock-pick-qty">{{ m.quantity|qty }} {{ m.unit }}</span>
+          <span>{{ m.last_price|uzs }}</span>
+        </span>
+      </button>
+      {% endfor %}
+      <div class="stock-side-empty" id="stockEmpty" {% if materials %}style="display:none"{% endif %}>
+        <span id="stockEmptyText">Omborda mahsulot yo'q.</span>
+        {% if quick_receive %}
+        <button type="button" class="btn btn-sm btn-primary mt-2" id="stockEmptyReceive">
+          <i class="bi bi-plus-lg"></i> Omborga qabul qilish</button>
+        {% endif %}
+      </div>
+    </div>
+    {% if quick_receive %}
+    <div class="stock-side-foot">
+      <button type="button" class="btn btn-outline-primary btn-sm w-100" id="sideReceiveBtn">
+        <i class="bi bi-plus-lg"></i> Omborda yo'q mahsulotni qabul qilish</button>
+    </div>
+    {% endif %}
+  </div>
+</div>
+</div>
+
+{% if quick_receive %}
+{# ---------------- TEZKOR KIRIM OYNASI (forma ichida EMAS — ichma-ich forma bo'lmaydi) ---------------- #}
+<div class="modal fade" id="quickReceiveModal" tabindex="-1" aria-labelledby="quickReceiveTitle" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <form class="modal-content" id="quickReceiveForm" novalidate>
+      {{ csrf() }}
+      <div class="modal-header">
+        <div>
+          <h5 class="modal-title" id="quickReceiveTitle">
+            <i class="bi bi-box-arrow-in-down me-1"></i> Omborga tezkor kirim</h5>
+          <div class="small text-muted">Kiritgan xarajat qatorlaringiz joyida qoladi.</div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Yopish"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-danger py-2 small d-none" id="qrError" role="alert"></div>
+
+        <div class="row g-2">
+          <div class="col-md-6">
+            <label class="form-label" for="qrName">Mahsulot</label>
+            <input type="hidden" name="row_material_id" id="qrMaterialId">
+            <input class="form-control" name="row_material_name" id="qrName" list="materialList"
+                   autocomplete="off" maxlength="120" placeholder="Nomi" required>
+            <div class="form-text" id="qrNameHint">Yangi nom bo'lsa — omborga yangi mahsulot ochiladi.</div>
+          </div>
+          <div class="col-md-2 col-4">
+            <label class="form-label" for="qrUnit">Birligi</label>
+            <select class="form-select" name="row_unit" id="qrUnit">
+              {% for u in units %}<option value="{{ u }}">{{ u }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="col-md-2 col-4">
+            <label class="form-label" for="qrQty">Soni</label>
+            <input type="number" step="0.001" min="0.001" class="form-control text-end"
+                   name="row_quantity" id="qrQty" required>
+          </div>
+          <div class="col-md-2 col-4">
+            <label class="form-label" for="qrPrice">Narxi</label>
+            <input type="number" step="0.01" min="0.01" class="form-control text-end"
+                   name="row_price" id="qrPrice" required>
+          </div>
+        </div>
+        <div class="text-end small mt-1">Jami: <span class="fw-semibold num" id="qrTotal">0,00</span> so'm</div>
+
+        <hr class="my-3">
+
+        <label class="form-label" for="qrSupplierName">Kimdan olindi</label>
+        <input type="hidden" name="supplier_id" id="qrSupplierId">
+        <input class="form-control" name="supplier_name" id="qrSupplierName" list="qrSupplierList"
+               autocomplete="off" maxlength="150" placeholder="Taminotchi nomi..." required>
+        <datalist id="qrSupplierList">
+          {% for s in suppliers %}<option value="{{ s.name }}">{% endfor %}
+        </datalist>
+
+        <label class="form-label mt-3">To'lov holati</label>
+        <div class="d-flex flex-wrap gap-2">
+          <input type="radio" class="btn-check" name="payment_method" value="naqd" id="qrPaidCash" autocomplete="off" checked>
+          <label class="btn btn-outline-success btn-sm" for="qrPaidCash">
+            <i class="bi bi-check-circle me-1"></i>Naqd to'landi</label>
+          <input type="radio" class="btn-check" name="payment_method" value="perechisleniye" id="qrPaidTransfer" autocomplete="off">
+          <label class="btn btn-outline-primary btn-sm" for="qrPaidTransfer">
+            <i class="bi bi-bank me-1"></i>Perechisleniye</label>
+          <input type="radio" class="btn-check" name="payment_method" value="qarzga" id="qrPaidNo" autocomplete="off">
+          <label class="btn btn-outline-warning btn-sm" for="qrPaidNo">
+            <i class="bi bi-hourglass-split me-1"></i>Qarzga olindi</label>
+        </div>
+
+        <div id="qrPaidViaBlock" class="mt-3" style="display:none">
+          <label class="form-label">Qaysi tashkilot orqali</label>
+          <div class="d-flex flex-wrap gap-2">
+            {% for c in payer_companies %}
+            <input type="radio" class="btn-check" name="paid_via" value="{{ c }}" id="qrPaidVia{{ loop.index }}" autocomplete="off">
+            <label class="btn btn-outline-secondary btn-sm" for="qrPaidVia{{ loop.index }}">
+              <i class="bi bi-building me-1"></i>{{ c }}</label>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div id="qrCashSourceBlock" class="mt-3">
+          <label class="form-label" for="qrCashSource">Naqd pul qaysi manbadan</label>
+          <select class="form-select" name="cash_source" id="qrCashSource">
+            <option value="">— tanlang —</option>
+            {% for h in cash_handovers %}
+            <option value="order:{{ h.order_id }}">
+              {{ h.order.order_number if h.order else '?' }} — {{ h.amount|uzs }} so'm
+              {% if h.order and h.order.client %}({{ h.order.client.name }}){% endif %}
+            </option>
+            {% endfor %}
+            {% for key, label in cash_source_labels.items() %}
+            <option value="{{ key }}">{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <input type="hidden" name="moved_on" id="qrMovedOn">
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Bekor qilish</button>
+        <button class="btn btn-primary" id="qrSubmit">
+          <i class="bi bi-check-lg"></i> Qabul qilish va qatorga qo'yish</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}
@@ -292,10 +489,18 @@ function computeGeneralMode() {
   return !cat || cat.value !== 'xomashyo';
 }
 
+const QUICK_RECEIVE = {{ 'true' if quick_receive else 'false' }};
+const mainCol = document.getElementById('expenseMainCol');
+const stockCol = document.getElementById('stockPanelCol');
+
 function applyExpenseMode() {
   generalMode = computeGeneralMode();
-  document.getElementById('materialChipsBlock').style.display = generalMode ? 'none' : '';
-  document.getElementById('receiveShortcutBtn').style.display = generalMode ? 'none' : '';
+  // umumiy xarajatda (ijara, ish haqi...) ombor ustuni kerak emas — forma to'liq kenglikda
+  stockCol.style.display = generalMode ? 'none' : '';
+  mainCol.classList.toggle('col-xl-8', !generalMode);
+  const shortcut = document.getElementById('receiveShortcutBtn');
+  if (shortcut) shortcut.style.display = generalMode ? 'none' : '';
+  syncTaxi();
   document.getElementById('materialHint').style.display = generalMode ? 'none' : '';
   document.getElementById('generalHint').style.display = generalMode ? '' : 'none';
   document.querySelectorAll('.qty-cell').forEach(el => { el.style.display = generalMode ? 'none' : ''; });
@@ -333,9 +538,15 @@ function matchMaterial(tr) {
   } else {
     hidden.value = '';
     hint.className = 'form-text exp-hint text-muted';
-    hint.innerHTML = desc.value.trim()
-      ? "<i class=\"bi bi-exclamation-circle\"></i> Omborda yo'q — buyurtma xarajati uchun avval kirim qiling"
-      : '';
+    if (!desc.value.trim()) {
+      hint.innerHTML = '';
+    } else if (QUICK_RECEIVE) {
+      hint.innerHTML = "<i class=\"bi bi-exclamation-circle\"></i> Omborda yo'q — "
+        + '<button type="button" class="btn btn-link btn-sm p-0 align-baseline quick-receive-row">'
+        + "shu yerda qabul qiling</button>";
+    } else {
+      hint.innerHTML = "<i class=\"bi bi-exclamation-circle\"></i> Omborda yo'q — buyurtma xarajati uchun avval kirim qiling";
+    }
   }
 }
 
@@ -345,8 +556,42 @@ function renumber() {
   });
 }
 
+/* ---------------- taksi qatori ---------------- */
+
+const taxiBlock = document.getElementById('taxiBlock');
+const taxiEnabled = document.getElementById('taxiEnabled');
+const taxiCount = document.getElementById('taxiCount');
+const taxiPrice = document.getElementById('taxiPrice');
+
+function taxiAmount() {
+  if (!taxiEnabled || !taxiEnabled.checked || generalMode) return 0;
+  return (parseInt(taxiCount.value, 10) || 0) * (parseFloat(taxiPrice.value) || 0);
+}
+
+function syncTaxi() {
+  if (!taxiBlock) return;
+  // taksi faqat mahsulot jadvali ko'rinadigan holatda (buyurtma yoki xomashyo)
+  taxiBlock.style.display = generalMode ? 'none' : '';
+  const on = taxiEnabled.checked && !generalMode;
+  taxiBlock.classList.toggle('on', on);
+  // o'chiq bo'lsa maydonlar yuborilmaydi va brauzer tekshiruvi ishlamaydi
+  taxiCount.disabled = !on;
+  taxiPrice.disabled = !on;
+  taxiPrice.required = on;
+  document.getElementById('taxiLine').textContent = money(taxiAmount());
+}
+
+if (taxiEnabled) {
+  taxiEnabled.addEventListener('change', () => {
+    syncTaxi();
+    recalc();
+    if (taxiEnabled.checked) { taxiPrice.focus(); }
+  });
+  [taxiCount, taxiPrice].forEach(el => el.addEventListener('input', () => { syncTaxi(); recalc(); }));
+}
+
 function recalc() {
-  let sum = 0;
+  let sum = taxiAmount();
   body.querySelectorAll('.expense-row').forEach(tr => {
     const qty = parseFloat(tr.querySelector('.exp-qty').value) || 0;
     const price = parseFloat(tr.querySelector('.exp-price').value) || 0;
@@ -401,25 +646,60 @@ body.addEventListener('keydown', e => {
 const addBtn = document.getElementById('addExpenseRow');
 if (addBtn) addBtn.addEventListener('click', () => addRow(true));
 
-/* ombordagi mahsulot tugmalari — bo'sh qatorga yozadi */
-document.querySelectorAll('.material-chip').forEach(btn => {
-  btn.addEventListener('click', () => {
-    let tr = activeRow;
-    if (!tr || !tr.isConnected) {
-      const rows = body.querySelectorAll('.expense-row');
-      tr = rows.length ? rows[rows.length - 1] : addRow(false);
-    }
-    if (tr.querySelector('.exp-desc').value.trim()) tr = addRow(false);
+/* ---------------- o'ng ustun: ombordagi mahsulotlar ---------------- */
 
-    tr.querySelector('.exp-desc').value = btn.dataset.name;
-    matchMaterial(tr);
-    const price = parseFloat(btn.dataset.price);
-    if (!isNaN(price) && price > 0) tr.querySelector('.exp-price').value = price;
-    setActive(tr);
-    tr.querySelector('.exp-qty').focus();
-    tr.querySelector('.exp-qty').select();
-    recalc();
+/* mahsulotni qatorga qo'yadi: faol bo'sh qatorga, bo'lmasa yangi qator ochadi */
+function putMaterial(m, targetRow) {
+  let tr = targetRow && targetRow.isConnected ? targetRow : activeRow;
+  if (!tr || !tr.isConnected) {
+    const rows = body.querySelectorAll('.expense-row');
+    tr = rows.length ? rows[rows.length - 1] : addRow(false);
+  }
+  const current = tr.querySelector('.exp-desc').value.trim();
+  if (current && current.toLowerCase() !== m.name.toLowerCase()) tr = addRow(false);
+
+  tr.querySelector('.exp-desc').value = m.name;
+  const price = parseFloat(m.price);
+  if (!isNaN(price) && price > 0) tr.querySelector('.exp-price').value = price;
+  matchMaterial(tr);
+  setActive(tr);
+  tr.querySelector('.exp-qty').focus();
+  tr.querySelector('.exp-qty').select();
+  recalc();
+  return tr;
+}
+
+const stockList = document.getElementById('stockList');
+const stockFilter = document.getElementById('stockFilter');
+const stockEmpty = document.getElementById('stockEmpty');
+const stockEmptyText = document.getElementById('stockEmptyText');
+const stockCount = document.getElementById('stockCount');
+
+stockList.addEventListener('click', e => {
+  const btn = e.target.closest('.stock-pick');
+  if (!btn) return;
+  putMaterial({name: btn.dataset.name, price: btn.dataset.price});
+});
+
+function filterStock() {
+  const q = stockFilter.value.trim().toLowerCase();
+  let shown = 0;
+  stockList.querySelectorAll('.stock-pick').forEach(btn => {
+    const hit = !q || btn.dataset.name.toLowerCase().includes(q);
+    btn.style.display = hit ? '' : 'none';
+    if (hit) shown++;
   });
+  stockCount.textContent = shown;
+  stockEmpty.style.display = shown ? 'none' : '';
+  stockEmptyText.textContent = q ? `«${stockFilter.value.trim()}» omborda yo'q.` : "Omborda mahsulot yo'q.";
+}
+stockFilter.addEventListener('input', filterStock);
+/* qidiruvda Enter — yagona natija bo'lsa uni qo'yadi */
+stockFilter.addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  const visible = [...stockList.querySelectorAll('.stock-pick')].filter(b => b.style.display !== 'none');
+  if (visible.length === 1) visible[0].click();
 });
 
 if (!body.querySelector('.expense-row')) addRow(false);
@@ -441,6 +721,173 @@ document.querySelectorAll('input[name="category"]').forEach(radio => {
   const hint = document.getElementById('salaryHrHint');
   if (hint) hint.style.display = '';
 }
+{% endif %}
+
+/* ---------------- tezkor kirim: formadan chiqmasdan omborga qabul qilish ---------------- */
+{% if quick_receive %}
+const QUICK_RECEIVE_URL = "{{ url_for('stock.quick_receive') }}";
+{% set supplier_json = [] %}
+{% for s in suppliers %}{% set _ = supplier_json.append({'id': s.id, 'name': s.name}) %}{% endfor %}
+const SUPPLIERS_BY_NAME = {};
+{{ supplier_json|tojson }}.forEach(s => { SUPPLIERS_BY_NAME[s.name.toLowerCase()] = s.id; });
+
+const qrModalEl = document.getElementById('quickReceiveModal');
+const qrModal = bootstrap.Modal.getOrCreateInstance(qrModalEl);
+const qrForm = document.getElementById('quickReceiveForm');
+const qrName = document.getElementById('qrName');
+const qrMaterialId = document.getElementById('qrMaterialId');
+const qrUnit = document.getElementById('qrUnit');
+const qrQty = document.getElementById('qrQty');
+const qrPrice = document.getElementById('qrPrice');
+const qrError = document.getElementById('qrError');
+const qrSubmit = document.getElementById('qrSubmit');
+const qrSupplierName = document.getElementById('qrSupplierName');
+const qrSupplierId = document.getElementById('qrSupplierId');
+let qrTargetRow = null;   // kirimdan keyin mahsulot shu qatorga qo'yiladi
+
+function qrShowError(msg) {
+  qrError.textContent = msg;
+  qrError.classList.toggle('d-none', !msg);
+}
+
+function qrMatchName() {
+  const found = BY_NAME[qrName.value.trim().toLowerCase()];
+  const hint = document.getElementById('qrNameHint');
+  if (found) {
+    qrMaterialId.value = found.id;
+    qrUnit.value = found.unit;
+    qrUnit.disabled = true;    // mavjud mahsulotning birligi o'zgarmaydi
+    if (!qrPrice.value && parseFloat(found.price) > 0) qrPrice.value = parseFloat(found.price);
+    hint.className = 'form-text text-success';
+    hint.innerHTML = '<i class="bi bi-check-circle"></i> Omborda bor: ' + found.qty + ' ' + found.unit;
+  } else {
+    qrMaterialId.value = '';
+    qrUnit.disabled = false;
+    hint.className = 'form-text';
+    hint.textContent = qrName.value.trim()
+      ? "Yangi mahsulot — birligini tanlang, omborga o'zi qo'shiladi."
+      : "Yangi nom bo'lsa — omborga yangi mahsulot ochiladi.";
+  }
+  qrRecalc();
+}
+
+function qrRecalc() {
+  const t = (parseFloat(qrQty.value) || 0) * (parseFloat(qrPrice.value) || 0);
+  document.getElementById('qrTotal').textContent = money(t);
+}
+
+function qrSyncPayment() {
+  const method = (qrForm.querySelector('input[name="payment_method"]:checked') || {}).value;
+  document.getElementById('qrPaidViaBlock').style.display = method === 'perechisleniye' ? '' : 'none';
+  document.getElementById('qrCashSourceBlock').style.display = method === 'naqd' ? '' : 'none';
+}
+
+function openQuickReceive(name, targetRow) {
+  qrTargetRow = targetRow || null;
+  qrShowError('');
+  qrName.value = name || '';
+  qrPrice.value = '';
+  qrQty.value = '';
+  // qatordagi soni kirim uchun ham yaxshi boshlang'ich qiymat
+  if (targetRow) {
+    const q = parseFloat(targetRow.querySelector('.exp-qty').value);
+    if (q > 0) qrQty.value = q;
+  }
+  qrMatchName();
+  qrSyncPayment();
+  qrModal.show();
+}
+
+qrModalEl.addEventListener('shown.bs.modal', () => {
+  (qrName.value.trim() ? qrQty : qrName).focus();
+});
+qrName.addEventListener('input', qrMatchName);
+[qrQty, qrPrice].forEach(el => el.addEventListener('input', qrRecalc));
+qrForm.querySelectorAll('input[name="payment_method"]').forEach(r => r.addEventListener('change', qrSyncPayment));
+qrSupplierName.addEventListener('input', () => {
+  qrSupplierId.value = SUPPLIERS_BY_NAME[qrSupplierName.value.trim().toLowerCase()] || '';
+});
+
+/* yangi yoki yangilangan mahsulotni ro'yxatlarga qo'shadi */
+function upsertMaterial(m) {
+  const key = m.name.toLowerCase();
+  const existing = BY_NAME[key];
+  if (existing) {
+    Object.assign(existing, m);
+  } else {
+    MATERIALS.push(m);
+    BY_NAME[key] = m;
+    const opt = document.createElement('option');
+    opt.value = m.name;
+    document.getElementById('materialList').appendChild(opt);
+  }
+  let btn = stockList.querySelector(`.stock-pick[data-id="${m.id}"]`);
+  if (!btn) {
+    btn = document.createElement('button');
+    btn.type = 'button';
+    btn.dataset.id = m.id;
+    btn.innerHTML = '<span class="stock-pick-name"></span><span class="stock-pick-meta">'
+      + '<span class="stock-pick-qty"></span><span class="stock-pick-price"></span></span>';
+    stockList.insertBefore(btn, stockList.firstChild);
+  }
+  const qty = parseFloat(m.qty) || 0;
+  btn.className = 'stock-pick just-added' + (qty <= 0 ? ' empty' : '');
+  btn.dataset.name = m.name;
+  btn.dataset.price = m.price;
+  btn.querySelector('.stock-pick-name').textContent = m.name;
+  btn.querySelector('.stock-pick-qty').textContent = m.qty + ' ' + m.unit;
+  // server |uzs filtri bilan bir xil ko'rinish: «15 000.00»
+  btn.querySelector('.stock-pick-meta').lastElementChild.textContent =
+    money(parseFloat(m.price)).replace(',', '.');
+  stockFilter.value = '';
+  filterStock();
+}
+
+qrForm.addEventListener('submit', e => {
+  e.preventDefault();
+  if (!qrName.value.trim()) { qrShowError("Mahsulot nomini yozing."); qrName.focus(); return; }
+  if (!(parseFloat(qrQty.value) > 0)) { qrShowError("Sonini kiriting."); qrQty.focus(); return; }
+  if (!(parseFloat(qrPrice.value) > 0)) { qrShowError("Narxini kiriting."); qrPrice.focus(); return; }
+  if (!qrSupplierName.value.trim()) { qrShowError("Taminotchini yozing."); qrSupplierName.focus(); return; }
+
+  // kirim xarajat formasidagi sana bilan yoziladi
+  document.getElementById('qrMovedOn').value =
+    (document.querySelector('#expenseForm input[name="date"]') || {}).value || '';
+  const data = new FormData(qrForm);
+  if (qrUnit.disabled) data.set('row_unit', qrUnit.value);   // disabled maydon yuborilmaydi
+
+  qrSubmit.disabled = true;
+  qrShowError('');
+  fetch(QUICK_RECEIVE_URL, {method: 'POST', body: data, headers: {'X-Requested-With': 'fetch'}})
+    .then(r => r.json().catch(() => ({ok: false, error: "Server javobi tushunarsiz (" + r.status + ")."})))
+    .then(res => {
+      if (!res.ok) { qrShowError(res.error || "Saqlab bo'lmadi."); return; }
+      upsertMaterial(res.material);
+      const tr = putMaterial(res.material, qrTargetRow);
+      // kirim narxi shu qatorning narxi bo'ladi
+      tr.querySelector('.exp-price').value = parseFloat(res.material.price);
+      recalc();
+      qrModal.hide();
+      const note = document.getElementById('quickReceiveDone');
+      note.querySelector('span').textContent = res.message;
+      note.classList.remove('d-none');
+    })
+    .catch(() => qrShowError("Internet aloqasini tekshiring va qayta urinib ko'ring."))
+    .finally(() => { qrSubmit.disabled = false; });
+});
+
+/* "Omborda yo'q — shu yerda qabul qiling" havolasi qator ichida */
+body.addEventListener('click', e => {
+  const link = e.target.closest('.quick-receive-row');
+  if (!link) return;
+  const tr = link.closest('.expense-row');
+  openQuickReceive(tr.querySelector('.exp-desc').value.trim(), tr);
+});
+
+['receiveShortcutBtn', 'sideReceiveBtn', 'stockEmptyReceive'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('click', () => openQuickReceive(stockFilter.value.trim(), null));
+});
 {% endif %}
 
 /* ---------------- buyurtma qidiruvi ---------------- */

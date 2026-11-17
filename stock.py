@@ -222,6 +222,46 @@ def adjust_material(material_id):
     return redirect(url_for("stock.material_detail", material_id=m.id))
 
 
+@stock_bp.route("/mahsulot/<int:material_id>/ochirish", methods=["POST"])
+@login_required
+@permission_required("stock.delete")
+def delete_material(material_id):
+    """Mahsulotni butunlay o'chirish — faqat admin (2026-11-17, foydalanuvchi
+    so'rovi).
+
+    Mahsulot kirim/chiqim tarixi bilan birga o'chadi (`Material.moves`
+    cascade). Kirim paytida yozilgan pul (`Expense`) ATAYLAB qoldiriladi —
+    pul haqiqatan chiqqan, moliyaviy hisobot va taminotchi qarzi o'zgarmasin.
+    Ombordan buyurtmaga sarflangan qismi esa o'sha buyurtmalarning
+    tannarxidan chiqib ketadi — shuning uchun tarixi bor mahsulotda
+    alohida qayta tasdiqlash (`confirm_moves=1`) so'raladi.
+    """
+    m = Material.query.get_or_404(material_id)
+
+    counts = dict(
+        db.session.query(StockMove.kind, func.count(StockMove.id))
+        .filter(StockMove.material_id == m.id)
+        .group_by(StockMove.kind)
+        .all()
+    )
+    ins, outs = counts.get(STOCK_IN, 0), counts.get(STOCK_OUT, 0)
+
+    if (ins or outs) and request.form.get("confirm_moves") != "1":
+        flash(
+            f"«{m.name}» ning tarixi bor: {ins} ta kirim, {outs} ta chiqim. "
+            "O'chirish uchun buni alohida tasdiqlang.", "warning",
+        )
+        return redirect(url_for("stock.material_detail", material_id=m.id))
+
+    name = m.name
+    log_action(current_user, "delete", "material", m.id,
+               f"{name} (kirim {ins}, chiqim {outs}, qoldiq {qty_str(m.quantity)} {m.unit})")
+    db.session.delete(m)
+    db.session.commit()
+    flash(f"«{name}» ombordan butunlay o'chirildi.", "success")
+    return redirect(url_for("stock.list_materials"))
+
+
 @stock_bp.route("/<int:material_id>")
 @login_required
 @permission_required("stock.view")
@@ -331,6 +371,127 @@ def receipt_rows_from_form(form):
     return rows
 
 
+def _receipt_payment_from_form(form, user, total):
+    """Kirimning to'lov qismini o'qiydi: taminotchi, to'lov holati, naqd manba.
+
+    `receive()` va xarajat formasidagi tezkor kirim (`quick_receive()`)
+    ikkalasi ham shu qoidalardan o'tadi — qoidalar bitta joyda turadi.
+    Xato bo'lsa `ValidationError` ko'taradi (hech narsa yozilmagan bo'ladi,
+    faqat yangi taminotchi `flush` qilingan bo'lishi mumkin — chaqiruvchi
+    `rollback` qiladi).
+    """
+    supplier = supplier_from_form(form)
+    payment_choice = parse_choice(
+        form.get("payment_method"), "To'lov holati",
+        [PAYMENT_CASH, PAYMENT_TRANSFER, "qarzga"], required=False,
+        default=PAYMENT_CASH,
+    )
+    paid_via = None
+    if payment_choice == PAYMENT_TRANSFER:
+        paid_via = parse_choice(form.get("paid_via"), "Tashkilot", PAYER_COMPANIES)
+
+    # "Naqd to'landi" tanlansa, pul albatta BITTA manbadan qoplanadi:
+    # muayyan buyurtmaning topshirilgan puli, yoki OFIS/Zoxidjon umumiy
+    # zaxirasi — tanlash MAJBURIY (2026-09-07, foydalanuvchi qarori).
+    # Boshqa to'lov holatlarida (perechisleniye/qarzga) bu tegishli emas.
+    source_order_id = None
+    cash_source = None
+    if payment_choice == PAYMENT_CASH:
+        raw_source = (form.get("cash_source") or "").strip()
+        if not raw_source:
+            raise ValidationError("Naqd to'lov qaysi manbadan qoplanganini tanlang.")
+        if raw_source in (CASH_SOURCE_OFFICE, CASH_SOURCE_OWNER):
+            cash_source = raw_source
+        elif raw_source.startswith("order:") and raw_source[6:].isdigit():
+            order_id = int(raw_source[6:])
+            if order_id not in _allowed_source_order_ids(user):
+                raise ValidationError("Tanlangan buyurtma puli sizga tegishli emas yoki topilmagan.")
+            source_order_id = order_id
+        else:
+            raise ValidationError("Noto'g'ri manba tanlandi.")
+
+        # Shaxsiy naqd (buyurtma puli) — OFIS/Zoxidjon zaxirasidan farqli
+        # o'laroq bu haqiqiy jismoniy naqd pul, qo'lida yo'q pulni sarflab
+        # bo'lmaydi. Qoldiq -ga o'tib ketishining OLDI OLINADI (2026-09-16,
+        # foydalanuvchi so'rovi) — OFIS/Zoxidjon zaxirasi esa qasddan
+        # "qarzga" ishlashi mumkin, shuning uchun bu tekshiruv faqat
+        # source_order_id (shaxsiy naqd) holatida qo'llanadi.
+        if cash_source is None:
+            available = cash_balance(user.id)
+            if total > available:
+                shortfall = total - available
+                raise ValidationError(
+                    "Qo'lingizdagi naqd pul yetarli emas: hozir qo'lingizda "
+                    f"{money_str(available)} so'm bor, bu kirim uchun "
+                    f"{money_str(total)} so'm kerak (yetishmayapti: "
+                    f"{money_str(shortfall)} so'm). Naqd qoldiq minusga o'tishi "
+                    "mumkin emas — summani kamaytiring yoki manba sifatida "
+                    "OFIS/Zoxidjon zaxirasini tanlang."
+                )
+
+    is_paid = payment_choice != "qarzga"
+    return {
+        "supplier": supplier,
+        "is_paid": is_paid,
+        "payment_method": payment_choice if is_paid else None,
+        "paid_via": paid_via,
+        "source_order_id": source_order_id,
+        "cash_source": cash_source,
+    }
+
+
+def _record_receipt(rows, payment, moved_on, note):
+    """Kirim qatorlarini yozadi: har qator — `Expense` + `StockMove(kirim)`.
+
+    Butun kirim (barcha qatorlar) bitta taminotchidan va bitta to'lov holati
+    bilan yoziladi. Commit qilmaydi — chaqiruvchi qiladi. Jami summani
+    qaytaradi.
+    """
+    supplier = payment["supplier"]
+    total = ZERO
+    for data in rows:
+        material = data["material"]
+        amount = to_money(data["quantity"] * data["unit_price"])
+
+        # pul chiqdi (yoki qarzga olindi) — xarajat sifatida yoziladi
+        expense = Expense(
+            category=STOCK_EXPENSE_CATEGORY,
+            amount=amount,
+            description=f"Ombor kirimi: {material.name} — "
+                        f"{qty_str(data['quantity'])} {material.unit}",
+            date=moved_on,
+            order_id=None,
+            supplier_id=supplier.id,
+            is_paid=payment["is_paid"],
+            payment_method=payment["payment_method"],
+            paid_via=payment["paid_via"],
+            source_order_id=payment["source_order_id"],
+            cash_source=payment["cash_source"],
+            created_by=current_user.id,
+        )
+        db.session.add(expense)
+        db.session.flush()
+
+        db.session.add(StockMove(
+            material_id=material.id, kind=STOCK_IN,
+            quantity=data["quantity"], unit_price=data["unit_price"],
+            moved_on=moved_on, expense_id=expense.id, note=note,
+            created_by=current_user.id,
+        ))
+        material.last_price = data["unit_price"]
+        if data.get("location"):
+            material.location = data["location"]
+        log_action(current_user, "create", "stock_in", material.id,
+                   f"{material.name} +{qty_str(data['quantity'])} {material.unit}"
+                   f" ({supplier.name})")
+        total += amount
+    return total
+
+
+def _receipt_total(rows):
+    return to_money(sum((d["quantity"] * d["unit_price"] for d in rows), Decimal("0")))
+
+
 @stock_bp.route("/kirim", methods=["GET", "POST"])
 @login_required
 @permission_required("stock.manage")
@@ -343,129 +504,80 @@ def receive():
                                   required=False) or today_local()
             note = parse_text(request.form.get("note"), "Izoh",
                               required=False, max_length=255)
-            supplier = supplier_from_form(request.form)
-            payment_choice = parse_choice(
-                request.form.get("payment_method"), "To'lov holati",
-                [PAYMENT_CASH, PAYMENT_TRANSFER, "qarzga"], required=False,
-                default=PAYMENT_CASH,
-            )
-            paid_via = None
-            if payment_choice == PAYMENT_TRANSFER:
-                paid_via = parse_choice(request.form.get("paid_via"), "Tashkilot",
-                                        PAYER_COMPANIES)
+            if moved_on > today_local():
+                raise ValidationError("Kirim sanasi kelajakda bo'lishi mumkin emas.")
+            payment = _receipt_payment_from_form(request.form, current_user,
+                                                 _receipt_total(rows))
         except ValidationError as e:
+            db.session.rollback()
             flash(str(e), "danger")
             return _receive_page(form=request.form)
 
-        # "Naqd to'landi" tanlansa, pul albatta BITTA manbadan qoplanadi:
-        # muayyan buyurtmaning topshirilgan puli, yoki OFIS/Zoxidjon umumiy
-        # zaxirasi — tanlash MAJBURIY (2026-09-07, foydalanuvchi qarori).
-        # Boshqa to'lov holatlarida (perechisleniye/qarzga) bu tegishli emas.
-        source_order_id = None
-        cash_source = None
-        if payment_choice == PAYMENT_CASH:
-            raw_source = (request.form.get("cash_source") or "").strip()
-            if not raw_source:
-                flash("Naqd to'lov qaysi manbadan qoplanganini tanlang.", "danger")
-                return _receive_page(form=request.form)
-            if raw_source in (CASH_SOURCE_OFFICE, CASH_SOURCE_OWNER):
-                cash_source = raw_source
-            elif raw_source.startswith("order:") and raw_source[6:].isdigit():
-                order_id = int(raw_source[6:])
-                if order_id in _allowed_source_order_ids(current_user):
-                    source_order_id = order_id
-                else:
-                    flash("Tanlangan buyurtma puli sizga tegishli emas yoki topilmagan.", "danger")
-                    return _receive_page(form=request.form)
-            else:
-                flash("Noto'g'ri manba tanlandi.", "danger")
-                return _receive_page(form=request.form)
-
-        if moved_on > today_local():
-            flash("Kirim sanasi kelajakda bo'lishi mumkin emas.", "danger")
-            return _receive_page(form=request.form)
-
-        # butun kirim (barcha qatorlar) bitta taminotchidan va bitta
-        # to'lov holati bilan yoziladi — mahsulotlar kabi bo'lakma-bo'lak emas
-        is_paid = payment_choice != "qarzga"
-        payment_method = payment_choice if is_paid else None
-
-        precomputed_total = to_money(
-            sum((d["quantity"] * d["unit_price"] for d in rows), Decimal("0"))
-        )
-
-        # Shaxsiy naqd (buyurtma puli) — OFIS/Zoxidjon zaxirasidan farqli
-        # o'laroq bu haqiqiy jismoniy naqd pul, qo'lida yo'q pulni sarflab
-        # bo'lmaydi. Qoldiq -ga o'tib ketishining OLDI OLINADI (2026-09-16,
-        # foydalanuvchi so'rovi) — OFIS/Zoxidjon zaxirasi esa qasddan
-        # "qarzga" ishlashi mumkin, shuning uchun bu tekshiruv faqat
-        # source_order_id (shaxsiy naqd) holatida qo'llanadi.
-        if payment_choice == PAYMENT_CASH and cash_source is None:
-            available = cash_balance(current_user.id)
-            if precomputed_total > available:
-                shortfall = precomputed_total - available
-                flash(
-                    "Qo'lingizdagi naqd pul yetarli emas: hozir qo'lingizda "
-                    f"{money_str(available)} so'm bor, bu kirim uchun "
-                    f"{money_str(precomputed_total)} so'm kerak (yetishmayapti: "
-                    f"{money_str(shortfall)} so'm). Naqd qoldiq minusga o'tishi "
-                    "mumkin emas — summani kamaytiring yoki manba sifatida "
-                    "OFIS/Zoxidjon zaxirasini tanlang.", "danger",
-                )
-                return _receive_page(form=request.form)
-
-        total = ZERO
-        for data in rows:
-            material = data["material"]
-            amount = to_money(data["quantity"] * data["unit_price"])
-
-            # pul chiqdi (yoki qarzga olindi) — xarajat sifatida yoziladi
-            expense = Expense(
-                category=STOCK_EXPENSE_CATEGORY,
-                amount=amount,
-                description=f"Ombor kirimi: {material.name} — "
-                            f"{qty_str(data['quantity'])} {material.unit}",
-                date=moved_on,
-                order_id=None,
-                supplier_id=supplier.id,
-                is_paid=is_paid,
-                payment_method=payment_method,
-                paid_via=paid_via,
-                source_order_id=source_order_id,
-                cash_source=cash_source,
-                created_by=current_user.id,
-            )
-            db.session.add(expense)
-            db.session.flush()
-
-            db.session.add(StockMove(
-                material_id=material.id, kind=STOCK_IN,
-                quantity=data["quantity"], unit_price=data["unit_price"],
-                moved_on=moved_on, expense_id=expense.id, note=note,
-                created_by=current_user.id,
-            ))
-            material.last_price = data["unit_price"]
-            if data.get("location"):
-                material.location = data["location"]
-            log_action(current_user, "create", "stock_in", material.id,
-                       f"{material.name} +{qty_str(data['quantity'])} {material.unit}"
-                       f" ({supplier.name})")
-            total += amount
-
+        total = _record_receipt(rows, payment, moved_on, note)
         db.session.commit()
-        if not is_paid:
+
+        supplier = payment["supplier"]
+        if not payment["is_paid"]:
             flash(f"{len(rows)} ta mahsulot omborga qabul qilindi — "
                   f"{money_str(total)} so'm «{supplier.name}»ga qarzga yozildi.", "warning")
-        elif payment_method == PAYMENT_TRANSFER:
+        elif payment["payment_method"] == PAYMENT_TRANSFER:
             flash(f"{len(rows)} ta mahsulot omborga qabul qilindi — "
-                  f"jami {money_str(total)} so'm «{paid_via}» orqali perechisleniye qilindi.",
-                  "success")
+                  f"jami {money_str(total)} so'm «{payment['paid_via']}» orqali "
+                  f"perechisleniye qilindi.", "success")
         else:
             flash(f"{len(rows)} ta mahsulot omborga qabul qilindi — "
                   f"jami {money_str(total)} so'm xarajat yozildi.", "success")
         return redirect(url_for("stock.list_materials"))
 
     return _receive_page(form=None)
+
+
+@stock_bp.route("/kirim/tezkor", methods=["POST"])
+@login_required
+@permission_required("stock.manage")
+def quick_receive():
+    """Xarajat formasidan chiqmasdan bitta mahsulotni omborga qabul qilish
+    (2026-11-17, foydalanuvchi so'rovi).
+
+    Buyurtma xarajatini kiritayotganda kerakli mahsulot omborda bo'lmasa,
+    avval Ombor -> Kirim sahifasiga o'tib, keyin xarajatni boshidan qayta
+    kiritishga to'g'ri kelardi. Endi xarajat formasidagi oynadan shu yerga
+    JSON so'rov yuboriladi: oddiy kirim bilan BIR XIL qoidalar (xarajat
+    yoziladi, taminotchi, to'lov holati, naqd manba) — faqat bitta qator.
+    Javobda mahsulot va uning yangi qoldig'i qaytadi, forma uni darhol
+    qatorga qo'yadi.
+    """
+    form = request.form
+    try:
+        rows = receipt_rows_from_form(form)
+        if len(rows) != 1:
+            raise ValidationError("Tezkor kirimda bitta mahsulot kiritiladi.")
+        moved_on = parse_date(form.get("moved_on"), "Sana", required=False) or today_local()
+        if moved_on > today_local():
+            raise ValidationError("Kirim sanasi kelajakda bo'lishi mumkin emas.")
+        payment = _receipt_payment_from_form(form, current_user, _receipt_total(rows))
+    except ValidationError as e:
+        db.session.rollback()
+        return jsonify({"ok": False, "error": str(e)}), 400
+
+    material = rows[0]["material"]
+    if not material.is_active:
+        material.is_active = True   # arxivdagi mahsulot qayta qabul qilindi
+    total = _record_receipt(rows, payment, moved_on, "Xarajat formasidan tezkor kirim")
+    db.session.commit()
+
+    material = db.session.get(Material, material.id)
+    return jsonify({
+        "ok": True,
+        "message": f"«{material.name}» omborga qabul qilindi — {money_str(total)} so'm.",
+        "material": {
+            "id": material.id,
+            "name": material.name,
+            "unit": material.unit,
+            "qty": qty_str(material.quantity),
+            "price": str(to_money(material.last_price)),
+        },
+    })
 
 
 def _confirmed_handovers_for(user):
