@@ -339,6 +339,55 @@ with app.test_client() as c:
           'class="form-control text-end exp-price"' not in body
           or 'step="1" min="1" class="form-control text-end exp-price"' in body)
 
+# ---------------------------------------------------------------- 6
+print("\n=== 6. BUYURTMA IKKI MARTA YARATILMAYDI (2026-11-17) ===")
+
+import re as _re
+from models import SubmitToken
+
+with app.test_client() as c:
+    login(c, "admin1")
+    r = c.get("/buyurtmalar/yangi")
+    m = _re.search(r'name="form_token" value="([0-9a-f]{32})"', text(r))
+    check("Yangi buyurtma formasida bir martalik kalit bor", m is not None)
+    token = m.group(1) if m else "x" * 32
+
+    data = {
+        "form_token": token, "client_name": "Ikki bosish MChJ",
+        "item_type": "Vizitka", "item_description": "90x50, 4+4",
+        "item_quantity": "100", "item_unit_price": "1500",
+    }
+
+    def count():
+        with app.app_context():
+            return Order.query.join(Client).filter(Client.name == "Ikki bosish MChJ").count()
+
+    # avval xato bilan (narx yo'q) — kalit "yonib" ketmasligi kerak
+    r = c.post("/buyurtmalar/yangi", data={**data, "item_unit_price": ""}, follow_redirects=True)
+    check("Xatoli yuborishda buyurtma yaratilmadi", count() == 0)
+    check("Xatoli yuborishda kalit bo'shatildi",
+          'value="%s"' % token in text(r))
+
+    r1 = c.post("/buyurtmalar/yangi", data=data, follow_redirects=True)
+    check("1-yuborish: buyurtma yaratildi", count() == 1 and "yaratildi" in text(r1))
+
+    r2 = c.post("/buyurtmalar/yangi", data=data, follow_redirects=True)
+    r3 = c.post("/buyurtmalar/yangi", data=data, follow_redirects=True)
+    check("2- va 3-yuborish: yangi buyurtma YARATILMADI", count() == 1)
+    check("Takrorda ogohlantirish va o'sha buyurtmaga yo'naltirildi",
+          "allaqachon yaratilgan" in text(r3))
+    with app.app_context():
+        check("Mijoz ham bitta", Client.query.filter_by(name="Ikki bosish MChJ").count() == 1)
+        t = SubmitToken.query.filter_by(token=token).first()
+        check("Kalit buyurtmaga bog'landi", t is not None and t.object_id is not None)
+
+    # yangi forma (yangi kalit) — ataylab ikkinchi buyurtma yaratsa bo'ladi
+    r = c.get("/buyurtmalar/yangi")
+    token2 = _re.search(r'name="form_token" value="([0-9a-f]{32})"', text(r)).group(1)
+    check("Har ochilganda yangi kalit", token2 != token)
+    c.post("/buyurtmalar/yangi", data={**data, "form_token": token2}, follow_redirects=True)
+    check("Yangi forma bilan ikkinchi buyurtma yaratiladi", count() == 2)
+
 os.unlink(db_path)
 
 print()

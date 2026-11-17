@@ -900,6 +900,27 @@ class LoginAttempt(db.Model):
     created_at = db.Column(db.DateTime, default=now_local, index=True)
 
 
+class SubmitToken(db.Model):
+    """Formaning bir martalik kaliti — bitta forma ikki marta yuborilsa,
+    ikkinchi nusxa yaratilmasligi uchun (2026-11-17, foydalanuvchi so'rovi:
+    bir xil buyurtma 2-3 marta yaratilib qolardi).
+
+    Forma ochilganda tasodifiy `token` beriladi. Saqlashda shu kalit avval
+    bazaga yoziladi — `token` unique bo'lgani uchun bir vaqtda kelgan ikkinchi
+    so'rov ham o'tolmaydi. Yaratilgan yozuv `object_id` da saqlanadi va
+    takror yuborilganda foydalanuvchi o'sha yozuvga yo'naltiriladi.
+    Yangi jadval — `db.create_all()` o'zi yaratadi, migratsiya shart emas.
+    """
+    __tablename__ = "submit_token"
+
+    id = db.Column(db.Integer, primary_key=True)
+    token = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    kind = db.Column(db.String(20), nullable=False)
+    object_id = db.Column(db.Integer)
+    created_by = db.Column(db.Integer, db.ForeignKey("user.id"))
+    created_at = db.Column(db.DateTime, default=now_local, index=True)
+
+
 class AuditLog(db.Model):
     """Muhim harakatlar izi — kim, qachon, nima qilgani."""
     id = db.Column(db.Integer, primary_key=True)

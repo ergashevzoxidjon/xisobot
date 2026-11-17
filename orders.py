@@ -22,7 +22,7 @@ from models import (
     STATUS_READY, ZERO, ORDER_PAYMENT_METHODS,
     CashHandover, HANDOVER_PENDING, CASH_PAYMENT_METHOD, CARD_PAYMENT_METHOD,
     HANDOVER_CHANNEL_CASH, HANDOVER_CHANNEL_CARD,
-    StockMove, STOCK_IN, STOCK_OUT,
+    StockMove, STOCK_IN, STOCK_OUT, SubmitToken,
 )
 from notifications import notify_new_order, notify_payment
 from permissions import permission_required, has_perm
@@ -308,6 +308,35 @@ def search_orders():
     ])
 
 
+def _order_for_token(token):
+    """Shu kalit bilan buyurtma allaqachon yaratilgan bo'lsa — o'shanga
+    yo'naltiradi (takror yaratmaydi). Kalit band, lekin buyurtma hali
+    yozilmayotgan bo'lsa (birinchi bosish hali ishlayapti) — ro'yxatga."""
+    if not token:
+        return None
+    t = SubmitToken.query.filter_by(token=token, kind="order").first()
+    if t is None:
+        return None
+    if t.object_id:
+        o = db.session.get(Order, t.object_id)
+        if o is not None:
+            flash(f"Bu buyurtma allaqachon yaratilgan ({o.order_number}) — "
+                  "ikkinchi marta yaratilmadi.", "warning")
+            return redirect(url_for("orders.order_detail", order_id=o.id))
+    flash("Buyurtma saqlanmoqda — ikkinchi marta yaratilmadi. "
+          "Ro'yxatda paydo bo'lganini tekshiring.", "warning")
+    return redirect(url_for("orders.list_orders"))
+
+
+def _release_token(reservation):
+    """Buyurtma yaratilmay qolsa (xato) — kalit bo'shatiladi, forma qayta
+    yuborilishi mumkin bo'lsin."""
+    if reservation is None or reservation.id is None:
+        return
+    db.session.query(SubmitToken).filter_by(id=reservation.id, object_id=None).delete()
+    db.session.commit()
+
+
 @orders_bp.route("/yangi", methods=["GET", "POST"])
 @login_required
 @permission_required("orders.create")
@@ -346,20 +375,48 @@ def new_order():
     pipeline_card_id = request.args.get("pipeline_card_id", type=int) if request.method == "GET" else None
 
     def back_to_form():
+        # xato bilan qaytganda kalit o'sha qoladi (request.form ichida)
         return render_template(
             "orders/form.html", order_types=order_types,
             order=None, prefill=None, form=request.form,
+            form_token=request.form.get("form_token") or uuid.uuid4().hex,
         )
 
     if request.method == "POST":
+        # Takror yuborilgan forma (ikki marta bosish, sekin internet,
+        # "orqaga" + qayta yuborish) — yangi buyurtma yaratilmaydi.
+        token = (request.form.get("form_token") or "").strip()[:64]
+        already = _order_for_token(token)
+        if already is not None:
+            return already
+
         try:
             # Avval qatorlarni tekshiramiz — xato bo'lsa bekorga
             # yangi mijoz yaratilib qolmasligi uchun.
             items = _items_from_form(request.form)
             common = _order_common_fields(request.form)
+        except ValidationError as e:
+            db.session.rollback()
+            flash(str(e), "danger")
+            return back_to_form()
+
+        # Kalit mijoz/buyurtma yozilishidan OLDIN band qilinadi: bir vaqtda
+        # kelgan ikkinchi so'rov shu yerda to'xtaydi (token unique).
+        reservation = None
+        if token:
+            reservation = SubmitToken(token=token, kind="order", created_by=current_user.id)
+            db.session.add(reservation)
+            try:
+                db.session.commit()
+            except IntegrityError:
+                db.session.rollback()
+                return _order_for_token(token) or redirect(url_for("orders.list_orders"))
+
+        try:
             client, client_created = _client_from_form(request.form)
         except ValidationError as e:
             db.session.rollback()
+            _release_token(reservation)
             flash(str(e), "danger")
             return back_to_form()
 
@@ -389,11 +446,15 @@ def new_order():
                 db.session.rollback()
                 o = None
                 if attempt == 4:
+                    _release_token(reservation)
                     flash("Buyurtma raqamini yaratib bo'lmadi. Qayta urinib ko'ring.", "danger")
                     return back_to_form()
 
         log_action(current_user, "create", "order", o.id,
                    f"{o.order_number} yaratildi ({len(items)} qator)")
+        if reservation is not None:
+            db.session.query(SubmitToken).filter_by(id=reservation.id).update(
+                {"object_id": o.id})
 
         # Pipeline kartasidan kelgan bo'lsa — shu karta shu buyurtma bilan
         # "yopiladi" (2026-08-29, to'rtinchi so'rov).
@@ -415,6 +476,7 @@ def new_order():
         order=None, prefill=prefill, form=None,
         prefill_client_id=prefill_client_id, prefill_client_name=prefill_client_name,
         pipeline_card_id=pipeline_card_id,
+        form_token=uuid.uuid4().hex,
     )
 
 

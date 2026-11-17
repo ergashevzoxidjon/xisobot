@@ -39,6 +39,7 @@
 <form method="post" id="orderForm">
   {{ csrf() }}
   {% if order %}<input type="hidden" name="version" value="{{ order.version }}">{% endif %}
+  {% if not order %}<input type="hidden" name="form_token" value="{{ form_token|default('', true) }}">{% endif %}
   {% if pipeline_card_id is defined and pipeline_card_id %}<input type="hidden" name="pipeline_card_id" value="{{ pipeline_card_id }}">{% endif %}
 
   {# ---------------- 1. MIJOZ ---------------- #}
