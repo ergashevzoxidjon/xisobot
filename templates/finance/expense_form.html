@@ -395,6 +395,14 @@
               <i class="bi bi-building me-1"></i>{{ c }}</label>
             {% endfor %}
           </div>
+          <label class="form-label mt-3" for="qrPaidAmount">To'langan summa</label>
+          <div class="input-group">
+            <input type="number" min="1" step="1" class="form-control text-end" name="paid_amount" id="qrPaidAmount"
+                   placeholder="Jami summa" autocomplete="off">
+            <span class="input-group-text">so'm</span>
+            <button type="button" class="btn btn-outline-secondary" id="qrPaidAmountFull">To'liq</button>
+          </div>
+          <div class="form-text" id="qrPaidAmountHint">Bo'sh qoldirsangiz — butun summa to'lanadi. Kam bo'lsa, qolgani qarzga yoziladi.</div>
         </div>
 
         <div id="qrCashSourceBlock" class="form-text mt-2">
@@ -766,10 +774,37 @@ function qrMatchName() {
   qrRecalc();
 }
 
+let qrSum = 0;
+let qrPaidTouched = false;
+const qrPaidAmount = document.getElementById('qrPaidAmount');
+const qrPaidHint = document.getElementById('qrPaidAmountHint');
+
 function qrRecalc() {
   const t = Math.round((parseFloat(qrQty.value) || 0) * (parseFloat(qrPrice.value) || 0));
+  qrSum = t;
   document.getElementById('qrTotal').textContent = money(t);
+  qrSyncPaidAmount();
 }
+
+/* To'langan summa: o'zgartirilmaguncha jamiga teng; kam bo'lsa qolgani qarz */
+function qrSyncPaidAmount() {
+  if (!qrPaidTouched) qrPaidAmount.value = qrSum > 0 ? qrSum : '';
+  const paid = parseFloat(qrPaidAmount.value);
+  qrPaidAmount.classList.remove('is-invalid');
+  if (!paid || qrSum <= 0 || paid === qrSum) {
+    qrPaidHint.className = 'form-text';
+    qrPaidHint.textContent = "Butun summa to'lanadi" + (qrSum > 0 ? ' (' + money(qrSum) + " so'm)." : '.');
+  } else if (paid > qrSum) {
+    qrPaidAmount.classList.add('is-invalid');
+    qrPaidHint.className = 'form-text text-danger';
+    qrPaidHint.textContent = "To'langan summa jami summadan (" + money(qrSum) + " so'm) oshib ketdi.";
+  } else {
+    qrPaidHint.className = 'form-text text-warning-emphasis fw-semibold';
+    qrPaidHint.textContent = "Qarzga qoladi: " + money(qrSum - paid) + " so'm — taminotchi balansiga yoziladi.";
+  }
+}
+qrPaidAmount.addEventListener('input', () => { qrPaidTouched = true; qrSyncPaidAmount(); });
+document.getElementById('qrPaidAmountFull').addEventListener('click', () => { qrPaidTouched = false; qrSyncPaidAmount(); });
 
 function qrSyncPayment() {
   const method = (qrForm.querySelector('input[name="payment_method"]:checked') || {}).value;
@@ -786,6 +821,8 @@ function openQuickReceive(name, targetRow) {
   qrName.value = name || '';
   qrPrice.value = '';
   qrQty.value = '';
+  qrPaidTouched = false;
+  qrPaidAmount.value = '';
   // qatordagi soni kirim uchun ham yaxshi boshlang'ich qiymat
   if (targetRow) {
     const q = parseFloat(targetRow.querySelector('.exp-qty').value);

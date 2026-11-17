@@ -16,6 +16,7 @@
 {% set posted_supplier_name = form.get('supplier_name', '') if form and form.get is defined else '' %}
 {% set posted_payment_method = form.get('payment_method', 'naqd') if form and form.get is defined else 'naqd' %}
 {% set posted_paid_via = form.get('paid_via', '') if form and form.get is defined else '' %}
+{% set posted_paid_amount = form.get('paid_amount', '') if form and form.get is defined else '' %}
 
 {% set rows = [] %}
 {% if posted_material_names %}
@@ -200,6 +201,15 @@
         {% endfor %}
       </div>
       <div class="form-text">Xisobotda tashkilotlar bo'yicha alohida ko'rinadi.</div>
+
+      <label class="form-label mt-3" for="paidAmount">To'langan summa</label>
+      <div class="input-group" style="max-width:360px">
+        <input type="number" min="1" step="1" class="form-control text-end" name="paid_amount" id="paidAmount"
+               value="{{ posted_paid_amount }}" placeholder="Jami summa" autocomplete="off">
+        <span class="input-group-text">so'm</span>
+        <button type="button" class="btn btn-outline-secondary" id="paidAmountFull" title="Butun summani to'lash">To'liq</button>
+      </div>
+      <div class="form-text" id="paidAmountHint">Bo'sh qoldirsangiz — butun summa to'lanadi. Kam kiritsangiz, qolgani taminotchiga qarz bo'lib yoziladi.</div>
     </div>
 
     <div id="cashSourceBlock" class="form-text mt-2">
@@ -257,6 +267,12 @@ const totalCell = document.getElementById('receiveTotalCell');
 const newTile = document.getElementById('newMaterialTile');
 let newItemSeq = 0;
 
+let receiveSum = 0;
+const paidAmountInput = document.getElementById('paidAmount');
+const paidAmountHint = document.getElementById('paidAmountHint');
+// foydalanuvchi summani o'zi o'zgartirganmi (xatodan keyin qayta ochilganda kiritilgan summa saqlansin)
+let paidAmountTouched = !!(paidAmountInput && paidAmountInput.value !== '');
+
 function money(v) {
   return (v || 0).toLocaleString('ru-RU', {minimumFractionDigits: 0, maximumFractionDigits: 2});
 }
@@ -273,6 +289,8 @@ function recalcCart() {
   const text = money(sum);
   totalPill.textContent = text;
   totalCell.textContent = text;
+  receiveSum = sum;
+  syncPaidAmount();
   const count = cartBody.querySelectorAll('.cart-row').length;
   cartCount.textContent = count ? count + ' ta mahsulot' : '';
   cartPanel.style.display = count ? '' : 'none';
@@ -458,6 +476,31 @@ document.querySelectorAll('.supplier-chip').forEach(btn => {
 });
 
 /* ---------------- to'lov usuli: perechisleniye bo'lsa tashkilot so'raladi ---------------- */
+
+/* To'langan summa: o'zgartirilmaguncha jami summaga teng turadi; kam bo'lsa qarz qolishi ko'rsatiladi */
+function syncPaidAmount() {
+  if (!paidAmountInput) return;
+  if (!paidAmountTouched) paidAmountInput.value = receiveSum > 0 ? receiveSum : '';
+  const paid = parseFloat(paidAmountInput.value);
+  paidAmountInput.classList.remove('is-invalid');
+  if (!paid || receiveSum <= 0 || paid === receiveSum) {
+    paidAmountHint.className = 'form-text';
+    paidAmountHint.textContent = "Butun summa to'lanadi" + (receiveSum > 0 ? ' (' + money(receiveSum) + " so'm)." : '.');
+  } else if (paid > receiveSum) {
+    paidAmountInput.classList.add('is-invalid');
+    paidAmountHint.className = 'form-text text-danger';
+    paidAmountHint.textContent = "To'langan summa jami summadan (" + money(receiveSum) + " so'm) oshib ketdi.";
+  } else {
+    paidAmountHint.className = 'form-text text-warning-emphasis fw-semibold';
+    paidAmountHint.textContent = "Qarzga qoladi: " + money(receiveSum - paid) + " so'm — taminotchi balansiga yoziladi.";
+  }
+}
+if (paidAmountInput) {
+  paidAmountInput.addEventListener('input', () => { paidAmountTouched = true; syncPaidAmount(); });
+  document.getElementById('paidAmountFull').addEventListener('click', () => {
+    paidAmountTouched = false; syncPaidAmount();
+  });
+}
 
 const paidViaBlock = document.getElementById('paidViaBlock');
 const cashSourceBlock = document.getElementById('cashSourceBlock');

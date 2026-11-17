@@ -403,8 +403,21 @@ def _receipt_payment_from_form(form, user, total):
         default=PAYMENT_CASH,
     )
     paid_via = None
+    paid_amount = None   # None — butun summa to'landi
     if payment_choice == PAYMENT_TRANSFER:
         paid_via = parse_choice(form.get("paid_via"), "Tashkilot", PAYER_COMPANIES)
+        # Perechisleniyeda to'langan summa shu yerning o'zida kiritiladi
+        # (2026-11-17, foydalanuvchi so'rovi): jamidan kam bo'lsa, qolgani
+        # taminotchiga qarz bo'lib yoziladi. Bo'sh yoki jamiga teng — to'liq.
+        raw_paid = (form.get("paid_amount") or "").strip()
+        if raw_paid:
+            entered = parse_money(raw_paid, "To'langan summa", min_value=Decimal("1"))
+            if entered > total:
+                raise ValidationError(
+                    f"To'langan summa ({money_str(entered)} so'm) jami summadan "
+                    f"({money_str(total)} so'm) oshib ketdi.")
+            if entered < total:
+                paid_amount = entered
 
     # Naqd to'langan bo'lsa pul har doim OFIS kassasidan chiqadi — manba
     # tanlanmaydi (2026-11-17, foydalanuvchi qarori). Kassada pul yetmasa
@@ -423,6 +436,8 @@ def _receipt_payment_from_form(form, user, total):
         "is_paid": is_paid,
         "payment_method": payment_choice if is_paid else None,
         "paid_via": paid_via,
+        "paid_amount": paid_amount,
+        "debt_amount": (total - paid_amount) if paid_amount is not None else ZERO,
         "source_order_id": source_order_id,
         "cash_source": cash_source,
         "warning": warning,
@@ -438,27 +453,51 @@ def _record_receipt(rows, payment, moved_on, note):
     """
     supplier = payment["supplier"]
     total = ZERO
+    # Qisman perechisleniye: to'langan summa qatorlarga ketma-ket taqsimlanadi.
+    # Qator to'liq to'langan bo'lsa — to'langan xarajat; umuman to'lanmagan bo'lsa —
+    # qarz (is_paid=False); chegaradagi qator ikkiga bo'linadi (to'langan qismi
+    # ombor yozuviga bog'lanadi, qarz qismi alohida xarajat bo'ladi). Shunda
+    # hisobotlar (tashkilot bo'yicha perechisleniye, taminotchi qarzi) o'zgarmaydi.
+    remaining_paid = payment.get("paid_amount")
     for data in rows:
         material = data["material"]
         amount = whole_money(data["quantity"] * data["unit_price"])
+        description = (f"Ombor kirimi: {material.name} — "
+                       f"{qty_str(data['quantity'])} {material.unit}")
 
-        # pul chiqdi (yoki qarzga olindi) — xarajat sifatida yoziladi
-        expense = Expense(
-            category=STOCK_EXPENSE_CATEGORY,
-            amount=amount,
-            description=f"Ombor kirimi: {material.name} — "
-                        f"{qty_str(data['quantity'])} {material.unit}",
-            date=moved_on,
-            order_id=None,
-            supplier_id=supplier.id,
-            is_paid=payment["is_paid"],
-            payment_method=payment["payment_method"],
-            paid_via=payment["paid_via"],
-            source_order_id=payment["source_order_id"],
-            cash_source=payment["cash_source"],
-            created_by=current_user.id,
-        )
-        db.session.add(expense)
+        def new_expense(part_amount, paid, label=""):
+            return Expense(
+                category=STOCK_EXPENSE_CATEGORY,
+                amount=part_amount,
+                description=description + label,
+                date=moved_on,
+                order_id=None,
+                supplier_id=supplier.id,
+                is_paid=paid,
+                payment_method=payment["payment_method"] if paid else None,
+                paid_via=payment["paid_via"] if paid else None,
+                source_order_id=payment["source_order_id"],
+                cash_source=payment["cash_source"] if paid else None,
+                created_by=current_user.id,
+            )
+
+        if remaining_paid is None:
+            # oddiy holat: butun qator bir xil to'lov holatida
+            expense = new_expense(amount, payment["is_paid"])
+            db.session.add(expense)
+        else:
+            paid_part = min(remaining_paid, amount)
+            remaining_paid -= paid_part
+            debt_part = amount - paid_part
+            if paid_part > ZERO:
+                expense = new_expense(paid_part, True,
+                                      " (to'langan qismi)" if debt_part > ZERO else "")
+                db.session.add(expense)
+                if debt_part > ZERO:
+                    db.session.add(new_expense(debt_part, False, " (qarz qismi)"))
+            else:
+                expense = new_expense(amount, False)
+                db.session.add(expense)
         db.session.flush()
 
         db.session.add(StockMove(
@@ -514,6 +553,11 @@ def receive():
         elif payment["payment_method"] == PAYMENT_CARD:
             flash(f"{len(rows)} ta mahsulot omborga qabul qilindi — "
                   f"jami {money_str(total)} so'm OFIS kartasidan to'landi.", "success")
+        elif payment["payment_method"] == PAYMENT_TRANSFER and payment["paid_amount"] is not None:
+            flash(f"{len(rows)} ta mahsulot omborga qabul qilindi — jami {money_str(total)} so'm: "
+                  f"{money_str(payment['paid_amount'])} so'm «{payment['paid_via']}» orqali "
+                  f"perechisleniye qilindi, {money_str(payment['debt_amount'])} so'm "
+                  f"«{supplier.name}»ga qarzga yozildi.", "warning")
         elif payment["payment_method"] == PAYMENT_TRANSFER:
             flash(f"{len(rows)} ta mahsulot omborga qabul qilindi — "
                   f"jami {money_str(total)} so'm «{payment['paid_via']}» orqali "
@@ -563,7 +607,10 @@ def quick_receive():
     material = db.session.get(Material, material.id)
     return jsonify({
         "ok": True,
-        "message": f"«{material.name}» omborga qabul qilindi — {money_str(total)} so'm.",
+        "message": f"«{material.name}» omborga qabul qilindi — {money_str(total)} so'm"
+                   + (f" ({money_str(payment['paid_amount'])} so'm perechisleniye, "
+                      f"{money_str(payment['debt_amount'])} so'm qarz)."
+                      if payment["paid_amount"] is not None else "."),
         "warning": payment["warning"],
         "material": {
             "id": material.id,
