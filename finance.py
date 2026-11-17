@@ -16,14 +16,14 @@ from models import (
     EXPENSE_CATEGORIES, GENERAL_EXPENSE_CATEGORIES, EXPENSE_ORDER_CATEGORY,
     STATUS_CANCELLED, STOCK_OUT, ZERO, PAYMENT_TRANSFER, PAYMENT_CASH,
     ORDER_PAYMENT_COMPANY_METHODS, CASH_SOURCE_OFFICE, TAXI_EXPENSE_CATEGORY,
-    Supplier, STOCK_UNITS, CASH_SOURCE_LABELS, PAYER_COMPANIES,
+    Supplier, STOCK_UNITS, PAYER_COMPANIES,
 )
 from permissions import permission_required, has_perm
 from queries import (
     top_debtors, eager_orders, materials_with_stock,
     suppliers_with_stats, all_managers_month_summary,
 )
-from stock import consume, shortage, _confirmed_handovers_for
+from stock import consume, shortage, office_shortage_warning
 from utils import (
     ValidationError, parse_money, parse_date, parse_text, parse_choice, parse_int,
     parse_qty, to_money, to_qty, today_local, month_bounds, money_str, qty_str, QTY_ZERO,
@@ -391,6 +391,9 @@ def new_expense():
             total += data["amount"]
 
         if taxi:
+            taxi_warning = office_shortage_warning(taxi["amount"])
+            if taxi_warning:
+                warnings.append(taxi_warning)
             record_taxi(taxi, order, exp_date)
             total += taxi["amount"]
 
@@ -440,8 +443,6 @@ def _expense_page(selected_order, expense, form):
             units=STOCK_UNITS,
             suppliers=Supplier.query.filter_by(is_active=True, is_deleted=False)
                                     .order_by(Supplier.name).all(),
-            cash_handovers=_confirmed_handovers_for(current_user),
-            cash_source_labels=CASH_SOURCE_LABELS,
             payer_companies=PAYER_COMPANIES,
         )
     return render_template(

@@ -656,8 +656,52 @@ def office_deposited_total():
     )
 
 
+def office_cash_in_total():
+    """Buyurtmalardan OFIS kassasiga tushgan naqd: ish boshqaruvchi (yoki
+    admin) "qabul qildim" deb tasdiqlagan naqd topshiriqlar jami. Karta
+    to'lovlari bu yerga kirmaydi — ular boshliqning kartasiga tushadi."""
+    return total_confirmed_handover_amount(HANDOVER_CHANNEL_CASH)
+
+
+def office_spent_total():
+    """OFIS kassasidan chiqqan pul: BARCHA to'langan naqd xarajatlar
+    (2026-11-17, foydalanuvchi qarori — manba tanlanmaydi; eski
+    "Zoxidjon xisobidan" va buyurtma puli hisobidan yozilganlar ham shu
+    yerga kiradi)."""
+    return to_money(
+        db.session.query(func.coalesce(func.sum(Expense.amount), 0))
+        .filter(Expense.payment_method == "naqd", Expense.is_paid.is_(True))
+        .scalar()
+    )
+
+
 def office_balance():
-    """OFIS zaxirasining joriy qoldig'i: kiritilgan jami minus shu
-    manbadan qilingan xarajatlar jami. Manfiy bo'lishi mumkin — bu holda
-    OFIS "qarzga" ishlagan (xarajat kiritilganidan ko'proq sarflangan)."""
-    return office_deposited_total() - cash_source_totals()[CASH_SOURCE_OFFICE]
+    """OFIS kassasining joriy qoldig'i: buyurtmalardan tushgan naqd +
+    qo'lda to'ldirishlar − naqd xarajatlar. Manfiy bo'lishi mumkin —
+    demak to'ldirish kerak."""
+    return office_cash_in_total() + office_deposited_total() - office_spent_total()
+
+
+def office_summary():
+    """"Pullar" sahifasi uchun OFIS kassasining to'rt raqami."""
+    cash_in = office_cash_in_total()
+    deposited = office_deposited_total()
+    spent = office_spent_total()
+    return {
+        "cash_in": cash_in, "deposited": deposited, "spent": spent,
+        "balance": cash_in + deposited - spent,
+    }
+
+
+def office_deposit_sources(limit=12):
+    """Avval yozilgan to'ldirish manbalari — eng ko'p ishlatilgani birinchi
+    (formada tayyor tugma bo'lib chiqadi)."""
+    rows = (
+        db.session.query(CashDeposit.source, func.count(CashDeposit.id))
+        .filter(CashDeposit.source.isnot(None), CashDeposit.source != "")
+        .group_by(CashDeposit.source)
+        .order_by(func.count(CashDeposit.id).desc())
+        .limit(limit)
+        .all()
+    )
+    return [name for name, _ in rows]

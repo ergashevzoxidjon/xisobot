@@ -11,6 +11,7 @@ Bugungi (2026-08-29, to'rtinchi bosqich) o'zgarishlar uchun maxsus tekshiruv:
 
 Ishga tushirish:  python tests/smoke_today.py
 """
+import html
 import os
 import sys
 import tempfile
@@ -650,14 +651,14 @@ with app.app_context():
     check("KPI: all_managers_month_summary ham faqat to'langan summani beradi",
           all_stats.get(mgr_id, {}).get("total_sum") == summary["total_sum"])
 
-# ---------------------------------------------------------------- 9. OFIS/Zoxidjon naqd manba
-print("\n=== OMBOR: NAQD XARAJAT MANBAI MAJBURIY — OFIS/ZOXIDJON (2026-09-07) ===")
+# ---------------------------------------------------------------- 9. OFIS kassasi
+print("\n=== OMBOR: BARCHA NAQD XARAJAT OFIS KASSASIDAN (2026-11-17) ===")
+
+from queries import office_balance, office_summary
+from models import CashDeposit
 
 with app.app_context():
-    expense_count_before = Expense.query.count()
-    # Boshqa (masalan 3-bo'lim, admin_t) testlarda ham OFIS/Zoxidjon manbasi
-    # ishlatilgan bo'lishi mumkin — mutlaq son emas, FARQ tekshiriladi.
-    source_totals_before = cash_source_totals()
+    office_before = office_summary()
 
 def _kirim_data(qty, price, extra=None):
     data = {
@@ -672,93 +673,78 @@ def _kirim_data(qty, price, extra=None):
 
 with app.test_client() as c:
     login(c, "xar_t")
+    r = c.get("/ombor/kirim")
+    body = html.unescape(r.data.decode())
+    check("Kirim formasida manba tanlash YO'Q", 'name="cash_source"' not in body)
+    check("Kirim formasida 'OFIS kassasidan' yozuvi bor", "OFIS kassasidan" in body)
+
     r = c.post("/ombor/kirim", data=_kirim_data("5", "1000", {"payment_method": "naqd"}),
                follow_redirects=True)
-    check("Manba: naqd to'lovda manba tanlanmasa rad etiladi (200, flash)", r.status_code == 200)
+    check("Naqd kirim manbasiz qabul qilindi (200)", r.status_code == 200)
 
 with app.app_context():
-    check("Manba: manbasiz urinishda Expense yozilmadi",
-          Expense.query.count() == expense_count_before)
+    e = Expense.query.order_by(Expense.id.desc()).first()
+    check("Naqd xarajat OFISdan (cash_source='ofis', source_order_id bo'sh)",
+          e.cash_source == CASH_SOURCE_OFFICE and e.source_order_id is None and e.amount == 5000)
+    now = office_summary()
+    check("OFIS: naqd xarajat +5000", now["spent"] - office_before["spent"] == 5000)
+    check("OFIS: qoldiq = tushgan + to'ldirilgan - sarflangan",
+          now["balance"] == now["cash_in"] + now["deposited"] - now["spent"]
+          and office_balance() == now["balance"])
+    check("OFIS: tasdiqlangan naqd topshiriqlar kassaga tushgan (>= 80000)",
+          now["cash_in"] >= 80000)
 
 with app.test_client() as c:
     login(c, "xar_t")
-    r = c.post("/ombor/kirim", data=_kirim_data(
-        "5", "1000", {"payment_method": "naqd", "cash_source": "ofis"}
-    ), follow_redirects=True)
-    check("Manba: OFIS manbasi bilan xarajat qabul qilindi (200)", r.status_code == 200)
+    # eski forma "zoxidjon" yuborsa ham — baribir OFIS
+    c.post("/ombor/kirim", data=_kirim_data("3", "1000", {"payment_method": "naqd",
+                                                         "cash_source": "zoxidjon"}),
+           follow_redirects=True)
+with app.app_context():
+    e = Expense.query.order_by(Expense.id.desc()).first()
+    check("'zoxidjon' yuborilsa ham OFISdan yoziladi", e.cash_source == CASH_SOURCE_OFFICE)
 
 with app.app_context():
-    ofis_expense = (Expense.query.filter_by(cash_source=CASH_SOURCE_OFFICE)
-                     .order_by(Expense.id.desc()).first())
-    check("Manba: OFIS xarajati yozildi, cash_source='ofis'",
-          ofis_expense is not None and ofis_expense.cash_source == CASH_SOURCE_OFFICE)
-    check("Manba: OFIS xarajatida source_order_id bo'sh",
-          ofis_expense is not None and ofis_expense.source_order_id is None)
-    check("Manba: OFIS xarajati summasi to'g'ri (5000)",
-          ofis_expense is not None and ofis_expense.amount == 5000)
+    big = int(office_balance()) + 50000
+with app.test_client() as c:
+    login(c, "xar_t")
+    r = c.post("/ombor/kirim", data=_kirim_data("1", str(big), {"payment_method": "naqd"}),
+               follow_redirects=True)
+    body = html.unescape(r.data.decode())
+    check("Kassada yetmasa ham saqlanadi, ogohlantirish chiqadi",
+          r.status_code == 200 and "OFIS hisobini to'ldiring" in body)
+with app.app_context():
+    check("Yetmaganda OFIS qoldig'i minusga o'tdi", office_balance() < 0)
+    before_fund = office_balance()
 
 with app.test_client() as c:
     login(c, "xar_t")
-    r = c.post("/ombor/kirim", data=_kirim_data(
-        "3", "1000", {"payment_method": "naqd", "cash_source": "zoxidjon"}
-    ), follow_redirects=True)
-    check("Manba: Zoxidjon manbasi bilan xarajat qabul qilindi (200)", r.status_code == 200)
-
+    r = c.post("/pullar/ofis-toldirish", data={"amount": "100000", "source": ""},
+               follow_redirects=True)
+    with app.app_context():
+        check("Manbasiz to'ldirish rad etildi", office_balance() == before_fund)
+    r = c.post("/pullar/ofis-toldirish", data={"amount": "100000", "source": "Zoxidjon",
+                                               "note": "kassa yetmadi"},
+               follow_redirects=True)
+    check("Ish boshqaruvchi OFISni to'ldira oladi", "100 000" in html.unescape(r.data.decode()))
 with app.app_context():
-    zox_expense = (Expense.query.filter_by(cash_source=CASH_SOURCE_OWNER)
-                    .order_by(Expense.id.desc()).first())
-    check("Manba: Zoxidjon xarajati yozildi (3000)",
-          zox_expense is not None and zox_expense.amount == 3000)
-
-    totals = cash_source_totals()
-    check("Manba: cash_source_totals OFIS +5000 ni to'g'ri hisoblaydi",
-          totals[CASH_SOURCE_OFFICE] - source_totals_before[CASH_SOURCE_OFFICE] == 5000)
-    check("Manba: cash_source_totals Zoxidjon +3000 ni to'g'ri hisoblaydi",
-          totals[CASH_SOURCE_OWNER] - source_totals_before[CASH_SOURCE_OWNER] == 3000)
-
-    check("Manba: OFIS/Zoxidjon xarajati xarajatchining shaxsiy naqd balansiga ta'sir qilmaydi",
-          cash_balance(xar_id) == 80000)
+    d = CashDeposit.query.order_by(CashDeposit.id.desc()).first()
+    check("To'ldirish: manba va sana avtomatik yozildi",
+          d.source == "Zoxidjon" and d.created_at is not None)
+    check("To'ldirishdan keyin qoldiq +100000", office_balance() == before_fund + 100000)
 
 with app.test_client() as c:
     login(c, "xar_t")
-    r = c.post("/ombor/kirim", data=_kirim_data(
-        "10", "1000", {"payment_method": "naqd", "cash_source": f"order:{handover_order_id}"}
-    ), follow_redirects=True)
-    check("Manba: buyurtma puli hisobidan xarajat qabul qilindi (200)", r.status_code == 200)
+    r = c.get("/pullar/")
+    body = html.unescape(r.data.decode())
+    check("Pullar sahifasida 'OFIS hisobini to'ldirish' va tarix",
+          "OFIS hisobini to'ldirish" in body and "To'ldirishlar tarixi" in body
+          and "Zoxidjon" in body)
+    check("Pullar sahifasida 'Zoxidjon xisobidan' manbasi YO'Q", "Zoxidjon xisobidan" not in body)
 
-with app.app_context():
-    order_expense = Expense.query.filter_by(source_order_id=handover_order_id).first()
-    check("Manba: buyurtma-bog'langan xarajat yozildi, cash_source bo'sh",
-          order_expense is not None and order_expense.cash_source is None)
-    check("Manba: bu xarajat xarajatchining shaxsiy naqd balansini kamaytiradi (80000-10000=70000)",
-          cash_balance(xar_id) == 70000)
-    check("Manba: total_order_cash_on_hand() barcha xarajatchilar balansi yig'indisi bilan mos",
-          total_order_cash_on_hand() == cash_balance(xar_id))
-    check("Manba: cash_received() bruto qabul qilingan (80000) — sarflashdan ta'sirlanmaydi",
-          cash_received(xar_id) == 80000)
-
-with app.app_context():
-    expense_count_before_over = Expense.query.count()
-
-with app.test_client() as c:
-    login(c, "xar_t")
-    r = c.post("/ombor/kirim", data=_kirim_data(
-        "100", "1000", {"payment_method": "naqd", "cash_source": f"order:{handover_order_id}"}
-    ), follow_redirects=True)
-    check("Manba: qolganidan (70000) ko'p naqd sarflash rad etiladi, qoldiq -ga o'tmaydi (200, flash)",
-          r.status_code == 200)
-
-with app.app_context():
-    check("Manba: qoldiqdan ko'p urinishda yangi Expense yozilmadi",
-          Expense.query.count() == expense_count_before_over)
-    check("Manba: xarajatchi balansi -ga o'tmadi (hamon 70000)",
-          cash_balance(xar_id) == 70000)
-
-with app.test_client() as c:
-    login(c, "xar_t")
     r = c.post("/ombor/kirim", data=_kirim_data("2", "1000", {"payment_method": "qarzga"}),
                follow_redirects=True)
-    check("Manba: 'qarzga' to'lov holatida manba talab qilinmaydi (200)", r.status_code == 200)
+    check("'qarzga' kirim OFISga tegmaydi (200)", r.status_code == 200)
 
 # ---------------------------------------------------------------- yakun
 os.remove(db_path)

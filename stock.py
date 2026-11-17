@@ -26,11 +26,10 @@ from models import (
     Material, StockMove, Expense, Order, Supplier, log_action,
     STOCK_IN, STOCK_OUT, STOCK_UNITS, STOCK_EXPENSE_CATEGORY, ZERO,
     PAYMENT_CASH, PAYMENT_TRANSFER, PAYER_COMPANIES,
-    CashHandover, HANDOVER_CONFIRMED,
-    CASH_SOURCE_OFFICE, CASH_SOURCE_OWNER, CASH_SOURCE_LABELS,
+    CASH_SOURCE_OFFICE,
 )
 from permissions import permission_required
-from queries import materials_with_stock, cash_balance
+from queries import materials_with_stock, office_balance
 from suppliers import supplier_from_form
 from utils import (
     ValidationError, parse_text, parse_money, parse_qty, parse_date, parse_choice,
@@ -374,8 +373,21 @@ def receipt_rows_from_form(form):
     return rows
 
 
+def office_shortage_warning(amount):
+    """OFIS kassasida `amount` uchun pul yetmasa — ogohlantirish matni,
+    yetsa `None`. Yozuvdan OLDIN chaqiriladi."""
+    balance = office_balance()
+    if amount <= balance:
+        return None
+    return (
+        f"OFIS kassasida {money_str(balance)} so'm bor edi, bu xarajat "
+        f"{money_str(amount)} so'm — qoldiq {money_str(balance - amount)} so'mga "
+        "tushdi. «Pullar» bo'limida OFIS hisobini to'ldiring."
+    )
+
+
 def _receipt_payment_from_form(form, user, total):
-    """Kirimning to'lov qismini o'qiydi: taminotchi, to'lov holati, naqd manba.
+    """Kirimning to'lov qismini o'qiydi: taminotchi, to'lov holati.
 
     `receive()` va xarajat formasidagi tezkor kirim (`quick_receive()`)
     ikkalasi ham shu qoidalardan o'tadi — qoidalar bitta joyda turadi.
@@ -393,44 +405,15 @@ def _receipt_payment_from_form(form, user, total):
     if payment_choice == PAYMENT_TRANSFER:
         paid_via = parse_choice(form.get("paid_via"), "Tashkilot", PAYER_COMPANIES)
 
-    # "Naqd to'landi" tanlansa, pul albatta BITTA manbadan qoplanadi:
-    # muayyan buyurtmaning topshirilgan puli, yoki OFIS/Zoxidjon umumiy
-    # zaxirasi — tanlash MAJBURIY (2026-09-07, foydalanuvchi qarori).
-    # Boshqa to'lov holatlarida (perechisleniye/qarzga) bu tegishli emas.
+    # Naqd to'langan bo'lsa pul har doim OFIS kassasidan chiqadi — manba
+    # tanlanmaydi (2026-11-17, foydalanuvchi qarori). Kassada pul yetmasa
+    # ish to'xtamaydi, faqat ogohlantiriladi (qoldiq minusga o'tadi).
     source_order_id = None
     cash_source = None
+    warning = None
     if payment_choice == PAYMENT_CASH:
-        raw_source = (form.get("cash_source") or "").strip()
-        if not raw_source:
-            raise ValidationError("Naqd to'lov qaysi manbadan qoplanganini tanlang.")
-        if raw_source in (CASH_SOURCE_OFFICE, CASH_SOURCE_OWNER):
-            cash_source = raw_source
-        elif raw_source.startswith("order:") and raw_source[6:].isdigit():
-            order_id = int(raw_source[6:])
-            if order_id not in _allowed_source_order_ids(user):
-                raise ValidationError("Tanlangan buyurtma puli sizga tegishli emas yoki topilmagan.")
-            source_order_id = order_id
-        else:
-            raise ValidationError("Noto'g'ri manba tanlandi.")
-
-        # Shaxsiy naqd (buyurtma puli) — OFIS/Zoxidjon zaxirasidan farqli
-        # o'laroq bu haqiqiy jismoniy naqd pul, qo'lida yo'q pulni sarflab
-        # bo'lmaydi. Qoldiq -ga o'tib ketishining OLDI OLINADI (2026-09-16,
-        # foydalanuvchi so'rovi) — OFIS/Zoxidjon zaxirasi esa qasddan
-        # "qarzga" ishlashi mumkin, shuning uchun bu tekshiruv faqat
-        # source_order_id (shaxsiy naqd) holatida qo'llanadi.
-        if cash_source is None:
-            available = cash_balance(user.id)
-            if total > available:
-                shortfall = total - available
-                raise ValidationError(
-                    "Qo'lingizdagi naqd pul yetarli emas: hozir qo'lingizda "
-                    f"{money_str(available)} so'm bor, bu kirim uchun "
-                    f"{money_str(total)} so'm kerak (yetishmayapti: "
-                    f"{money_str(shortfall)} so'm). Naqd qoldiq minusga o'tishi "
-                    "mumkin emas — summani kamaytiring yoki manba sifatida "
-                    "OFIS/Zoxidjon zaxirasini tanlang."
-                )
+        cash_source = CASH_SOURCE_OFFICE
+        warning = office_shortage_warning(total)
 
     is_paid = payment_choice != "qarzga"
     return {
@@ -440,6 +423,7 @@ def _receipt_payment_from_form(form, user, total):
         "paid_via": paid_via,
         "source_order_id": source_order_id,
         "cash_source": cash_source,
+        "warning": warning,
     }
 
 
@@ -518,6 +502,8 @@ def receive():
 
         total = _record_receipt(rows, payment, moved_on, note)
         db.session.commit()
+        if payment["warning"]:
+            flash(payment["warning"], "warning")
 
         supplier = payment["supplier"]
         if not payment["is_paid"]:
@@ -573,6 +559,7 @@ def quick_receive():
     return jsonify({
         "ok": True,
         "message": f"«{material.name}» omborga qabul qilindi — {money_str(total)} so'm.",
+        "warning": payment["warning"],
         "material": {
             "id": material.id,
             "name": material.name,
@@ -583,33 +570,14 @@ def quick_receive():
     })
 
 
-def _confirmed_handovers_for(user):
-    """Foydalanuvchi naqd manba sifatida tanlashi mumkin bo'lgan tasdiqlangan
-    topshiriqlar — admin istalganini, boshqalar faqat o'zinikini."""
-    query = CashHandover.query.filter_by(status=HANDOVER_CONFIRMED)
-    if user.role != "admin":
-        query = query.filter_by(to_user_id=user.id)
-    return query.order_by(CashHandover.confirmed_at.desc()).limit(20).all()
-
-
-def _allowed_source_order_ids(user):
-    return {h.order_id for h in _confirmed_handovers_for(user)}
-
-
 def _receive_page(form):
     preselected = request.args.get("material_id", type=int)
-    # "Pullar" bo'limidan "Xarajat qilish" tugmasi bosilsa shu naqd
-    # topshiriqning buyurtmasi oldindan tanlanadi (2026-09-07).
-    preselected_order_id = request.args.get("order_id", type=int)
-    cash_handovers = _confirmed_handovers_for(current_user)
     return render_template(
         "stock/receive.html",
         materials=materials_with_stock(only_active=True),
         suppliers=Supplier.query.filter_by(is_active=True).order_by(Supplier.name).all(),
         preselected_id=preselected,
-        preselected_order_id=preselected_order_id,
-        cash_handovers=cash_handovers,
-        cash_source_labels=CASH_SOURCE_LABELS,
+        office_balance=office_balance(),
         today_date=today_local(),
         units=STOCK_UNITS,
         payer_companies=PAYER_COMPANIES,

@@ -158,15 +158,16 @@ with app.test_client() as c:
         "supplier_name": "Plyonka MChJ", "payment_method": "naqd",
     }
 
-    r = c.post("/ombor/kirim/tezkor", data=base)
+    r = c.post("/ombor/kirim/tezkor", data={**base, "supplier_name": ""})
     res = r.get_json()
-    check("Naqd manbasisiz — 400 va xato matni",
-          r.status_code == 400 and res and not res["ok"] and "manba" in res["error"])
+    check("Taminotchisiz — 400 va xato matni",
+          r.status_code == 400 and res and not res["ok"] and "Taminotchi" in res["error"])
     with app.app_context():
         check("Xato bo'lganda hech narsa yozilmadi",
               Material.query.filter_by(name="Laminatsiya plyonka").first() is None)
 
-    r = c.post("/ombor/kirim/tezkor", data={**base, "cash_source": "ofis"})
+    # naqd — manba so'ralmaydi, har doim OFIS kassasidan (2026-11-17)
+    r = c.post("/ombor/kirim/tezkor", data=base)
     res = r.get_json()
     check("Yangi mahsulot qabul qilindi (200, ok)", r.status_code == 200 and res["ok"])
     check("Javobda mahsulot va qoldiq", res["material"]["name"] == "Laminatsiya plyonka"

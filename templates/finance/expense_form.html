@@ -394,20 +394,8 @@
           </div>
         </div>
 
-        <div id="qrCashSourceBlock" class="mt-3">
-          <label class="form-label" for="qrCashSource">Naqd pul qaysi manbadan</label>
-          <select class="form-select" name="cash_source" id="qrCashSource">
-            <option value="">— tanlang —</option>
-            {% for h in cash_handovers %}
-            <option value="order:{{ h.order_id }}">
-              {{ h.order.order_number if h.order else '?' }} — {{ h.amount|uzs }} so'm
-              {% if h.order and h.order.client %}({{ h.order.client.name }}){% endif %}
-            </option>
-            {% endfor %}
-            {% for key, label in cash_source_labels.items() %}
-            <option value="{{ key }}">{{ label }}</option>
-            {% endfor %}
-          </select>
+        <div id="qrCashSourceBlock" class="form-text mt-2">
+          <i class="bi bi-building"></i> Naqd pul <b>OFIS kassasidan</b> chiqadi.
         </div>
         <input type="hidden" name="moved_on" id="qrMovedOn">
       </div>
@@ -877,8 +865,8 @@ qrForm.addEventListener('submit', e => {
       recalc();
       qrModal.hide();
       const note = document.getElementById('quickReceiveDone');
-      note.querySelector('span').textContent = res.message;
-      note.classList.remove('d-none');
+      note.querySelector('span').textContent = res.message + (res.warning ? ' ' + res.warning : '');
+      note.className = 'alert py-2 small ' + (res.warning ? 'alert-warning' : 'alert-success');
     })
     .catch(() => qrShowError("Internet aloqasini tekshiring va qayta urinib ko'ring."))
     .finally(() => { qrSubmit.disabled = false; });
