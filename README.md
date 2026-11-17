@@ -130,6 +130,16 @@ Flask o'rnatilmagan bo'lsa ham ishlaydi. Tekshiradi: ma'lumot validatsiyasi, mol
 
 ---
 
+## Xisoblovchi (narx hisoblagich)
+
+Bosmaxona narx hisoblagichi Xisobot ichida, `/xisoblovchi/` manzilida (yon menyuda "Xisoblovchi"). Kirish — Xisobot login'i:
+admin va ish boshqaruvchi narx/sozlamalarni o'zgartira oladi, menejer va boss faqat hisoblaydi. Narxlar bazada (`xis_kv`),
+hamma qurilmada bir xil. Eski `xisoblovchi.mylogo.uz` saytidagi narxlarni ko'chirish: `/xisoblovchi/zaxira`.
+Tafsilot: `xisoblovchi_app/CLAUDE.md`. Serverga chiqarganda: rasmlar papkasi `uploads/xisoblovchi/` (eski saytdagi
+`uploads/` fayllarini shu yerga ko'chiring); yangi jadval `xis_kv` ilova ishga tushganda o'zi yaratiladi.
+
+---
+
 ## Internetda joylashtirish
 
 ### Umumiy hosting: cPanel + Passenger (hostmaster.uz va o'xshashlari)

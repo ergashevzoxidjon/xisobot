@@ -1,0 +1,113 @@
+<!-- ====================== QOG'OZ BO'LIMI — HTML qismlari ======================
+     Bu fayl brauzerda alohida ochilmaydi. yigish.bat har bir "@blok NOMI" ... "@/blok"
+     orasidagi qismni umumiy/index.template.html dagi mos "@include" belgisi o'rniga
+     qo'yib, tayyor index.html ni yig'adi. -->
+
+<!-- Admin panel — barcha qog'oz narxlari bitta joyda -->
+<!-- @blok admin -->
+            <!-- QOG'OZ BO'LIMI ADMIN PANEL BLOKI -->
+            <div id="qogozAdminBox" style="display: none; margin-bottom: 28px;">
+                <div class="admin-link-hint">📄 Barcha qog'oz narxlari shu yerda. Ofset qog'ozlari — Ofset hisobida (Flayer, Paket, Papka,
+                    Bloknot...) xom varoq narxi sifatida; Konvert qog'ozlari — Konvert kalkulyatorida.</div>
+
+                <div class="add-pen-card" style="margin-bottom: 16px;">
+                    <div class="add-pen-card-title">🖨️ Ofset Qog'ozi</div>
+                    <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 12px;">
+                        Ofset qog'ozining faqat bitta standart (A3) turi bor — shu qator o'chirilmaydi,
+                        faqat narxi kiritiladi.
+                    </p>
+                    <div class="form-group" style="max-width: 260px;">
+                        <label>Narxi (so'm):</label>
+                        <input type="number" min="0" id="ofsetSinglePrice" value="22000">
+                    </div>
+                </div>
+
+                <div class="add-pen-card" style="margin-bottom: 16px;">
+                    <div class="add-pen-card-title">📄 Melovka Qog'ozi</div>
+                    <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 12px;">Grammaji va bosma bichimlari bo'yicha narxlar.</p>
+                    <div class="table-card" style="margin-bottom: 16px;">
+                        <div class="table-scroll">
+                        <table class="admin-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 90px;">Gramaj (g)</th>
+                                    <th style="width: 130px;">620x880 (so'm)</th>
+                                    <th style="width: 130px;">620x940 (so'm)</th>
+                                    <th style="width: 130px;">700x1000 (so'm)</th>
+                                    <th style="width: 70px; text-align: right;">Amal</th>
+                                </tr>
+                            </thead>
+                            <tbody id="adminMelovkaPaperTableBody"></tbody>
+                        </table>
+                        </div>
+                    </div>
+                    <button class="btn" style="background: #4f46e5;" onclick="addOfsetPaperRow('Melovka')">+ Yangi grammaj qo'shish</button>
+                </div>
+
+                <div class="add-pen-card" style="margin-bottom: 16px;">
+                    <div class="add-pen-card-title">📦 Karton Qog'ozi</div>
+                    <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 12px;">Grammaji va bosma bichimlari bo'yicha narxlar (Papka, Kalendar kabi mahsulotlar shu bazadan foydalanadi).</p>
+                    <div class="table-card" style="margin-bottom: 16px;">
+                        <div class="table-scroll">
+                        <table class="admin-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 90px;">Gramaj (g)</th>
+                                    <th style="width: 130px;">620x880 (so'm)</th>
+                                    <th style="width: 130px;">620x940 (so'm)</th>
+                                    <th style="width: 130px;">700x1000 (so'm)</th>
+                                    <th style="width: 70px; text-align: right;">Amal</th>
+                                </tr>
+                            </thead>
+                            <tbody id="adminKartonPaperTableBody"></tbody>
+                        </table>
+                        </div>
+                    </div>
+                    <button class="btn" style="background: #4f46e5;" onclick="addOfsetPaperRow('Karton')">+ Yangi grammaj qo'shish</button>
+                </div>
+
+                <div class="add-pen-card" style="margin-bottom: 16px;">
+                    <div class="add-pen-card-title">🎨 Dizayn Qog'ozi</div>
+                    <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 12px;">Bu yerda qog'oz gramaj bilan emas, nomi bilan kiritiladi (masalan "Colotech-200gr", "Lyon", "Kvarts").</p>
+                    <div class="table-card" style="margin-bottom: 16px;">
+                        <div class="table-scroll">
+                        <table class="admin-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 150px;">Nomi</th>
+                                    <th style="width: 130px;">SRA3 320x450 (so'm)</th>
+                                    <th style="width: 130px;">620x880 (so'm)</th>
+                                    <th style="width: 130px;">620x940 (so'm)</th>
+                                    <th style="width: 130px;">700x1000 (so'm)</th>
+                                    <th style="width: 70px; text-align: right;">Amal</th>
+                                </tr>
+                            </thead>
+                            <tbody id="adminDizaynPaperTableBody"></tbody>
+                        </table>
+                        </div>
+                    </div>
+                    <button class="btn" style="background: #4f46e5;" onclick="addOfsetPaperRow(&quot;Dizayn qog&#39;ozi&quot;)">+ Yangi grammaj qo'shish</button>
+                </div>
+                <div class="admin-card-actions" style="margin-bottom: 24px;">
+                    <button class="btn btn-success" onclick="saveOfsetQogozNarxlari()">💾 Ofset qog'oz narxlarini saqlash</button>
+                </div>
+
+                <div class="add-pen-card" style="margin-bottom: 16px;">
+                    <div class="add-pen-card-title">✉️ Konvertlar uchun qog'oz</div>
+                    <p class="admin-hint">Konvert kalkulyatorida tanlanadigan qog'ozlar. Format — sotib olinadigan varaq o'lchami; konvert bichimi shu varaqqa joylashtiriladi va kerakli varaq soni hisoblanadi.</p>
+                    <div class="table-card" style="margin-bottom:12px;">
+                        <div class="table-scroll">
+                        <table class="admin-table" style="min-width:760px;">
+                            <thead><tr><th style="min-width:180px;">Qog'oz nomi</th><th>Format</th><th>Eni (mm)</th><th>Bo'yi (mm)</th><th>Narxi (so'm/varaq)</th><th></th></tr></thead>
+                            <tbody id="qogozJadval_konvert"></tbody>
+                        </table>
+                        </div>
+                    </div>
+                    <div class="admin-card-actions">
+                        <button type="button" class="btn" style="background:#4f46e5;" onclick="addQogozQator('konvert')">+ Qog'oz qo'shish</button>
+                        <button class="btn btn-success" onclick="saveQogozRoyxati('konvert')">💾 Saqlash</button>
+                    </div>
+                </div>
+
+            </div>
+<!-- @/blok -->

@@ -26,7 +26,7 @@ fails = []
 # ---------------------------------------------------------------- 1. endpointlar
 ROUTE_FILES = ["auth.py", "main.py", "clients.py", "orders.py", "finance.py",
                "stock.py", "suppliers.py", "settings.py", "managers.py", "hr.py",
-               "money.py"]
+               "money.py", "xisoblovchi.py"]
 endpoints = set()
 for fname in ROUTE_FILES:
     src = open(f"{APP}/{fname}").read()
@@ -96,10 +96,12 @@ ROLE_PERMISSIONS = {
               "managers.view", "managers.manage",
               "hr.view", "hr.manage", "hr.pay",
               "users.manage", "settings.manage",
-              "money.view", "money.confirm", "money.fund", "money.adjust"},
+              "money.view", "money.confirm", "money.fund", "money.adjust",
+              "calc.view", "calc.edit"},
     "menejer": {"orders.view", "orders.create", "orders.edit", "orders.manage",
                 "clients.view", "clients.create",
                 "managers.view",
+                "calc.view",
                 "money.view"},
     "xarajatchi": {"expenses.view", "expenses.create", "orders.view", "orders.status",
                    "stock.view", "stock.manage",
@@ -107,10 +109,12 @@ ROLE_PERMISSIONS = {
                    "reports.view",
                    "hr.view", "hr.pay",
                    "managers.view",
+                   "calc.view", "calc.edit",
                    "money.view", "money.confirm"},
     "boss": {"expenses.view",
              "reports.view", "reports.export",
              "managers.view",
+             "calc.view",
              "hr.view", "hr.pay",
              "money.view", "money.confirm", "money.fund"},
 }
@@ -596,6 +600,7 @@ CONTEXTS = {
         cash_expenses=[cash_expense],
         can_confirm=True,
     ),
+    "xisoblovchi/backup.html": dict(count=12),
     "errors/error.html": dict(code=404, title="Topilmadi", message="Sahifa yo'q"),
 }
 

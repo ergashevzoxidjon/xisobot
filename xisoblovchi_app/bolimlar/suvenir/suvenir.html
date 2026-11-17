@@ -1,0 +1,50 @@
+<!-- ====================== SUVENIR bo'limi — HTML qismlari ======================
+     Bu fayl brauzerda alohida ochilmaydi. yigish.bat har bir "@blok NOMI" ... "@/blok"
+     orasidagi qismni umumiy/index.template.html dagi mos "@include" belgisi o'rniga
+     qo'yib, tayyor index.html ni yig'adi. -->
+
+<!-- Bosh sahifadagi mahsulot kartochkalari -->
+<!-- @blok grid -->
+        <div class="section-title">3. SUVENIR MAHSULOTLARI</div>
+        <div class="product-grid" id="grid-souvenir">
+            <div class="product-card" onclick="openCalc('ruchka', 'Ruchka')"><div class="icon">🖊️</div><h3>Ruchka</h3></div>
+            <div class="product-card" onclick="openCalc('yejidnevnik', 'Yejidnevnik')"><div class="icon">📘</div><h3>Yejidnevnik</h3></div>
+            <div class="product-card" onclick="openCalc('termos', 'Termos')"><div class="icon">🥤</div><h3>Termos</h3></div>
+            <div class="product-card" onclick="openCalc('brelok', 'Brelok')"><div class="icon">🔑</div><h3>Brelok</h3></div>
+            <div class="product-card" onclick="openCalc('bakal', 'Bakal')"><div class="icon">☕</div><h3>Bakal</h3></div>
+            <div class="product-card" onclick="openCalc('suv_idishlar', 'Suv idishlar')"><div class="icon">🍾</div><h3>Suv idishlar</h3></div>
+            <div class="product-card" onclick="openCalc('naborlar', 'Naborlar')"><div class="icon">🎁</div><h3>Naborlar</h3></div>
+            <div class="product-card" onclick="openCalc('beyjik', 'Beyjik')"><div class="icon">🪪</div><h3>Beyjik</h3></div>
+            <div class="product-card" onclick="openCalc('plagetkalar', 'Plagetkalar')"><div class="icon">🏆</div><h3>Plagetkalar</h3></div>
+            <div class="product-card" onclick="openCalc('powerbanklar', 'Powerbanklar')"><div class="icon">🔋</div><h3>Powerbanklar</h3></div>
+            <div class="product-card" onclick="openCalc('fleshka', 'Fleshka')"><div class="icon">💾</div><h3>Fleshka</h3></div>
+            <div class="product-card" onclick="openCalc('statuetka', 'Statuetka')"><div class="icon">🏅</div><h3>Statuetka</h3></div>
+            <div class="product-card" onclick="openCalc('kardxolder', 'Kardxolder')"><div class="icon">💳</div><h3>Kardxolder</h3></div>
+            <div class="product-card" onclick="openCalc('soat', 'Soat')"><div class="icon">⌚</div><h3>Soat</h3></div>
+            <div class="product-card" onclick="openCalc('zontik', 'Zontik')"><div class="icon">☂️</div><h3>Zontik</h3></div>
+            <div class="product-card" onclick="openCalc('koja_papka', 'Koja papkalar')"><div class="icon">💼</div><h3>Koja papkalar</h3></div>
+            <div class="product-card" onclick="openCalc('guvohnoma', 'Guvohnomalar')"><div class="icon">📇</div><h3>Guvohnomalar</h3></div>
+            <div class="product-card" onclick="openCalc('znachok', 'Znachok')"><div class="icon">📍</div><h3>Znachok</h3></div>
+        </div>
+<!-- @/blok -->
+
+<!-- Admin panel — shu bo'lim mahsulotlarining sozlama bloklari -->
+<!-- @blok admin -->
+            <!-- TISNENIYA UCHUN BIR MARTALIK KLISHE NARXI (hozircha faqat Yejidnevnik) -->
+            <div class="add-pen-card" id="klisheFeeAdminBox" style="display:none; margin-bottom: 16px;">
+                <div class="add-pen-card-title">🖨️ Tisneniya uchun Klishe narxi</div>
+                <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 14px; line-height:1.5;">
+                    Mijoz chop turi sifatida <strong>Tisneniya</strong>ni tanlasa, shu narx buyurtmaga <strong>bir marta</strong> qo'shiladi —
+                    dona soniga ko'paytirilmaydi (qolip/klishe bir marta tayyorlanadi).
+                </p>
+                <div class="form-row" style="align-items:flex-end; margin-bottom:0;">
+                    <div class="form-group">
+                        <label>Klishe narxi (so'm):</label>
+                        <input type="number" id="klisheFeeInput" min="0" placeholder="150000">
+                    </div>
+                    <div class="form-group" style="justify-content:flex-end;">
+                        <button class="btn" onclick="saveKlisheFee()">💾 Saqlash</button>
+                    </div>
+                </div>
+            </div>
+<!-- @/blok -->

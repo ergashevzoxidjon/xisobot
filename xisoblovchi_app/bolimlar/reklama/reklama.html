@@ -1,0 +1,200 @@
+<!-- ====================== REKLAMA bo'limi — HTML qismlari ======================
+     Bu fayl brauzerda alohida ochilmaydi. yigish.bat har bir "@blok NOMI" ... "@/blok"
+     orasidagi qismni umumiy/index.template.html dagi mos "@include" belgisi o'rniga
+     qo'yib, tayyor index.html ni yig'adi. -->
+
+<!-- Bosh sahifadagi mahsulot kartochkalari -->
+<!-- @blok grid -->
+        <div class="section-title">4. REKLAMA MAHSULOTLARI</div>
+        <div class="product-grid" id="grid-reklama">
+            <div class="product-card" onclick="openCalc('baner', 'Baner')"><div class="icon">🖼️</div><h3>Baner</h3></div>
+            <div class="product-card" onclick="openCalc('orakal', 'Orakal')"><div class="icon">🌆</div><h3>Orakal</h3></div>
+            <div class="product-card" onclick="openCalc('setka_orakal', 'Setka Orakal')"><div class="icon">🏁</div><h3>Setka Orakal</h3></div>
+            <div class="product-card" onclick="openCalc('tumanka', 'Tumanka')"><div class="icon">🌫️</div><h3>Tumanka</h3></div>
+            <div class="product-card" onclick="openCalc('xolst', 'Xolst')"><div class="icon">🎨</div><h3>Xolst</h3></div>
+            <div class="product-card" onclick="openCalc('rollup', 'Roll Up')"><div class="icon">📜</div><h3>Roll Up</h3></div>
+            <div class="product-card" onclick="openCalc('pauk', 'Pauk')"><div class="icon">🕷️</div><h3>Pauk</h3></div>
+            <div class="product-card" onclick="openCalc('popup', 'PopUp')"><div class="icon">⛺</div><h3>PopUp</h3></div>
+            <div class="product-card" onclick="openCalc('promostoyka', 'PromoStoyka')"><div class="icon">📣</div><h3>PromoStoyka</h3></div>
+            <div class="product-card" onclick="openCalc('tablichka', 'Tablichkalar')"><div class="icon">🪧</div><h3>Tablichkalar</h3></div>
+            <div class="product-card" onclick="openCalc('nastolniy_tablichka', 'Nastolniy tablichkalar')"><div class="icon">🔖</div><h3>Nastolniy tablichkalar</h3></div>
+            <div class="product-card" onclick="openCalc('stend', 'Stendlar')"><div class="icon">📋</div><h3>Stendlar</h3></div>
+        </div>
+<!-- @/blok -->
+
+<!-- Admin panel — shu bo'lim mahsulotlarining sozlama bloklari -->
+<!-- @blok admin -->
+            <!-- BANER / ORAKAL / TUMANKA / SETKA / XOLST — MAKSIMAL CHOP ENI -->
+            <div id="reklamaBanAdminBox" style="display: none; margin-bottom: 16px;">
+                <div class="add-pen-card">
+                    <div class="add-pen-card-title">📏 Maksimal chop eni (stanok)</div>
+                    <p class="admin-hint">Stanok bir bo'lakda (ulanishsiz) shu kenglikkacha chop etadi. Mijoz kiritgan o'lchamning
+                        ikkala tomoni ham shundan katta bo'lsa, kalkulyatorda "ulanish bilan bo'ladi" ogohlantirishi chiqadi. 0 — cheklov yo'q.</p>
+                    <div class="admin-form-grid">
+                        <div class="form-group">
+                            <label>Maksimal eni</label>
+                            <div class="input-unit"><input type="number" id="reklamaMaxEniInput" min="0" step="0.1"><span>metr</span></div>
+                        </div>
+                    </div>
+                    <div class="admin-card-actions">
+                        <button class="btn btn-success" onclick="saveReklamaMaxEni()">💾 Saqlash</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- STEND ADMIN PANEL BLOKI -->
+            <div id="stendAdminBox" style="display: none; margin-bottom: 28px;">
+                <div class="add-pen-card" style="margin-bottom:16px;">
+                    <div class="add-pen-card-title">🧱 Stend — material va chop etish narxlari</div>
+                    <p class="admin-hint">Narx = maydon (kv.m) × (material narxi + chop narxi) + turning qo'shimcha narxi. Narxlar — marjasiz tannarx.
+                        Menejer kiritgan X×Y o'lcham material varag'iga (aylantirib ham) sig'masa, "Siz kiritgan o'lcham reklama mahsuloti sig'maydi" xabari chiqadi.</p>
+                    <div class="form-row">
+                        <div class="form-group"><label>Material varag'i eni (mm):</label><input type="number" id="stendAdminVaraqEni" min="1"></div>
+                        <div class="form-group"><label>Material varag'i bo'yi (mm):</label><input type="number" id="stendAdminVaraqBoyi" min="1"></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="table-card" style="flex:1; min-width:260px;">
+                            <table class="admin-table"><thead><tr><th>Material</th><th>Narxi (so'm / kv.m)</th></tr></thead><tbody id="stendAdminMaterialBody"></tbody></table>
+                        </div>
+                        <div class="table-card" style="flex:1; min-width:260px;">
+                            <table class="admin-table"><thead><tr><th>Chop etish turi</th><th>Narxi (so'm / kv.m)</th></tr></thead><tbody id="stendAdminChopBody"></tbody></table>
+                        </div>
+                    </div>
+                </div>
+                <div class="add-pen-card">
+                    <div class="add-pen-card-title">📋 Stend turlari</div>
+                    <p class="admin-hint">Har bir tur uchun qaysi materiallar va chop etish turlari mavjudligini belgilang. Belgilanmagani menejerda o'chiq tugma bo'ladi.</p>
+                    <div class="table-card" style="margin-bottom:14px;">
+                        <div class="table-scroll">
+                        <table class="admin-table" style="min-width:900px;">
+                            <thead><tr><th style="min-width:150px;">Tur nomi</th><th style="min-width:260px;">Materiallar</th><th style="min-width:260px;">Chop etish turlari</th><th style="min-width:120px;">Qo'shimcha (so'm/dona)</th><th style="text-align:center;">Standart</th><th></th></tr></thead>
+                            <tbody id="stendAdminTurlar"></tbody>
+                        </table>
+                        </div>
+                    </div>
+                    <div class="admin-card-actions">
+                        <button class="btn" style="background:#4f46e5;" onclick="addStendTur()">+ Yangi stend turi</button>
+                        <button class="btn btn-success" onclick="saveStendConfig()">💾 Stend sozlamalarini saqlash</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- REKLAMA STEND (Roll Up / Pauk / PopUp / PromoStoyka) ADMIN PANEL BLOKI -->
+            <div id="reklamaStendAdminBox" style="display: none; margin-bottom: 28px;">
+                <div class="add-pen-card" style="margin-bottom: 16px;">
+                    <div class="add-pen-card-title">📊 Miqdor bo'yicha narx oraliqlari</div>
+                    <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 14px; line-height:1.5;">
+                        Buyurtma miqdoriga qarab har xil narx belgilash uchun oraliqlarni shu yerda sozlang — masalan
+                        <strong>1-3 dona</strong> uchun bir narx, <strong>4-10 dona</strong> uchun arzonroq narx va h.k.
+                        Pastdagi jadvalda har bir o'lcham uchun shu oraliqlarga mos narxlarni kiritasiz.
+                        <strong>"Gacha"ni bo'sh yoki 0 qoldirsangiz</strong> — cheksiz (ya'ni "va undan yuqori") deb qabul qilinadi.
+                    </p>
+                    <div id="reklamaStendTierRangesEditor" style="display:flex; flex-wrap:wrap; gap:10px; margin-bottom:14px;"></div>
+                    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                        <button type="button" class="btn btn-outline" style="height:36px; padding:0 14px; font-size:0.82rem;" onclick="addReklamaStendTierRange()">+ Oraliq qo'shish</button>
+                        <button type="button" class="btn btn-outline" style="height:36px; padding:0 14px; font-size:0.82rem;" onclick="fillDefaultReklamaStendTierRanges()">⚡ Namuna oraliqlar (1-3, 4-10, 11-20, 21-50, 51-100, 101+)</button>
+                    </div>
+                </div>
+
+                <div class="add-pen-card">
+                    <div class="add-pen-card-title" id="reklamaStendSizesTitle">📐 O'lchamlar va Narxlari</div>
+                    <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 12px;">Har bir o'lcham qatoriga, yuqoridagi oraliqlarning har biriga mos narxni kiriting. <strong>Bazaviy narx</strong> — hech qanday oraliq sozlanmagan yoki mos kelmasa ishlatiladigan zaxira narx. "Standart" ustunida mijoz ekranida avtomatik tanlanadigan o'lchamni belgilang. Material (Glyans/Matoviy) tanlovi narxga ta'sir qilmaydi.</p>
+                    <div class="table-card" style="margin-bottom: 16px;">
+                        <div class="table-scroll">
+                        <table class="admin-table">
+                            <thead>
+                                <tr id="adminReklamaStendTierHeaderRow"></tr>
+                            </thead>
+                            <tbody id="adminReklamaStendSizeTableBody"></tbody>
+                        </table>
+                        </div>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+                        <button class="btn" style="background: #4f46e5;" onclick="addReklamaStendSizeRow()">+ Yangi o'lcham qo'shish</button>
+                        <button class="btn btn-success" onclick="saveAllReklamaStendSizes()">💾 Barcha o'lchamlar va narxlarni saqlash</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TABLICHKA / NASTOLNIY TABLICHKA ADMIN PANEL BLOKI (Bayroqlar kabi mahsulotlar katalogi) -->
+            <div id="tablichkaAdminBox" style="display: none; margin-bottom: 28px;">
+                <div class="add-pen-card" id="tablichkaAddForm">
+                    <div class="add-pen-card-head">
+                        <div class="add-pen-card-title" id="tablichkaFormTitle">➕ Yangi mahsulot qo'shish</div>
+                        <div class="add-pen-card-sub" id="tablichkaAdminSarlavha"></div>
+                    </div>
+                    <div class="model-form-section">
+                        <div class="form-row">
+                            <div class="form-group" style="flex:2; min-width:260px;">
+                                <label>Mahsulot nomi (title):</label>
+                                <input type="text" id="tablichkaNameInput" placeholder="Masalan: Tablichka 300x400mm">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group" style="flex:1; min-width:280px;">
+                                <label>Ma'lumot (mijozga ko'rsatiladi — o'lcham, material va h.k.):</label>
+                                <textarea id="tablichkaInfoInput" rows="8" oninput="this.style.height='auto'; this.style.height=this.scrollHeight+'px';" placeholder="Razmerlari: 20x30, 30x40 sm&#10;Material: ..." style="width:100%; min-height:200px; padding:10px 12px; border:1.5px solid var(--border); border-radius:8px; font-family:inherit; font-size:0.9rem; line-height:1.5; resize:vertical;"></textarea>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group" style="flex:1;">
+                                <label>Narx oraliqlari (tiraj bo'yicha) — UF pechat va Gravirovka narxlari alohida:</label>
+                                <div id="tablichkaTierRows"></div>
+                                <div id="tablichkaTierWarn" class="admin-hint" style="margin-top:6px;"></div>
+                                <button type="button" class="btn" style="background:#4f46e5; margin-top:6px;" onclick="tablichkaOraliqQosh()">+ Oraliq qo'shish</button>
+                                <small>Narxi 0 qoldirilgan chop turi bu mahsulotda mijozga o'chiq (tanlab bo'lmaydigan) ko'rinadi. Marja keyin qo'shiladi.</small>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group" style="flex:1;">
+                                <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                                    <input type="checkbox" id="tablichkaStandart" style="width:auto; height:auto;">
+                                    Standart mahsulot (kalkulyator ochilganda shu tanlangan turadi)
+                                </label>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group" style="flex:1;">
+                                <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                                    <input type="checkbox" id="tablichkaQogozBor" onchange="tablichkaQogozBorOzgardi()" style="width:auto; height:auto;">
+                                    Ichiga soladigan qog'oz mumkin (mijoz «kerak / kerak emas» tanlaydi)
+                                </label>
+                                <div id="tablichkaQogozMaydonlar" style="display:none; margin-top:8px;">
+                                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                                        <input type="checkbox" id="tablichkaQogozKerak" style="width:auto; height:auto;"> Standart holatda «kerak»
+                                    </label>
+                                    <div class="input-unit" style="margin-top:6px; max-width:260px;"><input type="number" min="0" id="tablichkaQogozNarxi" value="0"><span>so'm/dona</span></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Rasm Yuklash (Lokal):</label>
+                                <div class="image-upload-row">
+                                    <div class="image-upload-preview">
+                                        <img id="tablichkaImagePreview" alt="" style="display:none;">
+                                        <span id="tablichkaImagePreviewPlaceholder">🪧</span>
+                                    </div>
+                                    <input type="file" id="tablichkaFileInput" accept="image/*" onchange="tablichkaRasmTanlash(this)">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button class="btn btn-outline" id="btnTablichkaBekor" style="display:none;" onclick="tablichkaBekorQilish()">Bekor qilish</button>
+                        <button class="btn" onclick="saveTablichkaItem()">💾 Saqlash</button>
+                    </div>
+                </div>
+
+                <div class="table-card">
+                    <div class="model-list-head">
+                        <div class="model-list-head-left">
+                            <h3>📋 Mahsulotlar ro'yxati</h3>
+                            <span class="model-list-count" id="tablichkaAdminCount"></span>
+                        </div>
+                    </div>
+                    <div class="model-grid" id="tablichkaAdminGrid"></div>
+                </div>
+            </div>
+
+<!-- @/blok -->

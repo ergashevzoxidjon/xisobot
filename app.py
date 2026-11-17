@@ -51,6 +51,7 @@ def create_app(config_object=Config):
     from managers import managers_bp
     from hr import hr_bp
     from money import money_bp
+    from xisoblovchi import xisoblovchi_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
@@ -63,6 +64,7 @@ def create_app(config_object=Config):
     app.register_blueprint(managers_bp)
     app.register_blueprint(hr_bp)
     app.register_blueprint(money_bp)
+    app.register_blueprint(xisoblovchi_bp)
 
     register_error_handlers(app)
 

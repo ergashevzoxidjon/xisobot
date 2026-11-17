@@ -71,6 +71,11 @@ PERMISSIONS = {
     # to'g'ridan-to'g'ri tuzatish, boss o'ziga xato kiritgan bo'lsa ham
     # o'zi o'zgartira olmaydi, faqat admin orqali to'g'irlanadi).
     "money.view", "money.confirm", "money.fund", "money.adjust",
+    # Xisoblovchi (narx hisoblagich, 2026-11-17: Xisobot ichiga ko'chirildi).
+    # calc.view — hisoblash va taklif tuzish (hamma rol); calc.edit — narxlar,
+    # mahsulotlar va sozlamalarni o'zgartirish ("admin rejimi"): avval tashqi
+    # saytda admin va ish boshqaruvchiga ?rol=admin havolasi berilgan edi.
+    "calc.view", "calc.edit",
 }
 
 ROLE_PERMISSIONS = {
@@ -82,6 +87,7 @@ ROLE_PERMISSIONS = {
         "orders.view", "orders.create", "orders.edit", "orders.manage",
         "clients.view", "clients.create",
         "managers.view",
+        "calc.view",
         # o'zi topshirgan naqd pullarning holatini (kutilmoqda/qabul
         # qilindi) kuzatib borishi uchun — tasdiqlay olmaydi, faqat ko'radi.
         "money.view",
@@ -103,6 +109,7 @@ ROLE_PERMISSIONS = {
                    # kerak (2026-08-29, foydalanuvchi qarori) — shu bilan
                    # birga sotuv/KPI hisobotini ham ko'radi (bitta ruxsat).
                    "managers.view",
+                   "calc.view", "calc.edit",
                    # "Pullar" — o'ziga topshirilgan naqd pulni qabul
                    # qilganini tasdiqlaydi va xarajatga sarflaydi
                    # (2026-09-07, foydalanuvchi qarori).
@@ -116,6 +123,7 @@ ROLE_PERMISSIONS = {
         "expenses.view",
         "reports.view", "reports.export",
         "managers.view",
+        "calc.view",
         "hr.view", "hr.pay",
         # Naqd pulni kuzatib boradi (ko'radi), karta to'lovlarini esa o'zi
         # tasdiqlaydi — mijoz to'lovni Karta deb belgilasa, pul boshliqning

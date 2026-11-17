@@ -1,0 +1,46 @@
+<!-- ====================== SIFRAVOY (RAQAMLI) PECHAT bo'limi — HTML qismlari ======================
+     Bu fayl brauzerda alohida ochilmaydi. yigish.bat har bir "@blok NOMI" ... "@/blok"
+     orasidagi qismni umumiy/index.template.html dagi mos "@include" belgisi o'rniga
+     qo'yib, tayyor index.html ni yig'adi. -->
+
+<!-- Bosh sahifadagi mahsulot kartochkalari -->
+<!-- @blok grid -->
+        <div class="section-title">6. SIFRAVOY PECHAT</div>
+        <div class="product-grid" id="grid-sifravoy">
+            <div class="product-card" onclick="openCalc('sifravoy_pechat', 'Raqamli Pechat Kalkulyatori')"><div class="icon">🖨️</div><h3>Raqamli Pechat Kalkulyatori</h3></div>
+        </div>
+<!-- @/blok -->
+
+<!-- Admin panel — shu bo'lim mahsulotlarining sozlama bloklari -->
+<!-- @blok admin -->
+            <!-- RAQAMLI PECHAT ADMIN PANEL BLOKI -->
+            <div id="digitalAdminPanelBox" style="display: none; margin-bottom: 28px;">
+                <div class="add-pen-card" style="margin-bottom: 16px;">
+                    <div class="add-pen-card-title">📦 Raqamli Pechat Qog'ozlari va Narxlarini Boshqarish</div>
+                    <div class="table-card" style="margin-bottom: 16px;">
+                        <div class="table-scroll">
+                        <table class="admin-table">
+                            <thead>
+                                <tr>
+                                    <th>Nomi / Grammi</th>
+                                    <th style="width: 120px;">Qog'oz Eni</th>
+                                    <th style="width: 120px;">Qog'oz Bo'yi</th>
+                                    <th style="width: 120px;">Pechat Eni</th>
+                                    <th style="width: 120px;">Pechat Bo'yi</th>
+                                    <th style="width: 135px;">1 tomon. narxi</th>
+                                    <th style="width: 135px;">2 tomon. narxi</th>
+                                    <th style="width: 90px; text-align: right;">Amallar</th>
+                                </tr>
+                            </thead>
+                            <tbody id="adminDigitalPaperTableBody"></tbody>
+                        </table>
+                        </div>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+                        <button class="btn" style="background: #4f46e5;" onclick="addDigitalPaperRow()">+ Yangi qog'oz qo'shish</button>
+                        <button class="btn btn-success" onclick="saveAllDigitalPapers()">💾 Barcha o'zgarishlarni saqlash</button>
+                    </div>
+                </div>
+            </div>
+
+<!-- @/blok -->

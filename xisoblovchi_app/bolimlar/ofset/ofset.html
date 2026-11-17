@@ -1,0 +1,137 @@
+<!-- ====================== OFSET PECHAT bo'limi — HTML qismlari ======================
+     Bu fayl brauzerda alohida ochilmaydi. yigish.bat har bir "@blok NOMI" ... "@/blok"
+     orasidagi qismni umumiy/index.template.html dagi mos "@include" belgisi o'rniga
+     qo'yib, tayyor index.html ni yig'adi. -->
+
+<!-- Bosh sahifadagi mahsulot kartochkalari -->
+<!-- @blok grid -->
+        <div class="section-title">5. OFSET PECHAT</div>
+        <div class="product-grid" id="grid-ofset">
+            <div class="product-card" onclick="openCalc('ofset_pechat', 'Ofset Pechat Kalkulyatori')"><div class="icon">🖨️</div><h3>Ofset pechat kalkulyatori</h3></div>
+        </div>
+<!-- @/blok -->
+
+<!-- Admin panel — shu bo'lim mahsulotlarining sozlama bloklari -->
+<!-- @blok admin -->
+            <!-- OFSET PECHAT ADMIN PANEL BLOKI -->
+            <div id="ofsetAdminPanelBox" style="display: none; margin-bottom: 28px;">
+                <div class="admin-link-hint">📄 Qog'oz narxlari (Ofset, Melovka, Karton, Dizayn qog'ozi) endi alohida:
+                    <b>Admin panel → 📄 Qog'oz bo'limi</b>.</div>
+
+
+                <div class="add-pen-card" style="margin-bottom: 16px;">
+                    <div class="add-pen-card-title">🖨️ Ofset Forma (Klishe) Narxi</div>
+                    <div class="form-row" style="gap: 12px;">
+                        <div class="form-group">
+                            <label>A3 Ofset — forma tannarxi:</label>
+                            <input type="number" id="setPlateA3" value="22000">
+                        </div>
+                        <div class="form-group">
+                            <label>A2 Ofset — forma tannarxi:</label>
+                            <input type="number" id="setPlateA2" value="44000">
+                        </div>
+                        <div class="form-group">
+                            <label>A1 Ofset — forma tannarxi:</label>
+                            <input type="number" id="setPlateA1" value="88000">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="add-pen-card" style="margin-bottom: 16px;">
+                    <div class="add-pen-card-title">💰 Bosma (Pechat) Narxi — Baza va Qadam</div>
+                    <div class="form-row" style="gap: 12px;">
+                        <div class="form-group">
+                            <label>A3 — Baza (1-1000 ottisk):</label>
+                            <input type="number" id="setPrintA3Base" value="170000">
+                        </div>
+                        <div class="form-group">
+                            <label>A3 — Qadam (har +1000):</label>
+                            <input type="number" id="setPrintA3Step" value="70000">
+                        </div>
+                    </div>
+                    <div class="form-row" style="gap: 12px;">
+                        <div class="form-group">
+                            <label>A2 — Baza (1-1000 ottisk):</label>
+                            <input type="number" id="setPrintA2Base" value="350000">
+                        </div>
+                        <div class="form-group">
+                            <label>A2 — Qadam (har +1000):</label>
+                            <input type="number" id="setPrintA2Step" value="80000">
+                        </div>
+                    </div>
+                    <div class="form-row" style="gap: 12px;">
+                        <div class="form-group">
+                            <label>A1 — Baza (1-1000 ottisk):</label>
+                            <input type="number" id="setPrintA1Base" value="1000000">
+                        </div>
+                        <div class="form-group">
+                            <label>A1 — Qadam (har +1000):</label>
+                            <input type="number" id="setPrintA1Step" value="150000">
+                        </div>
+                    </div>
+                    <button class="btn btn-success" style="width: 100%; margin-top: 6px;" onclick="saveOfsetMashinaSozlamalari()">💾 Forma va bosma narxlarini saqlash</button>
+                </div>
+
+                <div class="add-pen-card" style="margin-bottom: 16px;">
+                    <div class="add-pen-card-title">✂️ Pardozlash xizmatlari (umumiy): Visochka, Laminatsiya, Lak, Tisneniya</div>
+                    <p class="admin-hint">Bu xizmatlar Poligrafiya bo'limidagi mahsulotlarda (Papka, Paket, Doorhanger...) takrorlanadi —
+                        narxi shu yerda <b>BIR MARTA</b>, ofset mashinasi formati (A3/A2/A1) bo'yicha kiritiladi. Mahsulot hisobi qaysi
+                        mashinada chiqsa, o'sha qatordagi narx olinadi. Visochka va Lak — pog'onali: 1000 donagacha qat'iy summa,
+                        undan keyin har donaga. Tisneniya — har donaga + bir martalik klishe.</p>
+                    <div class="table-card" style="margin-bottom:14px;">
+                        <div class="table-scroll">
+                        <table class="admin-table" style="min-width:980px;">
+                            <thead>
+                                <tr>
+                                    <th>Mashina</th>
+                                    <th>Visochka: 1000 gacha</th>
+                                    <th>Visochka: keyin (dona)</th>
+                                    <th>Laminatsiya (dona)</th>
+                                    <th>Lak: 1000 gacha</th>
+                                    <th>Lak: keyin (dona)</th>
+                                    <th>Tisneniya (dona)</th>
+                                    <th>Tisneniya klishe</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td style="font-weight:700;">A3</td>
+                                    <td><input type="number" min="0" id="finVisochkaA3First"></td>
+                                    <td><input type="number" min="0" id="finVisochkaA3Next"></td>
+                                    <td><input type="number" min="0" id="finLaminatsiyaA3"></td>
+                                    <td><input type="number" min="0" id="finLakA3First"></td>
+                                    <td><input type="number" min="0" id="finLakA3Next"></td>
+                                    <td><input type="number" min="0" id="finTisA3Unit"></td>
+                                    <td><input type="number" min="0" id="finTisA3Klishe"></td>
+                                </tr>
+                                <tr>
+                                    <td style="font-weight:700;">A2</td>
+                                    <td><input type="number" min="0" id="finVisochkaA2First"></td>
+                                    <td><input type="number" min="0" id="finVisochkaA2Next"></td>
+                                    <td><input type="number" min="0" id="finLaminatsiyaA2"></td>
+                                    <td><input type="number" min="0" id="finLakA2First"></td>
+                                    <td><input type="number" min="0" id="finLakA2Next"></td>
+                                    <td><input type="number" min="0" id="finTisA2Unit"></td>
+                                    <td><input type="number" min="0" id="finTisA2Klishe"></td>
+                                </tr>
+                                <tr>
+                                    <td style="font-weight:700;">A1</td>
+                                    <td><input type="number" min="0" id="finVisochkaA1First"></td>
+                                    <td><input type="number" min="0" id="finVisochkaA1Next"></td>
+                                    <td><input type="number" min="0" id="finLaminatsiyaA1"></td>
+                                    <td><input type="number" min="0" id="finLakA1First"></td>
+                                    <td><input type="number" min="0" id="finLakA1Next"></td>
+                                    <td><input type="number" min="0" id="finTisA1Unit"></td>
+                                    <td><input type="number" min="0" id="finTisA1Klishe"></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        </div>
+                    </div>
+                    <div class="admin-card-actions">
+                        <button class="btn btn-success" onclick="saveOfsetFinishingServices()">💾 Pardozlash narxlarini saqlash</button>
+                    </div>
+                </div>
+            </div>
+
+<!-- @/blok -->

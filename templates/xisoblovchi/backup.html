@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h3>Xisoblovchi zaxirasi</h3>
+    <div class="subtitle">Narxlar va sozlamalarni saqlash / eski saytdan ko'chirish · bazada {{ count }} ta sozlama</div>
+  </div>
+  <a href="{{ url_for('xisoblovchi.index') }}" class="btn btn-outline-secondary"><i class="bi bi-calculator"></i> Xisoblovchiga qaytish</a>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-6">
+    <div class="card p-4 h-100">
+      <h5>1. Zaxira nusxasini yuklab olish</h5>
+      <p class="text-muted">Hozirgi barcha umumiy narx va sozlamalar bitta JSON faylga yoziladi.</p>
+      <div><a class="btn btn-primary" href="{{ url_for('xisoblovchi.backup_export') }}"><i class="bi bi-download"></i> Yuklab olish</a></div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card p-4 h-100">
+      <h5>2. Zaxirani yuklash (import)</h5>
+      <p class="text-muted">Fayldagi sozlamalar bazadagi bir xil nomli sozlamalarning <b>ustidan yoziladi</b>. Faylda yo'q sozlamalar o'zgarmaydi.</p>
+      <form method="post" action="{{ url_for('xisoblovchi.backup_import') }}" enctype="multipart/form-data"
+            onsubmit="return confirm('Zaxiradagi sozlamalar hozirgilarining ustidan yoziladi. Davom etasizmi?')">
+        {{ csrf() }}
+        <input type="file" class="form-control mb-3" name="fayl" accept=".json,application/json" required>
+        <button class="btn btn-warning"><i class="bi bi-upload"></i> Import qilish</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="col-12">
+    <div class="card p-4">
+      <h5>Eski saytdan (xisoblovchi.mylogo.uz) narxlarni ko'chirish</h5>
+      <p class="text-muted mb-2">Eski saytdagi narxlar o'sha brauzerning ichida saqlangan, shuning uchun ularni bir marta fayl qilib olish kerak:</p>
+      <ol class="mb-3">
+        <li>Narxlar kiritilgan brauzerda eski saytni <b>admin</b> sifatida oching.</li>
+        <li><kbd>F12</kbd> → <b>Console</b> bo'limiga quyidagi kodni qo'yib <kbd>Enter</kbd> bosing — <code>xisoblovchi-zaxira.json</code> fayli yuklanadi.</li>
+        <li>Shu faylni yuqoridagi «Zaxirani yuklash» orqali import qiling.</li>
+      </ol>
+      <pre class="p-3 border rounded" style="white-space:pre-wrap;user-select:all">(()=>{const o={};for(let i=0;i&lt;localStorage.length;i++){const k=localStorage.key(i);if(k.startsWith('erp_'))o[k]=localStorage.getItem(k);}const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(o)],{type:'application/json'}));a.download='xisoblovchi-zaxira.json';a.click();})()</pre>
+      <div class="form-text">Eski PIN kodlar ko'chirilmaydi: past marjani tasdiqlash va to'liq hisob-kitobni ko'rish endi admin akkauntining paroli bilan bajariladi.
+      Eski saytda serverga yuklangan rasmlar (<code>uploads/</code>) papkasini ham ko'chirish kerak — serverdagi <code>uploads/xisoblovchi/</code> ga.</div>
+    </div>
+  </div>
+</div>
+{% endblock %}

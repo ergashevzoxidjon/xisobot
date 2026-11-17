@@ -3,6 +3,8 @@ from decimal import Decimal
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 
+from sqlalchemy.dialects.mysql import LONGTEXT
+
 from extensions import db, login_manager
 from utils import now_local, today_local, to_money, to_qty, ZERO, QTY_ZERO
 
@@ -1110,6 +1112,27 @@ class EmployeeAdvance(db.Model):
     @property
     def kind_label(self):
         return PAYMENT_KIND_LABELS.get(self.kind, self.kind)
+
+
+class XisKV(db.Model):
+    """Xisoblovchi (narx hisoblagich) sozlamalari — avval brauzer localStorage'ida
+    turgan `erp_*` kalitlar endi shu jadvalda, hamma qurilmada bir xil.
+
+    scope: "shared" — hamma uchun umumiy (narxlar, mahsulotlar, taklif arxivi);
+           "u<id>" — foydalanuvchining shaxsiy kaliti (savatcha, oxirgi tanlovlar).
+    version har yozuvda oshadi — ikki admin bir vaqtda tahrirlasa, ikkinchisining
+    eskirgan nusxasi jimgina ustidan yozib yubormasligi uchun (409).
+    """
+    __tablename__ = "xis_kv"
+    __table_args__ = (db.UniqueConstraint("scope", "key", name="uq_xis_kv_scope_key"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    scope = db.Column(db.String(32), nullable=False, index=True)
+    key = db.Column(db.String(120), nullable=False)
+    value = db.Column(db.Text().with_variant(LONGTEXT(), "mysql"), nullable=False)
+    version = db.Column(db.Integer, nullable=False, default=1)
+    updated_at = db.Column(db.DateTime, default=now_local, onupdate=now_local)
+    updated_by_id = db.Column(db.Integer, db.ForeignKey("user.id"))
 
 
 def log_action(user, action, entity=None, entity_id=None, detail=None):

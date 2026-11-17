@@ -14,7 +14,7 @@ import os
 APP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ROUTE_FILES = ["auth.py", "main.py", "clients.py", "orders.py", "finance.py",
                "stock.py", "suppliers.py", "settings.py", "managers.py", "hr.py",
-               "money.py"]
+               "money.py", "xisoblovchi.py"]
 ALL_PY = [f for f in os.listdir(APP) if f.endswith(".py")]
 
 fails = []

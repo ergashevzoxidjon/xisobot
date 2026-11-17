@@ -20,6 +20,7 @@ TESTS = [
     ("smoke_today.py", "Haqiqiy Flask+DB oqimlari (HR turkumlari, ombor joylashuvi, menejer jurnali)"),
     ("scenario_supplier_delete.py", "Taminotchini o'chirish/tiklash — qarzdorlikni qayta tasdiqlash"),
     ("scenario_stock_expense.py", "Mahsulotni o'chirish, tezkor kirim, taksi xarajati (2026-11-17)"),
+    ("scenario_xisoblovchi.py", "Xisoblovchi Xisobot ichida: kirish, rejim, bazaga saqlash, zaxira (2026-11-17)"),
 ]
 
 failed = []

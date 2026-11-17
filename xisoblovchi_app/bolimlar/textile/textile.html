@@ -1,0 +1,187 @@
+<!-- ====================== TEXTILE bo'limi — HTML qismlari ======================
+     Bu fayl brauzerda alohida ochilmaydi. yigish.bat har bir "@blok NOMI" ... "@/blok"
+     orasidagi qismni umumiy/index.template.html dagi mos "@include" belgisi o'rniga
+     qo'yib, tayyor index.html ni yig'adi. -->
+
+<!-- Bosh sahifadagi mahsulot kartochkalari -->
+<!-- @blok grid -->
+        <div class="section-title">2. TEXTILE MAHSULOTLARI</div>
+        <div class="product-grid" id="grid-textile">
+            <div class="product-card" onclick="openCalc('futbolka', 'Futbolka')"><div class="icon">👕</div><h3>Futbolka</h3></div>
+            <div class="product-card" onclick="openCalc('kepka', 'Kepka')"><div class="icon">🧢</div><h3>Kepka</h3></div>
+            <div class="product-card" onclick="openCalc('svitshot', 'Svitshot')"><div class="icon">👔</div><h3>Svitshot</h3></div>
+            <div class="product-card" onclick="openCalc('xudi', 'Xudi')"><div class="icon">🧥</div><h3>Xudi</h3></div>
+            <div class="product-card" onclick="openCalc('jiletka', 'Jiletka')"><div class="icon">🥼</div><h3>Jiletka</h3></div>
+            <div class="product-card" onclick="openCalc('shoper', 'Shoper')"><div class="icon">👜</div><h3>Shoper</h3></div>
+            <div class="product-card" onclick="openCalc('sumka', 'Sumkalar')"><div class="icon">🎒</div><h3>Sumkalar</h3></div>
+            <div class="product-card" onclick="openCalc('polo', 'Polo')"><div class="icon">👕</div><h3>Polo</h3></div>
+            <div class="product-card" onclick="openCalc('longsliv', 'Longsliv')"><div class="icon">🧥</div><h3>Longsliv</h3></div>
+            <div class="product-card" onclick="openCalc('lenta', 'Lenta')"><div class="icon">🎗️</div><h3>Lenta</h3></div>
+            <div class="product-card" onclick="openCalc('bayroqlar', 'Bayroqlar')"><div class="icon">🚩</div><h3>Bayroqlar</h3></div>
+        </div>
+<!-- @/blok -->
+
+<!-- Admin panel — shu bo'lim mahsulotlarining sozlama bloklari -->
+<!-- @blok admin -->
+            <!-- TEXTILE ADMIN PANEL BLOKI -->
+            <div id="adminTextileBox" style="display: none; margin-bottom: 28px;">
+                <div class="add-pen-card" style="margin-bottom: 16px;">
+                    <div class="add-pen-card-title">🧵 Materiallar (mato turlari)</div>
+                    <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 14px; line-height:1.5;">
+                        Kiyimning o'zi qancha turishi shu yerda belgilanadi. Har bir materialning <strong>o'z tiraj jadvali</strong> bor —
+                        tiraj oshgani sari dona narxi tushadi. "Gacha" ustunini 0 qoldirsangiz — cheksiz.
+                    </p>
+                    <div id="textileMaterialsEditor"></div>
+                    <button type="button" class="btn btn-outline" style="height:36px; padding:0 14px; font-size:0.82rem; margin-top:12px;" onclick="addTextileItem('materials')">+ Material qo'shish</button>
+                </div>
+
+                <div class="add-pen-card" style="margin-bottom: 16px;">
+                    <div class="add-pen-card-title">🎨 Ranglar</div>
+                    <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 14px; line-height:1.5;">
+                        Mijoz tanlaydigan mato ranglari. Har birining <strong>doimiy ustamasi</strong> bor (so'mda) —
+                        buyurtma miqdoridan qat'iy nazar bir xil qo'shiladi. Masalan qora rang uchun ustama qo'ying,
+                        oddiy ranglar uchun <strong>0</strong> qoldiring.
+                    </p>
+                    <div id="textileColorsEditor"></div>
+                    <button type="button" class="btn btn-outline" style="height:36px; padding:0 14px; font-size:0.82rem; margin-top:12px;" onclick="addTextileItem('colors')">+ Rang qo'shish</button>
+                </div>
+
+                <div class="add-pen-card" style="margin-bottom: 16px;">
+                    <div class="add-pen-card-title">🖨️ DTF Pechat narxi (avtomatik hisoblanadi)</div>
+                    <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 14px; line-height:1.5;">
+                        Bu sozlama <strong>barcha Tekstil turlariga umumiy</strong> (Futbolka, Kepka, Svitshot, Xudi, Jiletka, Shoper, Sumkalar, Polo, Longsliv, Lenta).
+                        Mashina eni maksimal <strong>58 sm</strong>, uzunligi rulon hisoblanadi — narx faqat
+                        <strong>uzunlikka (bo'yi, sm)</strong> bog'liq, eni 58 smgacha narxga ta'sir qilmaydi.
+                        Bir nechta dona/tomon bo'lsa, ular orasiga oraliq qo'yib umumiy rulon uzunligi topiladi,
+                        shu uzunlikka narx hisoblanadi (eng kamida — bitta bo'lak narxi).
+                    </p>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Mashina eni (sm):</label>
+                            <input type="number" min="1" id="txDtfRollWidth" value="58">
+                        </div>
+                        <div class="form-group">
+                            <label>Bo'lak uzunligi (sm):</label>
+                            <input type="number" min="1" id="txDtfRollLength" value="100">
+                        </div>
+                        <div class="form-group">
+                            <label>Shu bo'lakning DTF narxi (so'm):</label>
+                            <input type="number" min="0" id="txDtfRollPrice" value="90000">
+                        </div>
+                        <div class="form-group">
+                            <label>Detallar orasi (sm):</label>
+                            <input type="number" min="0" step="0.1" id="txDtfGap" value="0.5">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Bosish narxi — oldiga (so'm/dona):</label>
+                            <input type="number" min="0" id="txDtfFrontFee" value="2000">
+                        </div>
+                        <div class="form-group">
+                            <label>Bosish narxi — orqaga (so'm/dona):</label>
+                            <input type="number" min="0" id="txDtfBackFee" value="5000">
+                        </div>
+                        <div class="form-group">
+                            <label>Kepkaga bosish narxi (so'm/dona):</label>
+                            <input type="number" min="0" id="txDtfKepkaFee" value="1000">
+                        </div>
+                    </div>
+                    <div style="display:flex; justify-content:flex-end; margin-top:10px;">
+                        <button class="btn" onclick="saveTextileDtfConfig()">💾 DTF sozlamalarini saqlash</button>
+                    </div>
+                </div>
+
+
+                <div style="display:flex; justify-content:flex-end;">
+                    <button class="btn btn-success" onclick="saveTextileConfig()">💾 Material/Rang sozlamalarini saqlash</button>
+                </div>
+            </div>
+
+            <!-- BAYROQLAR ADMIN PANEL BLOKI -->
+            <div id="bayroqAdminBox" style="display: none; margin-bottom: 28px;">
+
+                <div class="add-pen-card" id="bayroqAddForm">
+                    <div class="add-pen-card-head">
+                        <div class="add-pen-card-title" id="bayroqFormTitle">➕ Yangi Bayroq Qo'shish</div>
+                        <div class="add-pen-card-sub">Nomi, rasmi, ma'lumoti va narx oraliqlarini (konstruksiya + bayroq) kiriting.</div>
+                    </div>
+                    <div class="model-form-section">
+                        <div class="form-row">
+                            <div class="form-group" style="flex:2; min-width:260px;">
+                                <label>Mahsulot turi (nomi):</label>
+                                <input type="text" id="bayroqNameInput" placeholder="Masalan: Парус уличный флаг">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group" style="flex:1; min-width:280px;">
+                                <label>Ma'lumot (mijozga ko'rsatiladi — o'lcham, mato, pechat va h.k.):</label>
+                                <textarea id="bayroqInfoInput" rows="12" oninput="this.style.height='auto'; this.style.height=this.scrollHeight+'px';" placeholder="Размер флага: 0,60х2,20 м&#10;Ткань флага: Полиэстер 135гр.&#10;..." style="width:100%; min-height:280px; padding:10px 12px; border:1.5px solid var(--border); border-radius:8px; font-family:inherit; font-size:0.9rem; line-height:1.5; resize:vertical;"></textarea>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group" style="flex:1;">
+                                <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                                    <input type="checkbox" id="bayroqKonsBor" checked onchange="onBayroqKonsBorChange()" style="width:auto; height:auto;">
+                                    Bu mahsulotda konstruksiya bor (mijoz «konstruksiya bilan» yoki «konstruksiyasiz» tanlay oladi)
+                                </label>
+                                <small>Belgi olib tashlansa — konstruksiyasiz mahsulot (masalan yostiq, vimpel): faqat bayroq narxi kiritiladi.</small>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group" style="flex:1;">
+                                <label>Narx oraliqlari (tiraj bo'yicha): narx = konstruksiya + bayroq, so'ng marja qo'shiladi</label>
+                                <div id="bayroqTierRows"></div>
+                                <div id="bayroqTierWarn" class="admin-hint" style="margin-top:6px;"></div>
+                                <button type="button" class="btn" style="background:#4f46e5; margin-top:6px;" onclick="addBayroqTierRow()">+ Oraliq qo'shish</button>
+                                <small>Konstruksiya bor bo'lsa mijoz standart holatda «konstruksiya bilan» narxini ko'radi; «konstruksiyasiz» tanlasa faqat bayroq narxi olinadi.</small>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Rasm Yuklash (Lokal):</label>
+                                <div class="image-upload-row">
+                                    <div class="image-upload-preview" id="bayroqImagePreviewBox">
+                                        <img id="bayroqImagePreview" alt="" style="display:none;" onerror="this.src=placeholderImg('Rasm yo'q', 150, 150)">
+                                        <span id="bayroqImagePreviewPlaceholder">🚩</span>
+                                    </div>
+                                    <input type="file" id="bayroqFileInput" accept="image/*" onchange="previewBayroqImage(this)">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button class="btn btn-outline" id="btnCancelBayroqEdit" style="display:none;" onclick="cancelBayroqEdit()">Bekor qilish</button>
+                        <button class="btn" onclick="saveBayroqItem()">💾 Saqlash</button>
+                    </div>
+                </div>
+
+                <div class="table-card" id="bayroqTableCard">
+                    <div class="model-list-head">
+                        <div class="model-list-head-left">
+                            <h3>📋 Bayroqlar Ro'yxati</h3>
+                            <span class="model-list-count" id="bayroqAdminCount"></span>
+                        </div>
+                        <div class="model-list-search">
+                            <input type="text" id="bayroqAdminSearchInput" placeholder="🔍 Nomi bo'yicha qidirish..." oninput="filterBayroqAdminGrid()">
+                        </div>
+                    </div>
+                    <div class="model-grid" id="bayroqAdminGrid"></div>
+                </div>
+            </div>
+
+<!-- @/blok -->
+
+<!-- Qalqib chiquvchi oyna (modal) -->
+<!-- @blok modal -->
+<!-- DTF RULONGA JOYLASHTIRISH SXEMASI (MODAL) -->
+<div id="dtfLayoutOverlay" class="dtf-layout-overlay" onclick="closeDtfLayoutModal()">
+    <div class="dtf-layout-modal" onclick="event.stopPropagation()">
+        <div class="dtf-layout-modal-header">
+            <h3 id="dtfLayoutModalTitle">Rulonga joylashtirish</h3>
+            <button class="quote-cart-close" onclick="closeDtfLayoutModal()">✕</button>
+        </div>
+        <div id="dtfLayoutModalBody" class="dtf-layout-modal-body"></div>
+    </div>
+</div>
+<!-- @/blok -->

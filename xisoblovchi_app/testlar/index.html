@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hisob-kitob testlari</title>
+<style>
+    body { font-family: system-ui, Arial, sans-serif; margin: 24px; color: #1f2937; background: #f8fafc; }
+    h1 { font-size: 1.3rem; margin: 0 0 4px; }
+    .izoh { color: #64748b; font-size: 0.88rem; margin-bottom: 16px; max-width: 760px; line-height: 1.5; }
+    #xulosa { font-weight: 700; margin: 12px 0; font-size: 1.05rem; }
+    .yaxshi { color: #059669; } .yomon { color: #dc2626; }
+    table { border-collapse: collapse; background: #fff; min-width: 640px; }
+    th, td { border: 1px solid #e2e8f0; padding: 6px 12px; text-align: left; font-size: 0.88rem; }
+    th { background: #f1f5f9; }
+    td.son { text-align: right; font-variant-numeric: tabular-nums; }
+    tr.xato td { background: #fef2f2; }
+    pre { background: #0f172a; color: #e2e8f0; padding: 12px; border-radius: 8px; overflow: auto; max-height: 360px; font-size: 0.8rem; }
+    button { padding: 8px 14px; border-radius: 8px; border: 1px solid #cbd5e1; background: #fff; cursor: pointer; }
+    #sinov { position: absolute; left: -10000px; top: 0; width: 1280px; height: 900px; border: 0; }
+</style>
+</head>
+<body>
+<h1>🧪 Hisob-kitob testlari</h1>
+<p class="izoh">
+    Har bir holat ilovani <b>toza xotira bilan</b> (standart narxlarda; sizning saqlangan narxlaringizga tegmaydi) ochadi,
+    mahsulotni hisoblaydi va natijani <code>kutilgan.js</code> dagi qiymat bilan solishtiradi.
+    Hisob formulalariga tegilgandan keyin shu sahifani oching — kutilmagan o'zgargan narx qizil bilan ko'rinadi.
+    Yangi holatlar uchun sahifani <code>?yozib</code> bilan oching va chiqqan qiymatlarni <code>kutilgan.js</code> ga ko'chiring.
+</p>
+<div id="xulosa">Tayyorlanmoqda…</div>
+<button id="qayta">↻ Qayta ishga tushirish</button>
+<table id="jadval" style="margin-top:12px;">
+    <thead><tr><th>Holat</th><th>Adad</th><th>Kutilgan jami</th><th>Chiqqan jami</th><th>Dona narxi</th><th>Natija</th></tr></thead>
+    <tbody></tbody>
+</table>
+<div id="yozibBox" style="display:none; margin-top:20px;">
+    <h3>Joriy natijalar (kutilgan.js ga ko'chiring):</h3>
+    <pre id="yozibMatn"></pre>
+</div>
+<iframe id="sinov" title="sinov"></iframe>
+<script src="holatlar.js"></script>
+<script src="kutilgan.js"></script>
+<script src="yurgizish.js"></script>
+</body>
+</html>

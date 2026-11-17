@@ -1,0 +1,46 @@
+/* Umumiy shrift va o'qilishi — oxirida yuklanadi (boshqa CSS fayllarining ustidan ustun turadi).
+   Bitta shrift oilasi (Inter): sarlavha, matn va raqamlar uchun. Oldin sarlavhada ingichka "Big Shoulders"
+   va narx/raqamlarda monospace "IBM Plex Mono" edi — o'qish qiyin edi. Raqamlar bir xil kenglikda (tabular-nums),
+   shuning uchun narx ustunlari baribir tekis turadi. */
+:root {
+    --font-display: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --font-mono: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+html { font-size: 118.75%; } /* 19px: kichik yozuvlar (rem) ham birdek kattalashadi */
+body {
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    line-height: 1.55;
+}
+
+h1, h2, h3, h4 { letter-spacing: -0.01em; font-weight: 700; }
+
+/* Kichik BOSH HARFLI yozuvlar o'qishga qiyin — oddiy yozuvga o'tkazildi */
+.step-title, .poli-spec-label, .poli-gsm-field label, .card-preview-text span,
+.tier-preview-table th, .analytics-card-label, .home-hero-kicker, .home-recent-label,
+.home-sec-title, .login-role-name, .admin-table th, .quote-offer-table th {
+    text-transform: none;
+    letter-spacing: 0;
+}
+.step-title { font-weight: 700; font-size: 0.82rem; padding: 4px 11px; }
+.home-sec-title { font-size: 1.35rem; }
+.header-versiya, .home-search-kbd { font-weight: 600; }
+
+/* Kichik matnlar juda mayda bo'lib qolmasin */
+small, .admin-hint { font-size: 0.82rem; line-height: 1.5; }
+
+/* Bosh sahifadagi mahsulot kartochkalari nomi */
+.product-card h3, .home-sec .product-card h3 { font-size: 1.02rem; font-weight: 600; line-height: 1.25; }
+
+/* Telefon: kartochkalar ekrandan chiqib ketmasin (yozuv kattaroq bo'lgani uchun) */
+@media (max-width: 520px) {
+    .home-sec .product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .home-sec .product-card { min-width: 0; padding: 10px 10px; gap: 8px; }
+    .home-sec .product-card .icon { width: 36px; height: 36px; flex-shrink: 0; }
+    .home-sec .product-card h3, .product-card h3 { font-size: 0.92rem; overflow-wrap: anywhere; min-width: 0; }
+}
+
+/* Ichki ekranlardagi "Orqaga" tugmasi */
+.ekran-orqaga-qator { margin-bottom: 14px; }
