@@ -9,3 +9,6 @@ instance/
 *.xlsx
 .DS_Store
 uploads/
+
+# Arxiv nusxalar repoga kirmaydi
+*.zip
