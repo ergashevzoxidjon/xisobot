@@ -16,9 +16,55 @@
       <i class="bi bi-box-arrow-in-down"></i> Kirim</a>
     <a href="{{ url_for('stock.edit_material', material_id=material.id) }}" class="btn btn-outline-secondary">
       <i class="bi bi-pencil"></i> Tahrirlash</a>
+    {% if has_perm('stock.delete') %}
+    <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal"
+            data-bs-target="#deleteMaterialModal">
+      <i class="bi bi-trash"></i> O'chirish</button>
+    {% endif %}
   </div>
   {% endif %}
 </div>
+
+{% if has_perm('stock.delete') %}
+<div class="modal fade" id="deleteMaterialModal" tabindex="-1" aria-labelledby="deleteMaterialTitle" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <form method="post" class="modal-content"
+          action="{{ url_for('stock.delete_material', material_id=material.id) }}">
+      {{ csrf() }}
+      <div class="modal-header">
+        <h5 class="modal-title" id="deleteMaterialTitle">
+          <i class="bi bi-trash text-danger me-1"></i> «{{ material.name }}»ni o'chirish</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Yopish"></button>
+      </div>
+      <div class="modal-body">
+        {% if moves %}
+        <div class="alert alert-warning small mb-3">
+          <div class="fw-semibold mb-1"><i class="bi bi-exclamation-triangle"></i> Bu mahsulotning tarixi bor</div>
+          Mahsulot barcha kirim va chiqim yozuvlari bilan birga o'chadi:
+          <ul class="mb-1 mt-1">
+            <li>Kirimda to'langan pul ({{ received|uzs }} so'm) xarajatlarda <b>qoladi</b> — hisobot o'zgarmaydi.</li>
+            <li>Buyurtmalarga sarflangan qismi ({{ used|uzs }} so'm) o'sha buyurtmalar tannarxidan <b>chiqib ketadi</b>.</li>
+          </ul>
+          Buni ortga qaytarib bo'lmaydi.
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" name="confirm_moves" value="1"
+                 id="confirmMoves" required>
+          <label class="form-check-label" for="confirmMoves">
+            Tushundim, tarixi bilan birga butunlay o'chirilsin</label>
+        </div>
+        {% else %}
+        <p class="mb-0">Bu mahsulotda kirim yoki chiqim yo'q. Butunlay o'chirilsinmi?</p>
+        {% endif %}
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Bekor qilish</button>
+        <button class="btn btn-danger"><i class="bi bi-trash"></i> O'chirish</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
 
 <div class="row g-3 mb-3">
   <div class="col-sm-6 col-lg-3">
