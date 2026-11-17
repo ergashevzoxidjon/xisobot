@@ -25,6 +25,7 @@ from flask import (Blueprint, Response, abort, current_app, flash, jsonify,
 from flask_login import current_user, login_required
 from flask_wtf.csrf import generate_csrf
 
+import xisoblovchi_excel
 from auth import MAX_ATTEMPTS, clear_failures, recent_failures, record_failure
 from extensions import db
 from models import User, XisKV, log_action
@@ -346,6 +347,42 @@ def parse_backup(raw):
     if not out:
         raise ValueError("Faylda import qilinadigan erp_* sozlamalari topilmadi.")
     return out
+
+
+@xisoblovchi_bp.route("/excel/shablon", methods=["POST"])
+@login_required
+@permission_required("calc.edit")
+def excel_shablon():
+    """Brauzer joriy (standartlari bilan) sozlamalarni yuboradi — Excel shablon qaytadi."""
+    payload = request.get_json(silent=True) or {}
+    sections = payload.get("bolimlar")
+    if not isinstance(sections, list) or len(sections) > 100:
+        return jsonify({"xato": "Noto'g'ri so'rov"}), 400
+    data = xisoblovchi_excel.build_workbook(sections)
+    log_action(current_user, "xisoblovchi_excel_shablon", "xis_kv", None, "%d ta bo'lim" % len(sections))
+    db.session.commit()
+    return Response(
+        data,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="xisoblovchi-narxlar.xlsx"',
+                 "Cache-Control": "no-store"})
+
+
+@xisoblovchi_bp.route("/excel/oqish", methods=["POST"])
+@login_required
+@permission_required("calc.edit")
+def excel_oqish():
+    """Yuklangan Excelni JSON'ga o'giradi (bazaga yozmaydi — qiymatlarni brauzer qo'shib saqlaydi)."""
+    f = request.files.get("fayl")
+    if not f:
+        return jsonify({"xato": "Excel faylni tanlang."}), 400
+    try:
+        parsed = xisoblovchi_excel.parse_workbook(f.read(xisoblovchi_excel.MAX_FILE_BYTES + 1))
+    except ValueError as e:
+        return jsonify({"xato": str(e)}), 400
+    log_action(current_user, "xisoblovchi_excel_yuklash", "xis_kv", None, "%d ta varaq" % len(parsed))
+    db.session.commit()
+    return jsonify({"bolimlar": parsed})
 
 
 @xisoblovchi_bp.route("/zaxira/import", methods=["POST"])

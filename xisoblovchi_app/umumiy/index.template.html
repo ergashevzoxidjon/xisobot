@@ -23,46 +23,6 @@
 </head>
 <body>
 
-<!-- KIRISH DARVOZASI: tizimning qolgan qismi shundan keyingina ko'rinadi -->
-<div id="loginGateScreen" style="position:fixed; inset:0; z-index:9999; background:var(--bg-main); display:flex; align-items:center; justify-content:center; padding:20px;">
-    <div style="width:100%; max-width:380px; background:var(--surface); border:1.5px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); padding:32px 28px;">
-        <div style="margin-bottom:10px;">
-            <img src="umumiy/logo.png" alt="myprint.uz — print. design. ads." style="height:64px; width:auto; display:block;">
-        </div>
-
-        <!-- 1-QADAM: rol tanlash — Admin yoki Menejer kartochkasi -->
-        <div id="loginRoleStep">
-            <p style="color:var(--text-muted); font-size:0.85rem; margin:0 0 20px;">Davom etish uchun rolingizni tanlang.</p>
-            <div class="login-role-grid">
-                <div class="login-role-card login-role-admin" onclick="selectLoginRole('admin')">
-                    <div class="login-role-icon">🛡️</div>
-                    <div class="login-role-name">Admin</div>
-                    <div class="login-role-desc">To'liq boshqaruv</div>
-                </div>
-                <div class="login-role-card login-role-menejer" onclick="selectLoginRole('menejer')">
-                    <div class="login-role-icon">🧾</div>
-                    <div class="login-role-name">Menejer</div>
-                    <div class="login-role-desc">Hisob-kitob, buyurtma</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 2-QADAM: tanlangan rol uchun PIN kod kiritish -->
-        <div id="loginPinStep" style="display:none;">
-            <div class="login-pin-step-head">
-                <span class="login-pin-role-badge" id="loginSelectedRoleLabel"></span>
-                <button type="button" class="login-pin-back-btn" onclick="backToLoginRoleStep()">⬅️ Boshqa rol</button>
-            </div>
-            <div class="form-group" style="margin-bottom:10px;">
-                <label>PIN kod (parol)</label>
-                <input type="password" id="loginPinInput" placeholder="••••" inputmode="numeric" autocomplete="current-password" onkeydown="if(event.key==='Enter'){ attemptLoginGate(); }">
-            </div>
-            <div id="loginErrorMsg" style="display:none; color:var(--magenta); font-size:0.82rem; font-weight:600; margin-bottom:12px;"></div>
-            <button class="btn" style="width:100%;" onclick="attemptLoginGate()">Kirish</button>
-        </div>
-    </div>
-</div>
-
 <div class="container" id="appContainer" style="display:none;">
     <div class="header">
         <h1 onclick="goToLoginLandingScreen()" style="cursor:pointer;" title="Bosh sahifaga qaytish"><img class="header-logo" src="umumiy/logo.png" alt="myprint.uz — print. design. ads."> <span class="header-versiya">v3.8</span></h1>
@@ -114,6 +74,8 @@
         <div id="adminCategorySelection">
             <div style="margin-bottom:12px;">
                 <button class="btn btn-warning" id="addCustomProductBtn" style="white-space:nowrap;" onclick="openAddCustomProduct()">➕ Yangi mahsulot qo'shish</button>
+                <button class="btn" id="excelShablonBtn" style="white-space:nowrap;" onclick="excelShablonYuklash(this)" title="Joriy narxlarni Excel shablonga yuklab olish">📊 Excel shablon</button>
+                <button class="btn" id="excelYuklashBtn" style="white-space:nowrap;" onclick="excelFaylTanla()" title="To'ldirilgan Excel faylni qaytarib yuklash">📤 Excel yuklash</button>
             </div>
             <div id="narxTekshiruvBox"></div>
             <div id="marjaChegaraBox"></div>
@@ -560,6 +522,7 @@
 <script src="bolimlar/reklama/reklama.js"></script>
 <script src="umumiy/custom-products.js"></script>
 <script src="umumiy/full-calc.js"></script>
+<script src="umumiy/excel.js"></script>
 <script src="umumiy/admin-ux.js"></script>
 <script src="umumiy/narx-tekshiruv.js"></script>
 <script src="umumiy/rasm-ombori.js"></script>

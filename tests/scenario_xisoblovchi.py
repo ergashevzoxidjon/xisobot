@@ -208,6 +208,28 @@ try:
     os.unlink(db_path)
 except OSError:
     pass  # Windows: fayl hali band bo'lishi mumkin — vaqtinchalik fayl, muhim emas
+
+# ---- Excel shablon / yuklash (xisoblovchi_excel) ----
+import xisoblovchi_excel as xe
+_secs = [
+    {"kalit": "erp_default_prices", "nom": "Narxlar", "qiymat": {"flayer": 300, "a": {"b": [1, 2]}}},
+    {"kalit": "erp_digital_papers_db", "nom": "Qogoz", "qiymat": [{"name": "A", "price1": 800}, {"name": "B", "price1": 900}]},
+    {"kalit": "erp_taxi_narxi", "nom": "Taxi", "qiymat": 25000},
+]
+_parsed = xe.parse_workbook(xe.build_workbook(_secs))
+check("Excel: 3 ta varaq o'qildi", set(_parsed) == {"erp_default_prices", "erp_digital_papers_db", "erp_taxi_narxi"})
+check("Excel: daraxt yo'llari", ["a.b[1]", 2] in _parsed["erp_default_prices"]["qatorlar"])
+check("Excel: jadval sarlavha va qatorlar", _parsed["erp_digital_papers_db"]["sarlavha"] == ["name", "price1"]
+      and _parsed["erp_digital_papers_db"]["qatorlar"][1] == ["B", 900])
+check("Excel: yakka son 'qiymat' yo'li", _parsed["erp_taxi_narxi"]["qatorlar"] == [["qiymat", 25000]])
+try:
+    xe.parse_workbook(b"bu excel emas")
+    check("Excel: yaroqsiz fayl rad etiladi", False)
+except ValueError:
+    check("Excel: yaroqsiz fayl rad etiladi", True)
+_c = admin.post("/xisoblovchi/excel/shablon", json={"bolimlar": _secs})
+check("Excel shablon: admin oladi (200, xlsx)", _c.status_code == 200 and _c.data[:2] == b"PK")
+check("Excel shablon: menejer ololmaydi", men.post("/xisoblovchi/excel/shablon", json={"bolimlar": _secs}).status_code in (302, 403))
 print()
 if fails:
     print(f"XATOLAR ({len(fails)}):")

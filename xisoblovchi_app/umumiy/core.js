@@ -232,83 +232,12 @@
         return user || (rol === 'admin' ? { id: 'u_admin', name: 'admin', pin: '', role: 'admin' } : { id: 'u_menejer', name: 'menejer', pin: '', role: 'menejer' });
     }
 
-    // ====================== KIRISH DARVOZASI (LOGIN GATE) ======================
-    // Butun tizim shu ekran ortida — avval Admin yoki Menejer kartochkasi tanlanadi,
-    // keyin o'sha rol uchun PIN kod so'raladi. PIN to'g'ri kelmaguncha #appContainer
-    // ko'rsatilmaydi.
-    let loginSelectedRole = null;
-
-    // Rol kartochkasi bosilganda — kartochkalar bosqichini yashirib, PIN kiritish
-    // blokini ochadi va tanlangan rol nomini ko'rsatadi.
-    function selectLoginRole(role) {
-        loginSelectedRole = role;
-        let roleStep = document.getElementById('loginRoleStep');
-        let pinStep = document.getElementById('loginPinStep');
-        let roleLabel = document.getElementById('loginSelectedRoleLabel');
-        let pinInput = document.getElementById('loginPinInput');
-        let errEl = document.getElementById('loginErrorMsg');
-        if (roleStep) roleStep.style.display = 'none';
-        if (pinStep) pinStep.style.display = 'block';
-        if (roleLabel) roleLabel.innerText = role === 'admin' ? '🛡️ Admin' : '🧾 Menejer';
-        if (errEl) errEl.style.display = 'none';
-        if (pinInput) { pinInput.value = ''; pinInput.focus(); }
-    }
-
-    // "⬅️ Boshqa rol" tugmasi — PIN blokini yopib, rol tanlash kartochkalariga qaytaradi.
-    function backToLoginRoleStep() {
-        loginSelectedRole = null;
-        let roleStep = document.getElementById('loginRoleStep');
-        let pinStep = document.getElementById('loginPinStep');
-        let pinInput = document.getElementById('loginPinInput');
-        let errEl = document.getElementById('loginErrorMsg');
-        if (pinStep) pinStep.style.display = 'none';
-        if (roleStep) roleStep.style.display = 'block';
-        if (pinInput) pinInput.value = '';
-        if (errEl) errEl.style.display = 'none';
-    }
-
-    function attemptLoginGate() {
-        let pinInput = document.getElementById('loginPinInput');
-        let errEl = document.getElementById('loginErrorMsg');
-        let pin = (pinInput?.value || '').trim();
-
-        function showErr(msg) {
-            if (errEl) { errEl.innerText = msg; errEl.style.display = 'block'; }
-        }
-
-        if (!loginSelectedRole) {
-            showErr('⚠️ Avval Admin yoki Menejer kartochkasini tanlang.');
-            return;
-        }
-
-        if (!pin) {
-            showErr('⚠️ PIN kodni kiriting.');
-            return;
-        }
-
-        let user = usersDb.find(u => u.role === loginSelectedRole && u.pin === pin);
-        if (!user) {
-            showErr('⚠️ PIN kod noto\'g\'ri.');
-            if (pinInput) { pinInput.value = ''; pinInput.focus(); }
-            return;
-        }
-
-        if (errEl) errEl.style.display = 'none';
-        try { sessionStorage.setItem('erp_current_user_id', user.id); } catch (e) {}
-        // logAudit o'zi currentUser'ni "kim qildi" sifatida yozadi — shuning uchun avval
-        // completeLoginGate orqali currentUser'ni o'rnatamiz, keyin audit yozuvini qo'shamiz.
-        completeLoginGate(user);
-        if (typeof logAudit === 'function') logAudit('Tizimga kirildi', `${user.role === 'admin' ? 'Admin' : 'Menejer'}`);
-    }
-
     // Login muvaffaqiyatli bo'lgach (yoki sessiyadan tiklangach) darvozani yopib, asosiy ilovani ko'rsatadi.
     // Rolga qarab boshlang'ich ekran ham farqlanadi: admin — to'g'ridan-to'g'ri Admin Panelga,
     // menejer — hisoblash (mahsulotlar) ekraniga tushadi.
     function completeLoginGate(user) {
         currentUser = user;
-        let gate = document.getElementById('loginGateScreen');
         let app = document.getElementById('appContainer');
-        if (gate) gate.style.display = 'none';
         if (app) app.style.display = 'block';
         updateCurrentUserBadge();
 
@@ -423,14 +352,6 @@
         try { sessionStorage.removeItem('erp_current_user_id'); } catch (e) {}
         updateCurrentUserBadge();
         showScreen('selectionScreen');
-
-        // Ilovani yashirib, kirish darvozasini qayta ko'rsatamiz — chiqishdan keyin
-        // tizimning qolgan qismi yana login talab qiladi.
-        let gate = document.getElementById('loginGateScreen');
-        let app = document.getElementById('appContainer');
-        if (app) app.style.display = 'none';
-        if (gate) gate.style.display = 'flex';
-        backToLoginRoleStep();
     }
 
     function updateCurrentUserBadge() {

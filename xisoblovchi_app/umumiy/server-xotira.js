@@ -109,6 +109,9 @@
     window.addEventListener('pagehide', () => { if (kutmoqda.size) { clearTimeout(taymer); yubor(); } });
 
     // ---- admin tasdig'i (eski "admin PIN" o'rniga admin akkauntining paroli) ----
+    // Saqlash hali tugamaganmi (Excel yuklangach sahifani qayta yuklashdan oldin tekshiriladi)
+    window.xisSaqlashKutilmoqda = function () { return kutmoqda.size > 0 || yuborilmoqda; };
+
     window.adminTasdiq = async function (parol) {
         try {
             const r = await fetch(new URL('api/admin-tasdiq', location.href), {
