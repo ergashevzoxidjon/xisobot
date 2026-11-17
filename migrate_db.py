@@ -517,6 +517,10 @@ def main():
         # bo'sh qoladi. ---
         add_column("cash_deposit", "source VARCHAR(100)", "source")
 
+        # --- v22: OFIS kassasi naqd va karta qismlarga bo'linadi
+        # (2026-11-17). Eski to'ldirishlar naqd deb belgilanadi. ---
+        add_column("cash_deposit", "channel VARCHAR(10) DEFAULT 'naqd' NOT NULL", "channel")
+
         migrate_paid_amount()
         ensure_upload_folder(app)
 

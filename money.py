@@ -50,10 +50,10 @@ from models import (
     CashHandover, HANDOVER_PENDING, HANDOVER_CONFIRMED, User, ZERO, log_action,
     HANDOVER_CHANNEL_CASH, HANDOVER_CHANNEL_CARD,
     CashDeposit, Expense,
+    OFFICE_CHANNELS, OFFICE_CHANNEL_CASH, OFFICE_CHANNEL_CARD,
 )
 from permissions import permission_required
 from queries import (
-    card_balances, total_confirmed_handover_amount,
     office_summary, office_deposit_sources,
 )
 from utils import now_local, money_str, parse_money, parse_text, ValidationError
@@ -92,17 +92,6 @@ def list_handovers():
         if sees_office else None
     )
 
-    card_balance_rows = []
-    if current_user.role in ("admin", "boss"):
-        boss_users = User.query.filter_by(role="boss").order_by(User.username).all()
-        cbalances = card_balances()
-        card_balance_rows = [
-            {"user": u, "balance": cbalances.get(u.id, ZERO)} for u in boss_users
-        ]
-    card_total_received = (
-        total_confirmed_handover_amount(HANDOVER_CHANNEL_CARD) if sees_office else None
-    )
-
     cash_expenses = None
     if sees_office:
         cash_expenses = (
@@ -110,7 +99,7 @@ def list_handovers():
                 joinedload(Expense.creator), joinedload(Expense.order),
                 joinedload(Expense.supplier),
             )
-            .filter(Expense.payment_method == "naqd", Expense.is_paid.is_(True))
+            .filter(Expense.payment_method.in_(OFFICE_CHANNELS), Expense.is_paid.is_(True))
             .order_by(Expense.date.desc(), Expense.id.desc())
             .limit(100).all()
         )
@@ -120,7 +109,6 @@ def list_handovers():
         pending=pending, confirmed=confirmed,
         office=office, office_deposits=office_deposits,
         deposit_sources=office_deposit_sources() if sees_office else [],
-        card_balance_rows=card_balance_rows, card_total_received=card_total_received,
         cash_expenses=cash_expenses,
         can_confirm=current_user.role in ("admin", "xarajatchi", "boss"),
         now=now_local(),
@@ -168,16 +156,23 @@ def fund_office():
         flash(str(e), "danger")
         return redirect(url_for("money.list_handovers"))
 
-    d = CashDeposit(amount=amount, source=source, note=note, created_by=current_user.id)
+    channel = request.form.get("channel") or OFFICE_CHANNEL_CASH
+    if channel not in OFFICE_CHANNELS:
+        flash("Pul naqd yoki kartaga tushganini tanlang.", "danger")
+        return redirect(url_for("money.list_handovers"))
+
+    d = CashDeposit(amount=amount, source=source, note=note, channel=channel,
+                    created_by=current_user.id)
     db.session.add(d)
     db.session.flush()
     log_action(
         current_user, "create", "cash_deposit", d.id,
-        f"OFIS hisobi to'ldirildi: {money_str(amount)} so'm, manba: {source}"
+        f"OFIS hisobi ({channel}) to'ldirildi: {money_str(amount)} so'm, manba: {source}"
         + (f" — {note}" if note else ""),
     )
     db.session.commit()
-    flash(f"OFIS hisobiga {money_str(amount)} so'm qo'shildi (manba: {source}).", "success")
+    part = "kartasiga" if channel == OFFICE_CHANNEL_CARD else "kassasiga (naqd)"
+    flash(f"OFIS {part} {money_str(amount)} so'm qo'shildi (manba: {source}).", "success")
     return redirect(url_for("money.list_handovers"))
 
 
@@ -201,6 +196,10 @@ def adjust_deposit(deposit_id):
         return redirect(url_for("money.list_handovers"))
 
     changes = []
+    new_channel = request.form.get("channel") or d.channel
+    if new_channel in OFFICE_CHANNELS and new_channel != d.channel:
+        changes.append(f"qism {d.channel} -> {new_channel}")
+        d.channel = new_channel
     if (new_source or "") != (d.source or ""):
         changes.append(f"manba «{d.source or '-'}» -> «{new_source or '-'}»")
         d.source = new_source

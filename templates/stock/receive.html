@@ -168,9 +168,14 @@
     <label class="form-label mt-3">To'lov holati</label>
     <div class="d-flex flex-wrap gap-2">
       <input type="radio" class="btn-check" name="payment_method" value="naqd" id="paidCash" autocomplete="off"
-             {% if posted_payment_method not in ['perechisleniye', 'qarzga'] %}checked{% endif %}>
+             {% if posted_payment_method not in ['perechisleniye', 'qarzga', 'karta'] %}checked{% endif %}>
       <label class="btn btn-outline-success btn-sm" for="paidCash">
         <i class="bi bi-check-circle me-1"></i>Naqd to'landi</label>
+
+      <input type="radio" class="btn-check" name="payment_method" value="karta" id="paidCard" autocomplete="off"
+             {% if posted_payment_method == 'karta' %}checked{% endif %}>
+      <label class="btn btn-outline-info btn-sm" for="paidCard">
+        <i class="bi bi-credit-card me-1"></i>Karta orqali to'landi</label>
 
       <input type="radio" class="btn-check" name="payment_method" value="perechisleniye" id="paidTransfer" autocomplete="off"
              {% if posted_payment_method == 'perechisleniye' %}checked{% endif %}>
@@ -199,7 +204,11 @@
 
     <div id="cashSourceBlock" class="form-text mt-2">
       <i class="bi bi-building"></i> Naqd pul <b>OFIS kassasidan</b> chiqadi.
-      Hozirgi qoldiq: <span class="fw-semibold {% if office_balance < 0 %}text-danger{% endif %}">{{ office_balance|uzs }} so'm</span>.
+      Hozirgi naqd qoldiq: <span class="fw-semibold {% if office_balance < 0 %}text-danger{% endif %}">{{ office_balance|uzs }} so'm</span>.
+    </div>
+    <div id="cardSourceBlock" class="form-text mt-2" style="display:none">
+      <i class="bi bi-credit-card"></i> Pul <b>OFIS kartasidan</b> chiqadi.
+      Kartadagi qoldiq: <span class="fw-semibold {% if office_card_balance < 0 %}text-danger{% endif %}">{{ office_card_balance|uzs }} so'm</span>.
     </div>
 </div>
   </div>
@@ -456,8 +465,10 @@ function syncPaidVia() {
   const checked = document.querySelector('input[name="payment_method"]:checked');
   const isTransfer = checked && checked.value === 'perechisleniye';
   const isCash = checked && checked.value === 'naqd';
+  const isCard = checked && checked.value === 'karta';
   paidViaBlock.style.display = isTransfer ? '' : 'none';
   cashSourceBlock.style.display = isCash ? '' : 'none';
+  document.getElementById('cardSourceBlock').style.display = isCard ? '' : 'none';
 }
 document.querySelectorAll('input[name="payment_method"]').forEach(r => {
   r.addEventListener('change', syncPaidVia);

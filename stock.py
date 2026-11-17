@@ -25,7 +25,7 @@ from extensions import db
 from models import (
     Material, StockMove, Expense, Order, Supplier, log_action,
     STOCK_IN, STOCK_OUT, STOCK_UNITS, STOCK_EXPENSE_CATEGORY, ZERO,
-    PAYMENT_CASH, PAYMENT_TRANSFER, PAYER_COMPANIES,
+    PAYMENT_CASH, PAYMENT_TRANSFER, PAYMENT_CARD, PAYER_COMPANIES,
     CASH_SOURCE_OFFICE,
 )
 from permissions import permission_required
@@ -373,14 +373,15 @@ def receipt_rows_from_form(form):
     return rows
 
 
-def office_shortage_warning(amount):
-    """OFIS kassasida `amount` uchun pul yetmasa — ogohlantirish matni,
-    yetsa `None`. Yozuvdan OLDIN chaqiriladi."""
-    balance = office_balance()
+def office_shortage_warning(amount, channel=PAYMENT_CASH):
+    """OFIS kassasining shu qismida (naqd yoki karta) `amount` uchun pul
+    yetmasa — ogohlantirish matni, yetsa `None`. Yozuvdan OLDIN chaqiriladi."""
+    balance = office_balance(channel)
     if amount <= balance:
         return None
+    part = "kartasida" if channel == PAYMENT_CARD else "kassasida (naqd)"
     return (
-        f"OFIS kassasida {money_str(balance)} so'm bor edi, bu xarajat "
+        f"OFIS {part} {money_str(balance)} so'm bor edi, bu xarajat "
         f"{money_str(amount)} so'm — qoldiq {money_str(balance - amount)} so'mga "
         "tushdi. «Pullar» bo'limida OFIS hisobini to'ldiring."
     )
@@ -398,7 +399,7 @@ def _receipt_payment_from_form(form, user, total):
     supplier = supplier_from_form(form)
     payment_choice = parse_choice(
         form.get("payment_method"), "To'lov holati",
-        [PAYMENT_CASH, PAYMENT_TRANSFER, "qarzga"], required=False,
+        [PAYMENT_CASH, PAYMENT_CARD, PAYMENT_TRANSFER, "qarzga"], required=False,
         default=PAYMENT_CASH,
     )
     paid_via = None
@@ -411,9 +412,10 @@ def _receipt_payment_from_form(form, user, total):
     source_order_id = None
     cash_source = None
     warning = None
-    if payment_choice == PAYMENT_CASH:
+    if payment_choice in (PAYMENT_CASH, PAYMENT_CARD):
+        # naqd ham, karta ham OFIS kassasidan — o'z qismidan ayriladi
         cash_source = CASH_SOURCE_OFFICE
-        warning = office_shortage_warning(total)
+        warning = office_shortage_warning(total, payment_choice)
 
     is_paid = payment_choice != "qarzga"
     return {
@@ -509,6 +511,9 @@ def receive():
         if not payment["is_paid"]:
             flash(f"{len(rows)} ta mahsulot omborga qabul qilindi — "
                   f"{money_str(total)} so'm «{supplier.name}»ga qarzga yozildi.", "warning")
+        elif payment["payment_method"] == PAYMENT_CARD:
+            flash(f"{len(rows)} ta mahsulot omborga qabul qilindi — "
+                  f"jami {money_str(total)} so'm OFIS kartasidan to'landi.", "success")
         elif payment["payment_method"] == PAYMENT_TRANSFER:
             flash(f"{len(rows)} ta mahsulot omborga qabul qilindi — "
                   f"jami {money_str(total)} so'm «{payment['paid_via']}» orqali "
@@ -577,7 +582,8 @@ def _receive_page(form):
         materials=materials_with_stock(only_active=True),
         suppliers=Supplier.query.filter_by(is_active=True).order_by(Supplier.name).all(),
         preselected_id=preselected,
-        office_balance=office_balance(),
+        office_balance=office_balance("naqd"),
+        office_card_balance=office_balance("karta"),
         today_date=today_local(),
         units=STOCK_UNITS,
         payer_companies=PAYER_COMPANIES,

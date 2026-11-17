@@ -318,13 +318,13 @@ card_handover_pending = SimpleNamespace(
     order=order, order_id=1, created_at=datetime.now(), confirmed_at=None,
 )
 office_deposit = SimpleNamespace(
-    id=1, amount=Decimal("200000.00"), note="Kassa to'ldirish", source="Zoxidjon", created_at=datetime.now(),
+    id=1, amount=Decimal("200000.00"), note="Kassa to'ldirish", source="Zoxidjon", channel="naqd", created_at=datetime.now(),
     creator=boss_user,
 )
 cash_expense = SimpleNamespace(
     id=1, date=TODAY, creator=xarajatchi_user, category="xomashyo",
     description="Qog'oz sotib olindi", supplier=None, order=None,
-    amount=Decimal("50000.00"),
+    amount=Decimal("50000.00"), payment_method="naqd",
 )
 
 # ---- HR va Manager xisoboti mocklari (2026-08-29, foydalanuvchi qarori) ----
@@ -461,6 +461,7 @@ CONTEXTS = {
     "stock/receive.html": dict(materials=[material], suppliers=[supplier, supplier_no_debt],
                                preselected_id=None,
                                office_balance=Decimal("-25000.00"),
+                               office_card_balance=Decimal("75000.00"),
                                today_date=TODAY, form=None,
                                units=["dona", "list", "kg"],
                                payer_companies=["Marvel Creative MChJ", "MyPrint MChJ"]),
@@ -583,10 +584,14 @@ CONTEXTS = {
     "managers/jurnal.html": dict(),
     "money/list.html": dict(
         pending=[handover_pending, card_handover_pending], confirmed=[handover_confirmed],
-        card_balance_rows=[{"user": boss_user, "balance": Decimal("75000.00")}],
-        card_total_received=Decimal("75000.00"),
-        office={"cash_in": Decimal("150000.00"), "deposited": Decimal("200000.00"),
-                "spent": Decimal("400000.00"), "balance": Decimal("-50000.00")},
+        office={
+            "cash": {"cash_in": Decimal("150000.00"), "deposited": Decimal("200000.00"),
+                     "spent": Decimal("400000.00"), "balance": Decimal("-50000.00")},
+            "card": {"cash_in": Decimal("75000.00"), "deposited": Decimal("0.00"),
+                     "spent": Decimal("25000.00"), "balance": Decimal("50000.00")},
+            "total": {"cash_in": Decimal("225000.00"), "deposited": Decimal("200000.00"),
+                      "spent": Decimal("425000.00"), "balance": Decimal("0.00")},
+        },
         office_deposits=[office_deposit], deposit_sources=["Zoxidjon", "Karta"],
         now=datetime(2026, 11, 17, 13, 30),
         cash_expenses=[cash_expense],

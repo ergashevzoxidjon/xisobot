@@ -690,7 +690,8 @@ with app.app_context():
     check("OFIS: naqd xarajat +5000", now["spent"] - office_before["spent"] == 5000)
     check("OFIS: qoldiq = tushgan + to'ldirilgan - sarflangan",
           now["balance"] == now["cash_in"] + now["deposited"] - now["spent"]
-          and office_balance() == now["balance"])
+          and office_balance() == now["cash"]["balance"]
+          and now["balance"] == now["cash"]["balance"] + now["card"]["balance"])
     check("OFIS: tasdiqlangan naqd topshiriqlar kassaga tushgan (>= 80000)",
           now["cash_in"] >= 80000)
 
@@ -733,6 +734,24 @@ with app.app_context():
           d.source == "Zoxidjon" and d.created_at is not None)
     check("To'ldirishdan keyin qoldiq +100000", office_balance() == before_fund + 100000)
 
+# karta: kirim kartadan to'lansa — karta qismidan ayriladi, naqdga tegmaydi
+with app.app_context():
+    cash_b, card_b = office_balance("naqd"), office_balance("karta")
+with app.test_client() as c:
+    login(c, "xar_t")
+    r = c.post("/ombor/kirim", data=_kirim_data("4", "1000", {"payment_method": "karta"}),
+               follow_redirects=True)
+    check("Karta orqali to'langan kirim qabul qilindi", r.status_code == 200)
+    r = c.post("/pullar/ofis-toldirish", data={"amount": "30000", "source": "Bank",
+                                               "channel": "karta"}, follow_redirects=True)
+with app.app_context():
+    e = Expense.query.order_by(Expense.id.desc()).first()
+    check("Karta xarajati: payment_method='karta'", e.payment_method == "karta" and e.is_paid)
+    check("Karta qismi: −4000 + 30000", office_balance("karta") == card_b - 4000 + 30000)
+    check("Naqd qismi o'zgarmadi", office_balance("naqd") == cash_b)
+    d = CashDeposit.query.order_by(CashDeposit.id.desc()).first()
+    check("Kartaga to'ldirish channel='karta'", d.channel == "karta" and d.source == "Bank")
+
 with app.test_client() as c:
     login(c, "xar_t")
     r = c.get("/pullar/")
@@ -740,6 +759,8 @@ with app.test_client() as c:
     check("Pullar sahifasida 'OFIS hisobini to'ldirish' va tarix",
           "OFIS hisobini to'ldirish" in body and "To'ldirishlar tarixi" in body
           and "Zoxidjon" in body)
+    check("Pullar sahifasida Naqd va Kartada alohida", "Kartada" in body and "Naqd" in body
+          and "OFIS kassasi qanday hisoblandi" in body)
     check("Pullar sahifasida 'Zoxidjon xisobidan' manbasi YO'Q", "Zoxidjon xisobidan" not in body)
 
     r = c.post("/ombor/kirim", data=_kirim_data("2", "1000", {"payment_method": "qarzga"}),

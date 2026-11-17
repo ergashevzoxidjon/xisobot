@@ -138,8 +138,16 @@ STOCK_EXPENSE_CATEGORY = "xomashyo"
 
 PAYMENT_CASH = "naqd"
 PAYMENT_TRANSFER = "perechisleniye"
+# OFIS kartasidan to'langan (2026-11-17, foydalanuvchi so'rovi) — OFIS
+# kassasining "kartada" qismidan ayriladi.
+PAYMENT_CARD = "karta"
 # Faqat is_paid=True bo'lganda mantiqiy — qarzga olinganda bo'sh qoladi.
-PAYMENT_METHODS = [PAYMENT_CASH, PAYMENT_TRANSFER]
+PAYMENT_METHODS = [PAYMENT_CASH, PAYMENT_CARD, PAYMENT_TRANSFER]
+
+# OFIS kassasining ikki qismi: naqd va karta.
+OFFICE_CHANNEL_CASH = "naqd"
+OFFICE_CHANNEL_CARD = "karta"
+OFFICE_CHANNELS = [OFFICE_CHANNEL_CASH, OFFICE_CHANNEL_CARD]
 
 # Perechisleniye qilinganda pul shu tashkilotlardan birining hisobidan
 # ketadi — hisobot/tahlilda qaysi tashkilot orqali qancha to'langani
@@ -677,6 +685,10 @@ class CashDeposit(db.Model):
     amount = db.Column(MONEY, nullable=False)
     # Pul qayerdan keldi — eski yozuvlarda bo'sh bo'lishi mumkin
     source = db.Column(db.String(100))
+    # Kassaning qaysi qismiga tushdi: "naqd" yoki "karta" (2026-11-17).
+    # Eski yozuvlar migratsiyada "naqd" bo'ladi.
+    channel = db.Column(db.String(10), nullable=False, default="naqd",
+                        server_default="naqd")
     note = db.Column(db.String(255))
     created_at = db.Column(db.DateTime, default=now_local)
     created_by = db.Column(db.Integer, db.ForeignKey("user.id"))

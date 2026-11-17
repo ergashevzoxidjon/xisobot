@@ -648,49 +648,56 @@ def cash_source_totals():
 
 # ---- OFIS zaxirasini to'ldirish — 2026-09-08, foydalanuvchi qarori ----
 
-def office_deposited_total():
-    """Boshliq tomonidan OFIS zaxirasiga BUTUN TARIX bo'yicha kiritilgan
-    jami summa."""
-    return to_money(
-        db.session.query(func.coalesce(func.sum(CashDeposit.amount), 0)).scalar()
-    )
+def office_deposited_total(channel=None):
+    """OFIS kassasiga qo'lda kiritilgan jami summa (butun tarix).
+    `channel` berilsa — faqat naqd yoki faqat karta qismi."""
+    q = db.session.query(func.coalesce(func.sum(CashDeposit.amount), 0))
+    if channel is not None:
+        q = q.filter(CashDeposit.channel == channel)
+    return to_money(q.scalar())
 
 
-def office_cash_in_total():
-    """Buyurtmalardan OFIS kassasiga tushgan naqd: ish boshqaruvchi (yoki
-    admin) "qabul qildim" deb tasdiqlagan naqd topshiriqlar jami. Karta
-    to'lovlari bu yerga kirmaydi — ular boshliqning kartasiga tushadi."""
-    return total_confirmed_handover_amount(HANDOVER_CHANNEL_CASH)
+def office_cash_in_total(channel=HANDOVER_CHANNEL_CASH):
+    """Buyurtmalardan OFIS kassasiga tushgan pul: tasdiqlangan topshiriqlar
+    jami. Naqd — ish boshqaruvchi "qabul qildim" deganda; karta — boshliq
+    kartaga tushganini tasdiqlaganda (2026-11-17 dan karta ham OFIS
+    kassasining "kartada" qismi hisoblanadi)."""
+    return total_confirmed_handover_amount(channel)
 
 
-def office_spent_total():
-    """OFIS kassasidan chiqqan pul: BARCHA to'langan naqd xarajatlar
-    (2026-11-17, foydalanuvchi qarori — manba tanlanmaydi; eski
-    "Zoxidjon xisobidan" va buyurtma puli hisobidan yozilganlar ham shu
-    yerga kiradi)."""
+def office_spent_total(payment_method="naqd"):
+    """OFIS kassasidan chiqqan pul: shu usulda to'langan BARCHA xarajatlar.
+    Naqd uchun — eski "Zoxidjon xisobidan" va buyurtma puli hisobidan
+    yozilganlar ham kiradi (2026-11-17, foydalanuvchi qarori)."""
     return to_money(
         db.session.query(func.coalesce(func.sum(Expense.amount), 0))
-        .filter(Expense.payment_method == "naqd", Expense.is_paid.is_(True))
+        .filter(Expense.payment_method == payment_method, Expense.is_paid.is_(True))
         .scalar()
     )
 
 
-def office_balance():
-    """OFIS kassasining joriy qoldig'i: buyurtmalardan tushgan naqd +
-    qo'lda to'ldirishlar − naqd xarajatlar. Manfiy bo'lishi mumkin —
-    demak to'ldirish kerak."""
-    return office_cash_in_total() + office_deposited_total() - office_spent_total()
+def _office_part(channel):
+    cash_in = office_cash_in_total(channel)
+    deposited = office_deposited_total(channel)
+    spent = office_spent_total(channel)
+    return {"cash_in": cash_in, "deposited": deposited, "spent": spent,
+            "balance": cash_in + deposited - spent}
+
+
+def office_balance(channel="naqd"):
+    """OFIS kassasining shu qismidagi joriy qoldiq (standart — naqd).
+    Manfiy bo'lishi mumkin — demak to'ldirish kerak."""
+    return _office_part(channel)["balance"]
 
 
 def office_summary():
-    """"Pullar" sahifasi uchun OFIS kassasining to'rt raqami."""
-    cash_in = office_cash_in_total()
-    deposited = office_deposited_total()
-    spent = office_spent_total()
-    return {
-        "cash_in": cash_in, "deposited": deposited, "spent": spent,
-        "balance": cash_in + deposited - spent,
-    }
+    """"Pullar" sahifasi uchun: naqd qism, karta qism va jami."""
+    cash = _office_part("naqd")
+    card = _office_part("karta")
+    total = {k: cash[k] + card[k] for k in cash}
+    return {"cash": cash, "card": card, "total": total,
+            # eski kalitlar (jami) — boshqa joylar uchun
+            **total}
 
 
 def office_deposit_sources(limit=12):

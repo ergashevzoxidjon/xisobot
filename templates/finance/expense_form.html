@@ -375,6 +375,9 @@
           <input type="radio" class="btn-check" name="payment_method" value="naqd" id="qrPaidCash" autocomplete="off" checked>
           <label class="btn btn-outline-success btn-sm" for="qrPaidCash">
             <i class="bi bi-check-circle me-1"></i>Naqd to'landi</label>
+          <input type="radio" class="btn-check" name="payment_method" value="karta" id="qrPaidCard" autocomplete="off">
+          <label class="btn btn-outline-info btn-sm" for="qrPaidCard">
+            <i class="bi bi-credit-card me-1"></i>Karta orqali to'landi</label>
           <input type="radio" class="btn-check" name="payment_method" value="perechisleniye" id="qrPaidTransfer" autocomplete="off">
           <label class="btn btn-outline-primary btn-sm" for="qrPaidTransfer">
             <i class="bi bi-bank me-1"></i>Perechisleniye</label>
@@ -395,7 +398,7 @@
         </div>
 
         <div id="qrCashSourceBlock" class="form-text mt-2">
-          <i class="bi bi-building"></i> Naqd pul <b>OFIS kassasidan</b> chiqadi.
+          <i class="bi bi-building"></i> Pul <b id="qrOfficePart">OFIS kassasidan (naqd)</b> chiqadi.
         </div>
         <input type="hidden" name="moved_on" id="qrMovedOn">
       </div>
@@ -771,7 +774,10 @@ function qrRecalc() {
 function qrSyncPayment() {
   const method = (qrForm.querySelector('input[name="payment_method"]:checked') || {}).value;
   document.getElementById('qrPaidViaBlock').style.display = method === 'perechisleniye' ? '' : 'none';
-  document.getElementById('qrCashSourceBlock').style.display = method === 'naqd' ? '' : 'none';
+  document.getElementById('qrCashSourceBlock').style.display =
+    (method === 'naqd' || method === 'karta') ? '' : 'none';
+  document.getElementById('qrOfficePart').textContent =
+    method === 'karta' ? 'OFIS kartasidan' : 'OFIS kassasidan (naqd)';
 }
 
 function openQuickReceive(name, targetRow) {

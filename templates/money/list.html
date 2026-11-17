@@ -3,55 +3,77 @@
 <div class="page-header">
   <div>
     <h3>Pullar</h3>
-    <div class="subtitle">Naqd to'lov ish boshqaruvchi «Qabul qildim» deganda OFIS kassasiga tushadi; barcha naqd xarajat shu kassadan chiqadi. Karta to'lovi boshliqning kartasiga tushadi.</div>
+    <div class="subtitle">Buyurtmalardan kelgan to'lov tasdiqlanganda OFIS kassasiga tushadi: naqd — naqd qismiga, karta — karta qismiga. Xarajat qaysi usulda to'lansa, o'sha qismdan chiqadi.</div>
   </div>
 </div>
 
 {% if office %}
 <div class="row g-3 mb-3">
-  <div class="col-6 col-lg-3">
+  <div class="col-12 col-lg-4">
     <div class="card p-3 stat-card h-100">
-      <div class="stat-icon {% if office.balance > 0 %}green{% elif office.balance < 0 %}red{% else %}slate{% endif %}">
+      <div class="stat-icon {% if office.total.balance > 0 %}green{% elif office.total.balance < 0 %}red{% else %}slate{% endif %}">
         <i class="bi bi-building"></i></div>
       <div>
-        <div class="stat-label">OFIS kassasi — qoldiq</div>
-        <div class="stat-value num {% if office.balance < 0 %}text-danger{% endif %}">{{ office.balance|uzs }}</div>
+        <div class="stat-label">OFIS kassasi — jami qoldiq</div>
+        <div class="stat-value num {% if office.total.balance < 0 %}text-danger{% endif %}">{{ office.total.balance|uzs }}</div>
       </div>
     </div>
   </div>
-  <div class="col-6 col-lg-3">
+  <div class="col-6 col-lg-4">
     <div class="card p-3 stat-card h-100">
       <div class="stat-icon green"><i class="bi bi-cash-coin"></i></div>
       <div>
-        <div class="stat-label">Buyurtmalardan tushgan naqd</div>
-        <div class="stat-value num">{{ office.cash_in|uzs }}</div>
+        <div class="stat-label">Naqd</div>
+        <div class="stat-value num {% if office.cash.balance < 0 %}text-danger{% endif %}">{{ office.cash.balance|uzs }}</div>
       </div>
     </div>
   </div>
-  <div class="col-6 col-lg-3">
+  <div class="col-6 col-lg-4">
     <div class="card p-3 stat-card h-100">
-      <div class="stat-icon blue"><i class="bi bi-plus-circle"></i></div>
+      <div class="stat-icon blue"><i class="bi bi-credit-card"></i></div>
       <div>
-        <div class="stat-label">Qo'lda to'ldirilgan</div>
-        <div class="stat-value num">{{ office.deposited|uzs }}</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-6 col-lg-3">
-    <div class="card p-3 stat-card h-100">
-      <div class="stat-icon red"><i class="bi bi-cash-stack"></i></div>
-      <div>
-        <div class="stat-label">Naqd xarajatlar</div>
-        <div class="stat-value num">{{ office.spent|uzs }}</div>
+        <div class="stat-label">Kartada</div>
+        <div class="stat-value num {% if office.card.balance < 0 %}text-danger{% endif %}">{{ office.card.balance|uzs }}</div>
       </div>
     </div>
   </div>
 </div>
 
-{% if office.balance < 0 %}
+<div class="card p-3 mb-3">
+  <h6 class="fw-bold mb-2"><i class="bi bi-table me-1 text-muted"></i> OFIS kassasi qanday hisoblandi</h6>
+  <div class="table-responsive">
+    <table class="table table-sm mb-0 office-breakdown">
+      <thead><tr><th></th><th class="text-end">Naqd</th><th class="text-end">Kartada</th><th class="text-end">Jami</th></tr></thead>
+      <tbody>
+        <tr><td>Buyurtmalardan tushgan</td>
+          <td class="text-end num">{{ office.cash.cash_in|uzs }}</td>
+          <td class="text-end num">{{ office.card.cash_in|uzs }}</td>
+          <td class="text-end num">{{ office.total.cash_in|uzs }}</td></tr>
+        <tr><td>Qo'lda to'ldirilgan</td>
+          <td class="text-end num">{% if office.cash.deposited %}+{% endif %}{{ office.cash.deposited|uzs }}</td>
+          <td class="text-end num">{% if office.card.deposited %}+{% endif %}{{ office.card.deposited|uzs }}</td>
+          <td class="text-end num">{% if office.total.deposited %}+{% endif %}{{ office.total.deposited|uzs }}</td></tr>
+        <tr><td>Xarajatlar</td>
+          <td class="text-end num text-danger">{% if office.cash.spent %}−{% endif %}{{ office.cash.spent|uzs }}</td>
+          <td class="text-end num text-danger">{% if office.card.spent %}−{% endif %}{{ office.card.spent|uzs }}</td>
+          <td class="text-end num text-danger">{% if office.total.spent %}−{% endif %}{{ office.total.spent|uzs }}</td></tr>
+        <tr class="fw-bold"><td>Qoldiq</td>
+          <td class="text-end num {% if office.cash.balance < 0 %}text-danger{% endif %}">{{ office.cash.balance|uzs }}</td>
+          <td class="text-end num {% if office.card.balance < 0 %}text-danger{% endif %}">{{ office.card.balance|uzs }}</td>
+          <td class="text-end num {% if office.total.balance < 0 %}text-danger{% endif %}">{{ office.total.balance|uzs }}</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if office.cash.balance < 0 or office.card.balance < 0 %}
 <div class="alert alert-danger py-2 small d-flex align-items-center gap-2">
   <i class="bi bi-exclamation-triangle"></i>
-  <span>OFIS kassasi minusda — sarflangan pul tushganidan {{ (-office.balance)|uzs }} so'm ko'p. Pastdan OFIS hisobini to'ldiring.</span>
+  <span>
+    {% if office.cash.balance < 0 %}Naqd qism minusda ({{ office.cash.balance|uzs }} so'm). {% endif %}
+    {% if office.card.balance < 0 %}Karta qismi minusda ({{ office.card.balance|uzs }} so'm). {% endif %}
+    Pastdan OFIS hisobini to'ldiring.
+  </span>
 </div>
 {% endif %}
 
@@ -65,6 +87,15 @@
   {% if has_perm('money.fund') %}
   <form method="post" action="{{ url_for('money.fund_office') }}" class="no-print">
     {{ csrf() }}
+    <div class="mb-2">
+      <span class="form-label small text-muted me-2">Pul qayerga tushdi:</span>
+      <div class="btn-group btn-group-sm" role="group" aria-label="Naqd yoki karta">
+        <input type="radio" class="btn-check" name="channel" value="naqd" id="fundCash" autocomplete="off" checked>
+        <label class="btn btn-outline-success" for="fundCash"><i class="bi bi-cash-coin me-1"></i>Naqd</label>
+        <input type="radio" class="btn-check" name="channel" value="karta" id="fundCard" autocomplete="off">
+        <label class="btn btn-outline-info" for="fundCard"><i class="bi bi-credit-card me-1"></i>Karta</label>
+      </div>
+    </div>
     <div class="row g-2 align-items-end">
       <div class="col-sm-6 col-lg-2">
         <label class="form-label small text-muted" for="fundAmount">Summa</label>
@@ -110,12 +141,13 @@
   {% if office_deposits %}
   <div class="table-responsive">
     <table class="table table-sm stack-table mb-0">
-      <thead><tr><th>Sana va vaqt</th><th>Manba</th><th>Kim yozdi</th><th>Izoh</th>
+      <thead><tr><th>Sana va vaqt</th><th>Qayerga</th><th>Manba</th><th>Kim yozdi</th><th>Izoh</th>
         <th class="text-end">Summa</th><th class="no-print"></th></tr></thead>
       <tbody>
       {% for d in office_deposits %}
       <tr>
         <td data-label="Sana" class="small num">{{ d.created_at|datetime_uz }}</td>
+        <td data-label="Qayerga">{% if d.channel == 'karta' %}<span class="badge text-bg-info"><i class="bi bi-credit-card me-1"></i>karta</span>{% else %}<span class="badge bg-success"><i class="bi bi-cash-coin me-1"></i>naqd</span>{% endif %}</td>
         <td data-label="Manba">{% if d.source %}<span class="badge bg-info-subtle text-info-emphasis border">{{ d.source }}</span>{% else %}<span class="text-muted small">—</span>{% endif %}</td>
         <td data-label="Kim" class="small">{{ d.creator.display_name if d.creator else '-' }}</td>
         <td data-label="Izoh" class="text-muted small">{{ d.note or '-' }}</td>
@@ -160,6 +192,13 @@
                    value="{{ d.amount|whole }}" required>
           </div>
           <div class="mb-2">
+            <label class="form-label small text-muted">Qayerga tushgan</label>
+            <select name="channel" class="form-select">
+              <option value="naqd" {% if d.channel != 'karta' %}selected{% endif %}>Naqd</option>
+              <option value="karta" {% if d.channel == 'karta' %}selected{% endif %}>Karta</option>
+            </select>
+          </div>
+          <div class="mb-2">
             <label class="form-label small text-muted">Manba</label>
             <input type="text" name="source" class="form-control" value="{{ d.source or '' }}"
                    maxlength="100" list="fundSourceList">
@@ -183,7 +222,7 @@
 {% if cash_expenses is not none %}
 <div class="card p-3 mb-3">
   <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
-    <h6 class="fw-bold mb-0"><i class="bi bi-cash-stack me-1 text-muted"></i> OFIS kassasidan naqd xarajatlar</h6>
+    <h6 class="fw-bold mb-0"><i class="bi bi-cash-stack me-1 text-muted"></i> OFIS kassasidan xarajatlar (naqd va karta)</h6>
     {% if cash_expenses %}
     <a class="small text-decoration-none no-print" data-bs-toggle="collapse" href="#cashExpensesList" role="button">
       <i class="bi bi-clock-history"></i> Ro'yxat ({{ cash_expenses|length }})
@@ -196,7 +235,7 @@
       <table class="table table-sm mb-0">
         <thead>
           <tr>
-            <th>Sana</th><th>Kim</th><th>Turkum</th><th>Tavsif</th>
+            <th>Sana</th><th>Qayerdan</th><th>Kim</th><th>Turkum</th><th>Tavsif</th>
             <th class="text-end">Summa</th><th class="no-print"></th>
           </tr>
         </thead>
@@ -204,6 +243,7 @@
         {% for e in cash_expenses %}
         <tr>
           <td class="text-muted small num">{{ e.date|date_uz }}</td>
+          <td>{% if e.payment_method == 'karta' %}<span class="badge text-bg-info">karta</span>{% else %}<span class="badge bg-success">naqd</span>{% endif %}</td>
           <td class="small">{{ e.creator.display_name if e.creator else '-' }}</td>
           <td><span class="badge bg-secondary"><i class="bi {{ e.category|category_icon }} me-1"></i>{{ e.category }}</span></td>
           <td class="text-muted small">
@@ -226,28 +266,8 @@
     </div>
   </div>
   {% else %}
-  <div class="empty-state py-3"><i class="bi bi-cash-stack"></i><p class="mb-0">Hali naqd xarajat yo'q</p></div>
+  <div class="empty-state py-3"><i class="bi bi-cash-stack"></i><p class="mb-0">Hali xarajat yo'q</p></div>
   {% endif %}
-</div>
-{% endif %}
-
-{% if card_balance_rows %}
-<div class="card p-3 mb-3">
-  <h6 class="fw-bold mb-3"><i class="bi bi-credit-card me-1 text-muted"></i> Boshliqlar — joriy karta qoldig'i
-    {% if card_total_received is not none %}<span class="text-muted small fw-normal ms-2">jami kartaga tushgan: {{ card_total_received|uzs }} so'm</span>{% endif %}</h6>
-  <div class="table-responsive">
-  <table class="table table-sm mb-0">
-    <thead><tr><th>Boshliq</th><th class="text-end">Kartadagi pul</th></tr></thead>
-    <tbody>
-    {% for row in card_balance_rows %}
-    <tr>
-      <td>{{ row.user.display_name }}</td>
-      <td class="text-end num fw-semibold {% if row.balance > 0 %}text-success{% endif %}">{{ row.balance|uzs }}</td>
-    </tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  </div>
 </div>
 {% endif %}
 
