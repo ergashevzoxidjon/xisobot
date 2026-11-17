@@ -15,6 +15,22 @@
 <form method="post">
   {{ csrf() }}
 
+  {% if similar %}
+  <input type="hidden" name="confirm_duplicate" value="1">
+  <div class="alert alert-warning">
+    <div class="fw-semibold mb-2"><i class="bi bi-exclamation-triangle"></i> Bazada o'xshash mijoz bor — bu o'sha emasmi?</div>
+    <ul class="mb-2">
+      {% for c, why in similar %}
+      <li><a href="{{ url_for('clients.client_detail', client_id=c.id) }}" target="_blank">{{ c.name }}</a>
+        {% if c.phone %}· {{ c.phone }}{% endif %} <span class="text-muted small">({{ why }})</span></li>
+      {% endfor %}
+    </ul>
+    <div class="small">Agar bu boshqa mijoz bo'lsa, pastdagi <b>Baribir saqlash</b> tugmasini bosing.</div>
+  </div>
+  {% endif %}
+
+  <div id="dupHint" class="alert alert-warning py-2 small d-none"></div>
+
   <div class="form-step">
     <div class="form-step-head">
       <span class="step-num"><i class="bi bi-person"></i></span>
@@ -67,10 +83,42 @@
   </div>
 
   <div class="sticky-actions">
-    <button class="btn btn-primary"><i class="bi bi-check-lg"></i> Saqlash</button>
+    <button class="btn btn-primary"><i class="bi bi-check-lg"></i> {{ 'Baribir saqlash' if similar else 'Saqlash' }}</button>
     <a href="{{ url_for('clients.client_detail', client_id=client.id) if client else url_for('clients.list_clients') }}"
        class="btn btn-outline-secondary">Bekor qilish</a>
   </div>
 </form>
 </div>
+
+{% if not client %}
+<script>
+(function () {
+  var nameEl = document.querySelector('input[name="name"]');
+  var phoneEl = document.querySelector('input[name="phone"]');
+  var hint = document.getElementById('dupHint');
+  var timer = null;
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) {
+    return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]; }); }
+  function check() {
+    var n = nameEl.value.trim(), p = phoneEl.value.trim();
+    if (n.length < 3 && p.replace(/\D/g, '').length < 9) { hint.classList.add('d-none'); return; }
+    fetch('{{ url_for("clients.similar_clients") }}?name=' + encodeURIComponent(n) +
+          '&phone=' + encodeURIComponent(p), {credentials: 'same-origin'})
+      .then(function (r) { return r.ok ? r.json() : []; })
+      .then(function (list) {
+        if (!list.length) { hint.classList.add('d-none'); return; }
+        hint.innerHTML = '<i class="bi bi-exclamation-triangle"></i> O'xshash mijoz bor: ' +
+          list.map(function (c) {
+            return '<a href="' + esc(c.url) + '" target="_blank">' + esc(c.name) + '</a>' +
+                   (c.phone ? ' (' + esc(c.phone) + ')' : '');
+          }).join(', ');
+        hint.classList.remove('d-none');
+      }).catch(function () {});
+  }
+  function later() { clearTimeout(timer); timer = setTimeout(check, 400); }
+  nameEl.addEventListener('input', later);
+  phoneEl.addEventListener('input', later);
+})();
+</script>
+{% endif %}
 {% endblock %}

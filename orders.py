@@ -6,7 +6,7 @@ from decimal import Decimal
 
 from flask import (
     Blueprint, render_template, request, redirect, url_for, flash,
-    current_app, send_from_directory, jsonify,
+    current_app, send_from_directory, jsonify, abort,
 )
 from flask_login import login_required, current_user
 from sqlalchemy import func, or_
@@ -19,14 +19,15 @@ from models import (
     Order, OrderItem, Client, Payment, OrderType, OrderFile, CompanySettings,
     ClientPipelineCard, User, log_action, can_transition,
     ORDER_STATUSES, ALLOWED_TRANSITIONS, STATUS_CANCELLED, STATUS_PRODUCTION,
-    STATUS_READY, ZERO, ORDER_PAYMENT_METHODS,
+    STATUS_READY, STATUS_DELIVERED, ZERO, ORDER_PAYMENT_METHODS,
     CashHandover, HANDOVER_PENDING, CASH_PAYMENT_METHOD, CARD_PAYMENT_METHOD,
     HANDOVER_CHANNEL_CASH, HANDOVER_CHANNEL_CARD,
-    StockMove, STOCK_IN, STOCK_OUT, SubmitToken,
+    StockMove, STOCK_IN, STOCK_OUT, SubmitToken, snap, changes_text,
 )
 from notifications import notify_new_order, notify_payment
 from permissions import permission_required, has_perm
 from queries import eager_orders
+import sms
 from utils import (
     ValidationError, parse_money, parse_int, parse_date, parse_text, parse_choice,
     to_money, today_local, now_local, money_str, qty_str,
@@ -153,7 +154,29 @@ def _client_from_form(form):
     )
     db.session.add(client)
     db.session.flush()
+    # Yangi mijoz bazadagi boshqasiga o'xshasa — to'sqinlik qilmaymiz, lekin ogohlantiramiz
+    if client.phone:
+        from clients import find_similar_clients
+        same = [c.name for c, why in find_similar_clients(None, client.phone, exclude_id=client.id)
+                if why == "telefon raqami bir xil"]
+        if same:
+            flash(f"Diqqat: bu telefon raqami boshqa mijozda ham bor: {', '.join(same)}. "
+                  "Bir mijoz ikki marta kiritilmaganini tekshiring.", "warning")
     return client, True
+
+
+ORDER_AUDIT_FIELDS = ["deadline", "description", "total_price"]
+ORDER_AUDIT_LABELS = {
+    "deadline": "Muddat", "description": "Izoh", "total_price": "Summa",
+    "client": "Mijoz", "items": "Qatorlar",
+}
+
+
+def _items_text(items):
+    """Buyurtma qatorlarining qisqa matni — audit uchun (turi × miqdor × narx)."""
+    return " | ".join(
+        f"{i.order_type} x{i.quantity} @{i.unit_price}" for i in items
+    )
 
 
 def _order_common_fields(form):
@@ -202,6 +225,12 @@ def list_orders():
     elif manager_id:
         query = query.filter(Order.created_by == manager_id)
 
+    # Kechikkanlar soni (barcha oylar bo'yicha) — "Kechikkan" tugmasi yonida ko'rsatiladi
+    overdue_count = query.filter(
+        Order.deadline.isnot(None), Order.deadline < today_local(),
+        Order.status.notin_([STATUS_DELIVERED, STATUS_CANCELLED]),
+    ).count()
+
     # Oylar bo'yicha bo'limlar: har oy alohida tab. Standart — joriy oy;
     # qidiruv berilganda esa hamma oylar bo'yicha qidiriladi.
     month_rows = (
@@ -232,6 +261,13 @@ def list_orders():
     if month_start is None:
         month = ""
 
+    overdue_only = request.args.get("overdue") == "1"
+    if overdue_only:
+        # Kechikkanlar: muddati o'tgan va hali yetkazilmagan/bekor qilinmagan
+        query = query.filter(
+            Order.deadline.isnot(None), Order.deadline < today_local(),
+            Order.status.notin_([STATUS_DELIVERED, STATUS_CANCELLED]),
+        )
     if status and status in ORDER_STATUSES:
         query = query.filter(Order.status == status)
     if q:
@@ -266,6 +302,8 @@ def list_orders():
         manager_id=manager_id,
         month=month,
         month_tabs=month_tabs,
+        overdue_only=overdue_only,
+        overdue_count=overdue_count,
     )
 
 
@@ -533,6 +571,10 @@ def edit_order(order_id):
             log_action(current_user, "create", "client", client.id,
                        f"{client.name} (buyurtma orqali)")
 
+        before = snap(o, ORDER_AUDIT_FIELDS)
+        before["client"] = o.client.name if o.client else None
+        before["items"] = _items_text(o.items)
+
         o.client_id = client.id
         for key, value in common.items():
             setattr(o, key, value)
@@ -544,8 +586,12 @@ def edit_order(order_id):
         o.recalc_from_items()
 
         o.version = (o.version or 1) + 1
+        after = snap(o, ORDER_AUDIT_FIELDS)
+        after["client"] = client.name
+        after["items"] = _items_text(o.items)
+        diff = changes_text(before, after, ORDER_AUDIT_LABELS)
         log_action(current_user, "update", "order", o.id,
-                   f"{o.order_number} tahrirlandi ({len(items)} qator)")
+                   f"{o.order_number} tahrirlandi" + (f" — {diff}" if diff else " (o'zgarish yo'q)"))
         db.session.commit()
         flash("Buyurtma yangilandi.", "success")
         return redirect(url_for("orders.order_detail", order_id=o.id))
@@ -580,6 +626,39 @@ def order_detail(order_id):
         order_payment_methods=ORDER_PAYMENT_METHODS,
         active_xarajatchi=_active_xarajatchi() if has_perm("orders.manage") else [],
         active_boss=_active_boss() if has_perm("orders.manage") else [],
+        sms_available=sms.is_configured() and o.status == STATUS_READY
+        and bool(o.client and sms.normalize_phone(o.client.phone))
+        and (has_perm("orders.manage") or has_perm("orders.status")),
+    )
+
+
+def _qr_svg(text):
+    """Matndan QR kod (SVG, ichki o'lchamda). segno o'rnatilmagan bo'lsa — None."""
+    try:
+        import io
+        import segno
+        buf = io.BytesIO()
+        segno.make(text, error="m").save(buf, kind="svg", scale=4, border=1,
+                                         xmldecl=False, svgns=True, nl=False)
+        return buf.getvalue().decode("utf-8")
+    except Exception:
+        return None
+
+
+@orders_bp.route("/<int:order_id>/ishlab-chiqarish")
+@login_required
+@permission_required("orders.view")
+def production_sheet(order_id):
+    """Ishlab chiqarishga beriladigan varaqa: mijoz, texnik parametrlar, muddat, QR kod.
+    QR kod skanerlanganda buyurtma sahifasi ochiladi (holatni tez ko'rish uchun)."""
+    o = Order.query.options(joinedload(Order.client)).get_or_404(order_id)
+    guard = _guard_order_owner(o)
+    if guard:
+        return guard
+    url = url_for("orders.order_detail", order_id=o.id, _external=True)
+    return render_template(
+        "orders/production_sheet.html", order=o, today=today_local(),
+        company=CompanySettings.get(), qr=_qr_svg(url), qr_url=url,
     )
 
 
@@ -662,6 +741,44 @@ def update_status(order_id):
                + (f" ({cancel_reason})" if cancel_reason else ""))
     db.session.commit()
     flash("Holat yangilandi.", "success")
+
+    # "Tayyor" bo'lganda mijozga avtomatik SMS (SMS_AUTO_READY=1 bo'lsa).
+    # Xatosi holatni o'zgartirishga ta'sir qilmaydi — alohida yoziladi.
+    if new_status == STATUS_READY and sms.is_configured() and sms.auto_on_ready():
+        ok, msg = _send_ready_sms(o)
+        flash(msg, "success" if ok else "warning")
+    return redirect(url_for("orders.order_detail", order_id=order_id))
+
+
+def _send_ready_sms(o):
+    if not o.client or not o.client.phone:
+        return False, "Mijozning telefon raqami kiritilmagan — SMS yuborilmadi."
+    text = sms.ready_message(o, CompanySettings.get().name or "")
+    ok, msg = sms.send_sms(o.client.phone, text)
+    log_action(current_user, "sms" if ok else "sms_xato", "order", o.id,
+               f"{o.client.phone}: {msg}")
+    db.session.commit()
+    return ok, msg
+
+
+@orders_bp.route("/<int:order_id>/sms", methods=["POST"])
+@login_required
+@permission_required("orders.view")
+def send_ready_sms(order_id):
+    """Qo'lda: mijozga "buyurtmangiz tayyor" SMS'ini yuborish."""
+    if not (has_perm("orders.manage") or has_perm("orders.status")):
+        abort(403)
+    o = Order.query.get_or_404(order_id)
+    guard = _guard_order_owner(o)
+    if guard:
+        return guard
+    if not sms.is_configured():
+        flash("SMS xizmati sozlanmagan (ESKIZ_EMAIL / ESKIZ_PASSWORD).", "warning")
+    elif o.status != STATUS_READY:
+        flash("SMS faqat \"yetkazish uchun tayyor\" holatidagi buyurtma uchun yuboriladi.", "warning")
+    else:
+        ok, msg = _send_ready_sms(o)
+        flash(msg, "success" if ok else "danger")
     return redirect(url_for("orders.order_detail", order_id=order_id))
 
 

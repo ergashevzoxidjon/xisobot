@@ -74,6 +74,63 @@
   </div>
 </div>
 
+{% if card and card.last_date %}
+<div class="row g-3 mb-3">
+  <div class="col-lg-4">
+    <div class="card p-3 h-100">
+      <h6 class="fw-bold mb-3"><i class="bi bi-person-lines-fill text-muted"></i> Mijoz haqida</h6>
+      <dl class="row mb-0 small">
+        <dt class="col-6 text-muted fw-normal">Birinchi buyurtma</dt><dd class="col-6 text-end">{{ card.first_date|date_uz }}</dd>
+        <dt class="col-6 text-muted fw-normal">Oxirgi buyurtma</dt><dd class="col-6 text-end">{{ card.last_date|date_uz }}</dd>
+        <dt class="col-6 text-muted fw-normal">O'rtacha chek</dt><dd class="col-6 text-end num">{{ card.avg_order|uzs }}</dd>
+        {% if card.top_types %}
+        <dt class="col-12 text-muted fw-normal mt-2">Ko'p buyurtma qiladi</dt>
+        <dd class="col-12 mb-0">{% for t, n in card.top_types %}<span class="badge bg-light text-dark border me-1">{{ t }} · {{ n }}</span>{% endfor %}</dd>
+        {% endif %}
+      </dl>
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card p-3 h-100">
+      <h6 class="fw-bold mb-3"><i class="bi bi-hourglass-split text-muted"></i> Qarz yoshi</h6>
+      {% if card.debts %}
+      <div class="small">
+        <div class="d-flex justify-content-between"><span>0–30 kun</span><b class="num">{{ card.aging['0-30']|uzs }}</b></div>
+        <div class="d-flex justify-content-between"><span>31–60 kun</span><b class="num {% if card.aging['31-60'] > 0 %}text-warning-emphasis{% endif %}">{{ card.aging['31-60']|uzs }}</b></div>
+        <div class="d-flex justify-content-between"><span>60 kundan ortiq</span><b class="num {% if card.aging['60+'] > 0 %}text-danger{% endif %}">{{ card.aging['60+']|uzs }}</b></div>
+      </div>
+      <hr class="my-2">
+      {% for d in card.debts[:4] %}
+      <div class="d-flex justify-content-between small">
+        <a href="{{ url_for('orders.order_detail', order_id=d.order.id) }}">{{ d.order.order_number }}</a>
+        <span class="text-muted">{{ d.age }} kun</span>
+        <span class="num text-danger">{{ d.debt|uzs }}</span>
+      </div>
+      {% endfor %}
+      {% else %}
+      <div class="text-success small"><i class="bi bi-check-circle"></i> Qarz yo'q</div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card p-3 h-100">
+      <h6 class="fw-bold mb-3"><i class="bi bi-cash-stack text-muted"></i> Oxirgi to'lovlar</h6>
+      {% if card.payments %}
+      {% for p, o in card.payments %}
+      <div class="d-flex justify-content-between small">
+        <span class="text-muted">{{ p.paid_on|date_uz }}</span>
+        <a href="{{ url_for('orders.order_detail', order_id=o.id) }}">{{ o.order_number }}</a>
+        <span class="num text-success">{{ p.amount|uzs }}</span>
+      </div>
+      {% endfor %}
+      {% else %}
+      <div class="text-muted small">Hali to'lov yo'q</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {% if client.notes %}
 <div class="card p-3 mb-3">
   <div class="stat-label mb-1"><i class="bi bi-sticky"></i> Izoh</div>

@@ -62,7 +62,7 @@
         <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
         <input class="form-control border-start-0" name="client_name" id="clientName" required autocomplete="off"
                placeholder="Mijoz nomini yozing..."
-               value="{{ order.client.name if order and order.client else (src.client_name|default('', true) if src else (prefill_client_name|default('', true))) }}">
+               value="{{ order.client.name if order and order.client else ((form.client_name if form else (prefill.client.name if prefill and prefill.client else ''))|default('', true) if src else (prefill_client_name|default('', true))) }}">
       </div>
       <div id="clientResults" class="list-group position-absolute w-100 shadow"
            style="z-index:1000; display:none; max-height:260px; overflow-y:auto"></div>

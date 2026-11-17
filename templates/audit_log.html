@@ -7,6 +7,42 @@
   </div>
 </div>
 
+<form method="get" class="card p-3 mb-3">
+  <div class="row g-2 align-items-end">
+    <div class="col-6 col-md-2">
+      <label class="form-label small mb-1">Foydalanuvchi</label>
+      <select name="user_id" class="form-select form-select-sm">
+        <option value="">Hammasi</option>
+        {% for u in users %}<option value="{{ u.id }}" {% if f.user_id == u.id %}selected{% endif %}>{{ u.display_name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-6 col-md-2">
+      <label class="form-label small mb-1">Obyekt</label>
+      <select name="entity" class="form-select form-select-sm">
+        <option value="">Hammasi</option>
+        {% for x in entities %}<option value="{{ x }}" {% if f.entity == x %}selected{% endif %}>{{ x }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-6 col-md-2">
+      <label class="form-label small mb-1">Harakat</label>
+      <select name="action" class="form-select form-select-sm">
+        <option value="">Hammasi</option>
+        {% for x in actions %}<option value="{{ x }}" {% if f.action == x %}selected{% endif %}>{{ x }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-6 col-md-2"><label class="form-label small mb-1">Dan</label>
+      <input type="date" name="from" value="{{ f.from }}" class="form-control form-control-sm"></div>
+    <div class="col-6 col-md-2"><label class="form-label small mb-1">Gacha</label>
+      <input type="date" name="to" value="{{ f.to }}" class="form-control form-control-sm"></div>
+    <div class="col-6 col-md-2"><label class="form-label small mb-1">Matn</label>
+      <input type="text" name="q" value="{{ f.q }}" class="form-control form-control-sm" placeholder="qidirish"></div>
+    <div class="col-12 d-flex gap-2">
+      <button class="btn btn-sm btn-primary"><i class="bi bi-funnel"></i> Filtrlash</button>
+      <a href="{{ url_for('auth.audit_log') }}" class="btn btn-sm btn-outline-secondary">Tozalash</a>
+    </div>
+  </div>
+</form>
+
 <div class="card p-3">
 {% if entries %}
 <div class="table-responsive">
@@ -19,13 +55,13 @@
   <td>{{ e.user.display_name if e.user else '-' }}</td>
   <td><span class="badge bg-secondary">{{ e.action }}</span></td>
   <td class="small text-muted">{{ e.entity or '-' }}{% if e.entity_id %} #{{ e.entity_id }}{% endif %}</td>
-  <td class="small">{{ e.detail or '-' }}</td>
+  <td class="small" style="white-space:normal;word-break:break-word">{{ e.detail or '-' }}</td>
 </tr>
 {% endfor %}
 </tbody>
 </table>
 </div>
-{{ pager(pagination, 'auth.audit_log') }}
+{{ pager(pagination, 'auth.audit_log', {'user_id': f.user_id, 'entity': f.entity, 'action': f.action, 'q': f.q, 'from': f.from, 'to': f.to}) }}
 {% else %}
 <div class="empty-state"><i class="bi bi-journal-text"></i><p>Jurnal bo'sh</p></div>
 {% endif %}

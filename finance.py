@@ -16,7 +16,7 @@ from models import (
     EXPENSE_CATEGORIES, GENERAL_EXPENSE_CATEGORIES, EXPENSE_ORDER_CATEGORY,
     STATUS_CANCELLED, STOCK_OUT, ZERO, PAYMENT_TRANSFER, PAYMENT_CASH,
     ORDER_PAYMENT_COMPANY_METHODS, CASH_SOURCE_OFFICE, TAXI_EXPENSE_CATEGORY,
-    Supplier, STOCK_UNITS, PAYER_COMPANIES,
+    Supplier, STOCK_UNITS, PAYER_COMPANIES, changes_text,
 )
 from permissions import permission_required, has_perm
 from queries import (
@@ -480,13 +480,21 @@ def edit_expense(expense_id):
             return _expense_page(selected_order=e.order, expense=e, form=request.form)
 
         # Tahrirlashda bitta yozuv o'zgaradi — birinchi qator hisobga olinadi
+        before = {"category": e.category, "amount": e.amount,
+                  "description": e.description, "date": e.date, "order_id": e.order_id}
         e.order_id = order.id if order else None
         e.category = category
         e.amount = rows[0]["amount"]
         e.description = rows[0]["description"]
         e.date = exp_date
 
-        log_action(current_user, "update", "expense", e.id, f"{e.category} — {e.amount}")
+        after = {"category": e.category, "amount": e.amount,
+                 "description": e.description, "date": e.date, "order_id": e.order_id}
+        diff = changes_text(before, after, {
+            "category": "Turkum", "amount": "Summa", "description": "Izoh",
+            "date": "Sana", "order_id": "Buyurtma №"})
+        log_action(current_user, "update", "expense", e.id,
+                   f"{e.category}" + (f" — {diff}" if diff else ""))
         db.session.commit()
         flash("Xarajat yangilandi.", "success")
         if e.order_id:
@@ -670,6 +678,105 @@ def report():
         income_company_total=income_company_total,
         income_today_total_all=income_today_total_all,
         **expense_breakdown(start, end),
+    )
+
+
+def sales_between(start, end):
+    """Sotuv (hisoblangan) — shu davrda YARATILGAN buyurtmalar summasi, to'lovdan qat'i nazar.
+    Bekor qilingan va o'chirilgan buyurtmalar hisobga olinmaydi."""
+    from datetime import datetime, time
+    total = (
+        db.session.query(func.coalesce(func.sum(Order.total_price), 0))
+        .filter(
+            Order.created_at >= datetime.combine(start, time.min),
+            Order.created_at < datetime.combine(end, time.min),
+            Order.status != STATUS_CANCELLED,
+            Order.is_deleted.is_(False),
+        )
+        .scalar()
+    )
+    return to_money(total)
+
+
+def pnl_period(start, end):
+    """Bir davr uchun foyda-zarar ko'rsatkichlari."""
+    sales = sales_between(start, end)
+    income = income_between(start, end)
+    expense = expenses_between(start, end)
+    return {
+        "sales": sales, "income": income, "expense": expense,
+        "cash_profit": income - expense,
+        "accrual_profit": sales - expense,
+    }
+
+
+def pct_change(new, old):
+    """Foizli o'zgarish (old == 0 bo'lsa None)."""
+    if not old:
+        return None
+    return round(float((new - old) * 100 / old), 1)
+
+
+@finance_bp.route("/foyda-zarar")
+@login_required
+@permission_required("reports.view")
+def profit_loss():
+    """Foyda va zarar (P&L) hisoboti: tanlangan oy yoki butun yil, oldingi davr bilan solishtirib."""
+    from datetime import date
+    from utils import month_bounds as _month_bounds
+
+    today = today_local()
+    year = request.args.get("year", today.year, type=int)
+    if year < 2000 or year > 2100:
+        year = today.year
+    month = request.args.get("month", today.month if "year" not in request.args else 0, type=int)
+    if not 1 <= month <= 12:
+        month = 0
+
+    if month:
+        start, end = _month_bounds(year, month)
+        py, pm = (year - 1, 12) if month == 1 else (year, month - 1)
+        p_start, p_end = _month_bounds(py, pm)
+        label = f"{UZ_MONTHS[month - 1]} {year}"
+        prev_label = f"{UZ_MONTHS[pm - 1]} {py}"
+    else:
+        start, end = date_range_for_year(year)
+        p_start, p_end = date_range_for_year(year - 1)
+        label = f"{year}-yil"
+        prev_label = f"{year - 1}-yil"
+
+    cur = pnl_period(start, end)
+    prev = pnl_period(p_start, p_end)
+    change = {k: pct_change(cur[k], prev[k]) for k in cur}
+
+    def by_category(s, e):
+        rows = (
+            db.session.query(Expense.category, func.coalesce(func.sum(Expense.amount), 0))
+            .filter(Expense.date >= s, Expense.date < e)
+            .group_by(Expense.category).all()
+        )
+        return {c or "boshqa": to_money(a) for c, a in rows}
+
+    cur_cat, prev_cat = by_category(start, end), by_category(p_start, p_end)
+    cat_rows = []
+    for name in sorted(set(cur_cat) | set(prev_cat), key=lambda n: cur_cat.get(n, ZERO), reverse=True):
+        amount, before = cur_cat.get(name, ZERO), prev_cat.get(name, ZERO)
+        cat_rows.append({
+            "name": name, "amount": amount, "prev": before,
+            "share": round(float(amount * 100 / cur["expense"]), 1) if cur["expense"] else 0,
+            "change": pct_change(amount, before),
+        })
+
+    def margin(profit, base):
+        return round(float(profit * 100 / base), 1) if base else None
+
+    return render_template(
+        "finance/pnl.html",
+        year=year, month=month, label=label, prev_label=prev_label,
+        cur=cur, prev=prev, change=change, cat_rows=cat_rows,
+        cash_margin=margin(cur["cash_profit"], cur["income"]),
+        accrual_margin=margin(cur["accrual_profit"], cur["sales"]),
+        months=UZ_MONTHS,
     )
 
 

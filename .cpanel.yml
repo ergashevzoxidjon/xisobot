@@ -1,0 +1,14 @@
+---
+# cPanel -> Git Version Control -> Manage -> "Deploy HEAD Commit" bosilganda bajariladi.
+# (Oddiy "Update from Remote" faqat kodni tortadi, bu fayl ishga tushmaydi.)
+#
+# Bazani migratsiya qilish bu yerda EMAS: deploy terminalida DATABASE_URL yo'q.
+# Migratsiya ilova qayta ishga tushganda o'zi bajariladi (autodeploy.py).
+deployment:
+  tasks:
+    - export APP=/home/mylogo/repositories/xisobot
+    - /bin/mkdir -p $APP/tmp
+    # yangi kutubxona qo'shilgan bo'lsa o'rnatadi (yo'l mos kelmasa deploy to'xtamaydi)
+    - /home/mylogo/virtualenv/repositories/xisobot/3.10/bin/pip install -r $APP/requirements.txt || true
+    # Passenger: shu faylga tegilsa ilova qayta ishga tushadi (RESTART tugmasi o'rniga)
+    - /bin/touch $APP/tmp/restart.txt

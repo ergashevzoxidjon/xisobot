@@ -326,6 +326,37 @@ a{ text-decoration:none; }
 .pipeline-timeline-date{ font-size:.74rem; color:#94a3b8; font-weight:600; }
 .pipeline-timeline-text{ font-size:.87rem; color:#1e293b; margin-top:.15rem; }
 
+/* ---- Telefon uchun umumiy moslashuv (2026-11-17) ---- */
+@media (max-width: 767px){
+  .content{ padding:1rem .85rem; }
+  .page-header{ flex-direction:column; align-items:stretch; margin-bottom:1rem; }
+  .page-header > .d-flex{ flex-wrap:wrap; }
+  .page-header h3{ font-size:1.2rem; }
+  .stat-value{ font-size:1.15rem; }
+  /* iOS inputga bosganda sahifani kattalashtirib yubormasin */
+  .form-control, .form-select{ font-size:16px; }
+  .btn{ min-height:38px; }
+  .btn-sm{ min-height:34px; }
+  .card.p-4{ padding:1rem !important; }
+  .pagination{ flex-wrap:wrap; }
+  /* Oddiy jadvallar (JS .stack-auto qo'shadi) — har qator alohida kartochka */
+  .stack-auto thead{ display:none; }
+  .stack-auto, .stack-auto tbody, .stack-auto tfoot{ display:block; width:100%; }
+  .stack-auto tbody tr, .stack-auto tfoot tr{
+    display:block; border:1px solid #e5e9f0; border-radius:11px;
+    padding:.55rem .7rem; margin-bottom:.6rem; background:#fff;
+  }
+  .stack-auto tbody td, .stack-auto tfoot td, .stack-auto tfoot th{
+    display:flex; align-items:center; justify-content:space-between; gap:.6rem;
+    padding:.25rem 0; border:none; text-align:right !important; min-width:0;
+  }
+  .stack-auto td::before{
+    content:attr(data-label); flex:0 0 38%; max-width:38%; text-align:left;
+    color:#64748b; font-size:.76rem; font-weight:600;
+  }
+  .stack-auto td:empty{ display:none; }
+}
+
 @media print{
   .sidebar, .topbar, .no-print{ display:none !important; }
   .main-area{ margin-left:0 !important; }
@@ -435,6 +466,9 @@ a{ text-decoration:none; }
       <a href="{{ url_for('finance.report') }}" class="{% if request.endpoint == 'finance.report' %}active{% endif %}">
         <i class="bi bi-graph-up-arrow"></i> Moliyaviy hisobot
       </a>
+      <a href="{{ url_for('finance.profit_loss') }}" class="{% if request.endpoint == 'finance.profit_loss' %}active{% endif %}">
+        <i class="bi bi-calculator-fill"></i> Foyda va zarar
+      </a>
       <a href="{{ url_for('finance.analytics') }}" class="{% if request.endpoint == 'finance.analytics' %}active{% endif %}">
         <i class="bi bi-pie-chart"></i> Tahlil
       </a>
@@ -462,6 +496,9 @@ a{ text-decoration:none; }
       </a>
       <a href="{{ url_for('settings.telegram') }}" class="{% if request.endpoint and request.endpoint.startswith('settings.telegram') %}active{% endif %}">
         <i class="bi bi-send"></i> Telegram
+      </a>
+      <a href="{{ url_for('settings.backups') }}" class="{% if request.endpoint and request.endpoint.startswith('settings.backup') %}active{% endif %}">
+        <i class="bi bi-database-down"></i> Zaxira nusxa
       </a>
       {% endif %}
       {% if has_perm('orders.delete') %}
@@ -581,6 +618,29 @@ window.addEventListener('pageshow', ev => {
     });
   });
 });
+
+/* Telefonda oddiy jadvallar kartochkaga aylanadi (2026-11-17): har katakka ustun nomi
+   (data-label) qo'yiladi, CSS esa qatorni kartochka qilib ko'rsatadi.
+   O'tkazib yuborish: <table class="no-stack">. Murakkab (colspan/rowspan) jadvallar tegilmaydi. */
+(function () {
+  const mq = window.matchMedia('(max-width: 767px)');
+  function stackTables() {
+    if (!mq.matches) return;
+    document.querySelectorAll('table.table:not(.stack-table):not(.no-stack):not(.stack-auto)').forEach(t => {
+      const heads = t.querySelectorAll('thead tr:last-child th');
+      if (!heads.length || t.querySelector('[colspan],[rowspan]')) return;
+      const labels = Array.from(heads, h => h.textContent.trim());
+      t.querySelectorAll('tbody tr, tfoot tr').forEach(tr => {
+        Array.from(tr.children).forEach((td, i) => {
+          if (labels[i]) td.setAttribute('data-label', labels[i]);
+        });
+      });
+      t.classList.add('stack-auto');
+    });
+  }
+  stackTables();
+  mq.addEventListener && mq.addEventListener('change', stackTables);
+})();
 
 /* Sanaladigan birliklar (dona, list, rulon, quti) — miqdor faqat butun son;
    kg, metr, litr — kasr bo'lishi mumkin. Server ham shuni tekshiradi

@@ -12,3 +12,6 @@ uploads/
 
 # Arxiv nusxalar repoga kirmaydi
 *.zip
+
+# cPanel deploy vaqtida Passenger restart belgisi
+tmp/

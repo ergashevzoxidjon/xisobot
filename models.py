@@ -941,7 +941,8 @@ class AuditLog(db.Model):
     action = db.Column(db.String(50), nullable=False)
     entity = db.Column(db.String(50))
     entity_id = db.Column(db.Integer)
-    detail = db.Column(db.String(255))
+    # Eski/yangi qiymatlar ham shu yerga yoziladi (2026-11-17) — shuning uchun Text
+    detail = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=now_local, index=True)
 
     user = db.relationship("User", foreign_keys=[user_id])
@@ -1173,7 +1174,32 @@ def log_action(user, action, entity=None, entity_id=None, detail=None):
         action=action,
         entity=entity,
         entity_id=entity_id,
-        detail=(detail or "")[:255],
+        detail=(detail or "")[:2000],
     )
     db.session.add(entry)
     return entry
+
+
+def snap(obj, fields):
+    """Obyektning tanlangan maydonlari nusxasi — o'zgarishdan OLDIN olinadi."""
+    return {f: getattr(obj, f, None) for f in fields}
+
+
+def _fmt(v):
+    if v is None or v == "":
+        return "—"
+    return str(v)
+
+
+def changes_text(before, after, labels=None):
+    """Eski va yangi qiymatlarni solishtirib "Maydon: eski → yangi" matnini qaytaradi.
+
+    O'zgarish bo'lmasa bo'sh satr qaytadi. labels — {maydon: ko'rinadigan nom}.
+    """
+    labels = labels or {}
+    parts = []
+    for key, old in before.items():
+        new = after.get(key)
+        if _fmt(old) != _fmt(new):
+            parts.append(f"{labels.get(key, key)}: {_fmt(old)} → {_fmt(new)}")
+    return "; ".join(parts)

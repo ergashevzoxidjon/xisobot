@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% macro delta(v, good_up=True) %}
+  {% if v is none %}<span class="text-muted">—</span>
+  {% else %}
+    {% set good = (v >= 0) == good_up %}
+    <span class="{{ 'text-success' if good else 'text-danger' }}">
+      <i class="bi bi-arrow-{{ 'up' if v >= 0 else 'down' }}-short"></i>{{ v|abs }}%</span>
+  {% endif %}
+{% endmacro %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h3>Foyda va zarar</h3>
+    <div class="subtitle">{{ label }} · {{ prev_label }} bilan solishtirilgan</div>
+  </div>
+  <div class="d-flex gap-2 no-print">
+    <button onclick="window.print()" class="btn btn-outline-secondary"><i class="bi bi-printer"></i> Chop etish</button>
+  </div>
+</div>
+
+<form method="get" class="card p-3 mb-3 no-print">
+  <div class="row g-2 align-items-end">
+    <div class="col-6 col-md-3">
+      <label class="form-label small mb-1">Yil</label>
+      <input type="number" name="year" value="{{ year }}" min="2000" max="2100" class="form-control" onchange="this.form.submit()">
+    </div>
+    <div class="col-6 col-md-3">
+      <label class="form-label small mb-1">Oy</label>
+      <select name="month" class="form-select" onchange="this.form.submit()">
+        <option value="0" {% if not month %}selected{% endif %}>Butun yil</option>
+        {% for name in months %}
+        <option value="{{ loop.index }}" {% if month == loop.index %}selected{% endif %}>{{ name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+</form>
+
+<div class="row g-3 mb-3">
+  <div class="col-sm-6 col-lg-3">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon blue"><i class="bi bi-bag-check"></i></div>
+      <div><div class="stat-label">Sotuv (buyurtmalar)</div>
+        <div class="stat-value num">{{ cur.sales|uzs }}</div>
+        <div class="small">{{ delta(change.sales) }}</div></div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon green"><i class="bi bi-cash-coin"></i></div>
+      <div><div class="stat-label">Tushum (to'langan)</div>
+        <div class="stat-value num text-success">{{ cur.income|uzs }}</div>
+        <div class="small">{{ delta(change.income) }}</div></div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon red"><i class="bi bi-wallet2"></i></div>
+      <div><div class="stat-label">Xarajat</div>
+        <div class="stat-value num text-danger">{{ cur.expense|uzs }}</div>
+        <div class="small">{{ delta(change.expense, False) }}</div></div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card p-3 stat-card">
+      <div class="stat-icon {{ 'green' if cur.cash_profit >= 0 else 'red' }}"><i class="bi bi-graph-up-arrow"></i></div>
+      <div><div class="stat-label">Sof foyda (tushum − xarajat)</div>
+        <div class="stat-value num {{ 'text-success' if cur.cash_profit >= 0 else 'text-danger' }}">{{ cur.cash_profit|uzs }}</div>
+        <div class="small">{{ delta(change.cash_profit) }}
+          {% if cash_margin is not none %}<span class="text-muted ms-1">rentabellik {{ cash_margin }}%</span>{% endif %}</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-5">
+    <div class="card p-3 h-100">
+      <h6 class="fw-bold mb-3">Hisob-kitob</h6>
+      <table class="table table-sm mb-0">
+        <thead><tr><th></th><th class="text-end">{{ label }}</th><th class="text-end text-muted">{{ prev_label }}</th></tr></thead>
+        <tbody>
+          <tr><td>Sotuv (yaratilgan buyurtmalar)</td><td class="text-end num">{{ cur.sales|uzs }}</td><td class="text-end num text-muted">{{ prev.sales|uzs }}</td></tr>
+          <tr><td>Tushum (olingan to'lovlar)</td><td class="text-end num">{{ cur.income|uzs }}</td><td class="text-end num text-muted">{{ prev.income|uzs }}</td></tr>
+          <tr><td>Xarajat</td><td class="text-end num">− {{ cur.expense|uzs }}</td><td class="text-end num text-muted">− {{ prev.expense|uzs }}</td></tr>
+          <tr class="fw-bold"><td>Sof foyda (naqd)</td>
+            <td class="text-end num {{ 'text-success' if cur.cash_profit >= 0 else 'text-danger' }}">{{ cur.cash_profit|uzs }}</td>
+            <td class="text-end num text-muted">{{ prev.cash_profit|uzs }}</td></tr>
+          <tr class="fw-bold"><td>Hisoblangan foyda (sotuv − xarajat)
+              {% if accrual_margin is not none %}<div class="small fw-normal text-muted">rentabellik {{ accrual_margin }}%</div>{% endif %}</td>
+            <td class="text-end num {{ 'text-success' if cur.accrual_profit >= 0 else 'text-danger' }}">{{ cur.accrual_profit|uzs }}</td>
+            <td class="text-end num text-muted">{{ prev.accrual_profit|uzs }}</td></tr>
+        </tbody>
+      </table>
+      <div class="form-text mt-2">
+        <b>Sof foyda</b> — haqiqatan olingan pul minus xarajat. <b>Hisoblangan foyda</b> — hali to'lanmagan
+        buyurtmalar ham hisobga olingan holda (sotuv minus xarajat).
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-7">
+    <div class="card p-3 h-100">
+      <h6 class="fw-bold mb-3">Xarajatlar turkumlar bo'yicha</h6>
+      {% if cat_rows %}
+      <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead><tr><th>Turkum</th><th class="text-end">Summa</th><th style="width:28%">Ulushi</th><th class="text-end">{{ prev_label }}</th><th class="text-end">O'zgarish</th></tr></thead>
+        <tbody>
+        {% for r in cat_rows %}
+          <tr>
+            <td>{{ r.name }}</td>
+            <td class="text-end num">{{ r.amount|uzs }}</td>
+            <td><div class="d-flex align-items-center gap-2">
+              <div class="progress flex-grow-1" style="height:6px"><div class="progress-bar" style="width:{{ r.share }}%"></div></div>
+              <span class="small text-muted" style="min-width:42px">{{ r.share }}%</span></div></td>
+            <td class="text-end num text-muted">{{ r.prev|uzs }}</td>
+            <td class="text-end small">{{ delta(r.change, False) }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      {% else %}
+      <div class="empty-state"><i class="bi bi-wallet2"></i><p>Bu davrda xarajat yo'q</p></div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

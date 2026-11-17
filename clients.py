@@ -1,3 +1,6 @@
+import re
+from difflib import SequenceMatcher
+
 from flask import (
     Blueprint, render_template, request, redirect, url_for, flash, current_app, jsonify,
 )
@@ -6,12 +9,62 @@ from sqlalchemy import or_
 from sqlalchemy.orm import joinedload
 
 from extensions import db
-from models import Client, Order, log_action, STATUS_CANCELLED, ZERO
+from models import Client, Order, log_action, snap, changes_text, STATUS_CANCELLED, ZERO
 from permissions import permission_required
 from queries import clients_with_stats, client_totals, eager_orders
 from utils import ValidationError, parse_text, now_local
 
 clients_bp = Blueprint("clients", __name__, url_prefix="/mijozlar")
+
+NAME_SIMILARITY = 0.86
+
+
+def _norm_name(name):
+    """Taqqoslash uchun nom: kichik harf, tutuq belgilari va MChJ kabi qo'shimchalarsiz."""
+    s = (name or "").casefold()
+    for ch in ("'", "\u0060", "\u02bb", "\u02bc", "\u2019", "\u2018"):
+        s = s.replace(ch, "")
+    s = re.sub(r"\b(mchj|ooo|yatt|ao|xk|llc)\b", " ", s)
+    return re.sub(r"[^0-9a-z\u0430-\u044f\u0451\u045e\u049b\u0493\u04b3]+", "", s)
+
+
+def _norm_phone(phone):
+    """Telefonning oxirgi 9 raqami (998 va + belgisiz, bo'shliqlarsiz)."""
+    digits = re.sub(r"\D", "", phone or "")
+    return digits[-9:] if len(digits) >= 9 else ""
+
+
+def find_similar_clients(name, phone, exclude_id=None, limit=5):
+    """Shu ism yoki telefonga o'xshash mavjud mijozlar (dublikatdan saqlanish uchun).
+
+    Moslik: telefonning oxirgi 9 raqami bir xil, yoki nomlar normallashtirilgach
+    bir xil / juda o'xshash. [(mijoz, sabab)] qaytaradi.
+    """
+    n, p = _norm_name(name), _norm_phone(phone)
+    if not n and not p:
+        return []
+    found = []
+    q = Client.query.filter(Client.is_deleted.is_(False))
+    if exclude_id:
+        q = q.filter(Client.id != exclude_id)
+    for c in q.all():
+        reason = None
+        if p and _norm_phone(c.phone) == p:
+            reason = "telefon raqami bir xil"
+        elif n:
+            cn = _norm_name(c.name)
+            if cn and (cn == n or (min(len(cn), len(n)) >= 5 and (cn in n or n in cn))
+                       or SequenceMatcher(None, cn, n).ratio() >= NAME_SIMILARITY):
+                reason = "nomi o'xshash"
+        if reason:
+            found.append((c, reason))
+    # telefon mos kelganlar birinchi
+    found.sort(key=lambda x: (x[1] != "telefon raqami bir xil", x[0].name))
+    return found[:limit]
+
+
+CLIENT_LABELS = {"name": "Ism", "phone": "Telefon", "company": "Korxona",
+                 "address": "Manzil", "notes": "Izoh"}
 
 
 def _client_form_data(form):
@@ -96,6 +149,65 @@ def search_clients():
     ])
 
 
+@clients_bp.route("/oxshash")
+@login_required
+@permission_required("clients.view")
+def similar_clients():
+    """Forma to'ldirilayotganda o'xshash mijozlar bormi — JSON (jonli ogohlantirish)."""
+    exclude = request.args.get("exclude", type=int)
+    found = find_similar_clients(request.args.get("name"), request.args.get("phone"),
+                                 exclude_id=exclude)
+    return jsonify([
+        {"id": c.id, "name": c.name, "phone": c.phone or "", "reason": r,
+         "url": url_for("clients.client_detail", client_id=c.id)}
+        for c, r in found
+    ])
+
+
+def client_card_stats(orders):
+    """Mijoz kartochkasi uchun qo'shimcha ko'rsatkichlar.
+
+    Birinchi/oxirgi buyurtma sanasi, o'rtacha chek, eng ko'p buyurtma qilingan
+    mahsulotlar, qarzli buyurtmalar (necha kunlik) va oxirgi to'lovlar.
+    """
+    from collections import Counter
+    from utils import today_local
+
+    active = [o for o in orders if o.status != STATUS_CANCELLED]
+    today = today_local()
+    stats = {
+        "first_date": min((o.created_at for o in active), default=None),
+        "last_date": max((o.created_at for o in active), default=None),
+        "avg_order": None, "top_types": [], "debts": [],
+        "aging": {"0-30": ZERO, "31-60": ZERO, "60+": ZERO}, "payments": [],
+    }
+    if not active:
+        return stats
+    stats["avg_order"] = sum((o.total_price or ZERO for o in active), ZERO) / len(active)
+
+    types = Counter()
+    for o in active:
+        for it in o.items:
+            types[it.order_type] += 1
+        if not o.items and o.order_type:
+            types[o.order_type] += 1
+    stats["top_types"] = types.most_common(3)
+
+    for o in active:
+        debt = o.debt
+        if debt > ZERO:
+            age = (today - o.created_at.date()).days
+            stats["debts"].append({"order": o, "debt": debt, "age": age})
+            bucket = "0-30" if age <= 30 else ("31-60" if age <= 60 else "60+")
+            stats["aging"][bucket] += debt
+    stats["debts"].sort(key=lambda d: d["age"], reverse=True)
+
+    pays = [(p, o) for o in active for p in o.payments]
+    pays.sort(key=lambda x: (x[0].paid_on, x[0].id), reverse=True)
+    stats["payments"] = pays[:8]
+    return stats
+
+
 @clients_bp.route("/<int:client_id>")
 @login_required
 @permission_required("clients.view")
@@ -111,6 +223,7 @@ def client_detail(client_id):
         client=c, orders=orders,
         total_ordered=total_ordered, total_paid=total_paid,
         total_debt=total_debt,
+        card=client_card_stats(orders),
     )
 
 
@@ -128,6 +241,12 @@ def new_client():
         if Client.query.filter(Client.name.ilike(data["name"])).first():
             flash("Bu nomdagi mijoz allaqachon mavjud.", "warning")
             return render_template("clients/form.html", client=None, form=request.form)
+
+        if not request.form.get("confirm_duplicate"):
+            similar = find_similar_clients(data["name"], data["phone"])
+            if similar:
+                return render_template("clients/form.html", client=None, form=request.form,
+                                       similar=similar)
 
         c = Client(created_by=current_user.id, **data)
         db.session.add(c)
@@ -152,9 +271,12 @@ def edit_client(client_id):
             flash(str(e), "danger")
             return render_template("clients/form.html", client=c, form=request.form)
 
+        before = snap(c, list(data))
         for key, value in data.items():
             setattr(c, key, value)
-        log_action(current_user, "update", "client", c.id, c.name)
+        diff = changes_text(before, data, CLIENT_LABELS)
+        log_action(current_user, "update", "client", c.id,
+                   c.name + (f" — {diff}" if diff else ""))
         db.session.commit()
         flash("Mijoz ma'lumotlari yangilandi.", "success")
         return redirect(url_for("clients.client_detail", client_id=c.id))

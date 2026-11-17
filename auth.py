@@ -4,7 +4,7 @@ from flask import Blueprint, render_template, redirect, url_for, request, flash
 from flask_login import login_user, logout_user, login_required, current_user
 
 from extensions import db
-from models import User, LoginAttempt, ROLES, log_action
+from models import User, LoginAttempt, ROLES, log_action, changes_text
 from permissions import permission_required, home_endpoint
 from utils import ValidationError, parse_text, parse_choice, now_local
 
@@ -196,6 +196,11 @@ def user_edit(user_id):
                 flash("Tizimda kamida bitta faol administrator qolishi kerak.", "danger")
                 return render_template("user_form.html", roles=ROLES, user=u, form=request.form)
 
+        diff = changes_text(
+            {"full_name": u.full_name, "role": u.role},
+            {"full_name": full_name, "role": role},
+            {"full_name": "Ism", "role": "Rol"},
+        )
         u.full_name = full_name
         u.role = role
 
@@ -207,7 +212,9 @@ def user_edit(user_id):
                 flash(str(e), "danger")
                 return render_template("user_form.html", roles=ROLES, user=u, form=request.form)
 
-        log_action(current_user, "update", "user", u.id, f"{u.username} ({role})")
+        extra = "; parol almashtirildi" if new_password else ""
+        log_action(current_user, "update", "user", u.id,
+                   f"{u.username}" + (f" — {diff}" if diff else "") + extra)
         db.session.commit()
         flash("Foydalanuvchi yangilandi.", "success")
         return redirect(url_for("auth.users_list"))
@@ -294,8 +301,37 @@ def user_delete(user_id):
 @permission_required("users.manage")
 def audit_log():
     from models import AuditLog
+    from utils import parse_date
     page = request.args.get("page", 1, type=int)
-    pagination = AuditLog.query.order_by(AuditLog.created_at.desc()).paginate(
+    q = AuditLog.query
+    f_user = request.args.get("user_id", type=int)
+    f_entity = (request.args.get("entity") or "").strip()
+    f_action = (request.args.get("action") or "").strip()
+    f_text = (request.args.get("q") or "").strip()
+    try:
+        f_from = parse_date(request.args.get("from"), "Dan", required=False)
+        f_to = parse_date(request.args.get("to"), "Gacha", required=False)
+    except ValidationError:
+        f_from = f_to = None
+    if f_user:
+        q = q.filter(AuditLog.user_id == f_user)
+    if f_entity:
+        q = q.filter(AuditLog.entity == f_entity)
+    if f_action:
+        q = q.filter(AuditLog.action == f_action)
+    if f_text:
+        q = q.filter(AuditLog.detail.ilike(f"%{f_text}%"))
+    if f_from:
+        q = q.filter(AuditLog.created_at >= f_from)
+    if f_to:
+        q = q.filter(AuditLog.created_at < f_to + timedelta(days=1))
+    pagination = q.order_by(AuditLog.created_at.desc()).paginate(
         page=page, per_page=50, error_out=False
     )
-    return render_template("audit_log.html", entries=pagination.items, pagination=pagination)
+    users = User.query.order_by(User.username).all()
+    entities = [r[0] for r in db.session.query(AuditLog.entity).distinct().order_by(AuditLog.entity) if r[0]]
+    actions = [r[0] for r in db.session.query(AuditLog.action).distinct().order_by(AuditLog.action) if r[0]]
+    filters = {"user_id": f_user or "", "entity": f_entity, "action": f_action,
+               "q": f_text, "from": request.args.get("from", ""), "to": request.args.get("to", "")}
+    return render_template("audit_log.html", entries=pagination.items, pagination=pagination,
+                           users=users, entities=entities, actions=actions, f=filters)

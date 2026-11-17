@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h3>Zaxira nusxa</h3>
+    <div class="subtitle">Butun baza nusxasi (siqilgan). Oxirgi {{ keep }} ta saqlanadi.</div>
+  </div>
+  <form method="post" action="{{ url_for('settings.backup_create') }}">
+    {{ csrf() }}
+    <button class="btn btn-primary"><i class="bi bi-database-down"></i> Hozir zaxira olish</button>
+  </form>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-lg-6">
+    <div class="card p-3 h-100">
+      <h6 class="fw-bold"><i class="bi bi-clock-history text-muted"></i> Avtomatik (har kuni)</h6>
+      <p class="small text-muted mb-2">cPanel → <b>Cron Jobs</b> da bir marta qo'shing (har kuni 03:00):</p>
+      <code class="small d-block p-2 bg-light rounded" style="word-break:break-all">0 3 * * * cd /home/mylogo/repositories/xisobot &amp;&amp; /home/mylogo/virtualenv/repositories/xisobot/3.10/bin/python backup.py</code>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card p-3 h-100">
+      <h6 class="fw-bold"><i class="bi bi-cloud-arrow-up text-muted"></i> Tashqi nusxa</h6>
+      {% if tg_ready %}
+      <p class="small mb-0"><span class="badge bg-success">Yoqilgan</span>
+        Har bir zaxira Telegramdagi rahbar chatiga ham yuboriladi — hosting buzilsa ham nusxa qoladi.</p>
+      {% else %}
+      <p class="small mb-0"><span class="badge bg-warning text-dark">Yoqilmagan</span>
+        <a href="{{ url_for('settings.telegram') }}">Telegram</a> ulansa, zaxira avtomatik shu yerga ham yuboriladi.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="card p-3">
+  {% if items %}
+  <div class="table-responsive">
+  <table class="table table-hover">
+    <thead><tr><th>Fayl</th><th>Vaqt</th><th class="text-end">Hajm</th><th></th></tr></thead>
+    <tbody>
+    {% for b in items %}
+    <tr>
+      <td class="small">{{ b.name }}</td>
+      <td class="num small">{{ b.mtime|datetime_uz }}</td>
+      <td class="text-end num small">{{ '%.2f' % (b.size / 1048576) }} MB</td>
+      <td class="text-end">
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('settings.backup_download', name=b.name) }}">
+          <i class="bi bi-download"></i> Yuklab olish</a>
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <div class="empty-state"><i class="bi bi-database"></i><p>Hali zaxira olinmagan</p></div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -13,6 +13,54 @@ from utils import ValidationError, parse_text, parse_money
 settings_bp = Blueprint("settings", __name__, url_prefix="/sozlamalar")
 
 
+# ---------- Zaxira (backup) ----------
+
+@settings_bp.route("/zaxira")
+@login_required
+@permission_required("settings.manage")
+def backups():
+    import backup as bk
+    from flask import current_app
+    folder = bk.backup_dir(current_app)
+    return render_template("settings/backups.html", items=bk.list_backups_in(folder),
+                           keep=bk.keep_count(), tg_ready=TelegramSettings.get().is_ready)
+
+
+@settings_bp.route("/zaxira/yaratish", methods=["POST"])
+@login_required
+@permission_required("settings.manage")
+def backup_create():
+    import os
+    import backup as bk
+    from flask import current_app
+    try:
+        path, note = bk.make_backup(current_app)
+    except Exception as e:
+        flash(f"Zaxira yaratilmadi: {e}", "danger")
+        return redirect(url_for("settings.backups"))
+    log_action(current_user, "backup", "database", None, f"{os.path.basename(path)}; {note}")
+    db.session.commit()
+    flash(f"Zaxira yaratildi. {note}.", "success")
+    return redirect(url_for("settings.backups"))
+
+
+@settings_bp.route("/zaxira/<name>")
+@login_required
+@permission_required("settings.manage")
+def backup_download(name):
+    import os
+    import backup as bk
+    from flask import current_app, send_from_directory, abort
+    folder = bk.backup_dir(current_app)
+    if name != os.path.basename(name) or not (name.startswith(bk.PREFIX) and name.endswith(bk.SUFFIX)):
+        abort(404)
+    if not os.path.isfile(os.path.join(folder, name)):
+        abort(404)
+    log_action(current_user, "backup_download", "database", None, name)
+    db.session.commit()
+    return send_from_directory(folder, name, as_attachment=True)
+
+
 # ---------- Telegram ----------
 
 @settings_bp.route("/telegram", methods=["GET", "POST"])

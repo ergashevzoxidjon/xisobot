@@ -381,6 +381,22 @@ def ensure_upload_folder(app):
         print(f"✓ Fayllar papkasi yaratildi: {folder}")
 
 
+def widen_audit_detail():
+    """audit_log.detail VARCHAR(255) -> TEXT (eski/yangi qiymatlar sig'ishi uchun).
+    SQLite matn uzunligini tekshirmaydi, shuning uchun faqat MySQL/PostgreSQL'da kerak."""
+    if "audit_log" not in existing_tables():
+        return
+    dialect = db.engine.dialect.name
+    if dialect == "mysql":
+        db.session.execute(text("ALTER TABLE audit_log MODIFY detail TEXT"))
+    elif dialect == "postgresql":
+        db.session.execute(text("ALTER TABLE audit_log ALTER COLUMN detail TYPE TEXT"))
+    else:
+        return
+    db.session.commit()
+    print("✓ audit_log.detail TEXT ga kengaytirildi")
+
+
 def main():
     app = create_app()
     with app.app_context():
@@ -520,6 +536,9 @@ def main():
         # --- v22: OFIS kassasi naqd va karta qismlarga bo'linadi
         # (2026-11-17). Eski to'ldirishlar naqd deb belgilanadi. ---
         add_column("cash_deposit", "channel VARCHAR(10) DEFAULT 'naqd' NOT NULL", "channel")
+
+        # --- v23: harakatlar jurnalida eski/yangi qiymatlar (2026-11-17) ---
+        widen_audit_detail()
 
         migrate_paid_amount()
         ensure_upload_folder(app)

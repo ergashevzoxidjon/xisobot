@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Ishlab chiqarish varaqasi {{ order.order_number }}{% endblock %}
+{% block content %}
+<div class="no-print mb-3 d-flex gap-2">
+  <button onclick="window.print()" class="btn btn-primary"><i class="bi bi-printer"></i> Chop etish</button>
+  <a href="{{ url_for('orders.order_detail', order_id=order.id) }}" class="btn btn-outline-secondary">Orqaga</a>
+</div>
+
+<div class="card p-4" style="max-width:820px">
+  <div class="d-flex justify-content-between align-items-start mb-3 pb-3" style="border-bottom:2px solid #111">
+    <div>
+      <div class="text-muted small text-uppercase fw-bold" style="font-size:.7rem">Ishlab chiqarish varaqasi</div>
+      <div class="fw-bold" style="font-size:2rem;line-height:1.1">{{ order.order_number }}</div>
+      <div class="text-muted small mt-1">{{ company.name }} · chop etilgan: {{ today|date_uz }}</div>
+    </div>
+    {% if qr %}
+    <div class="text-center" style="width:110px" title="{{ qr_url }}">
+      <div class="qr-box">{{ qr|safe }}</div>
+      <div class="text-muted" style="font-size:.6rem">Skanerlang</div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="row mb-3 g-3">
+    <div class="col-6">
+      <div class="text-muted small text-uppercase fw-bold mb-1" style="font-size:.7rem">Mijoz</div>
+      <div class="fw-semibold fs-5">{{ order.client.name }}</div>
+      {% if order.client.company %}<div class="small">{{ order.client.company }}</div>{% endif %}
+      {% if order.client.phone %}<div class="small">{{ order.client.phone }}</div>{% endif %}
+    </div>
+    <div class="col-6 text-end">
+      <div class="text-muted small text-uppercase fw-bold mb-1" style="font-size:.7rem">Topshirish muddati</div>
+      <div class="fw-bold fs-4 {% if order.is_overdue %}text-danger{% endif %}">
+        {% if order.deadline %}{{ order.deadline|date_uz }}{% else %}—{% endif %}</div>
+      <div class="small text-muted">Qabul qilindi: {{ order.created_at|date_uz }}
+        {% if order.creator %} · {{ order.creator.display_name }}{% endif %}</div>
+    </div>
+  </div>
+
+  <table class="table table-bordered align-middle">
+    <thead><tr>
+      <th style="width:36px">№</th><th>Mahsulot</th><th>Texnik parametr</th>
+      <th class="text-end" style="width:90px">Miqdor</th><th style="width:60px">✓</th>
+    </tr></thead>
+    <tbody>
+    {% for it in order.items %}
+      <tr>
+        <td>{{ loop.index }}</td>
+        <td class="fw-semibold">{{ it.order_type }}</td>
+        <td style="white-space:pre-wrap">{{ it.description or '—' }}</td>
+        <td class="text-end num fw-semibold">{{ it.quantity }}</td>
+        <td></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  {% if order.description %}
+  <div class="mb-3 p-2 border rounded">
+    <div class="text-muted small text-uppercase fw-bold" style="font-size:.7rem">Umumiy izoh</div>
+    <div style="white-space:pre-wrap">{{ order.description }}</div>
+  </div>
+  {% endif %}
+
+  <div class="row g-3 mt-2 small">
+    <div class="col-4"><div class="border-top pt-1">Dizayn / maket</div></div>
+    <div class="col-4"><div class="border-top pt-1">Ishlab chiqarish</div></div>
+    <div class="col-4"><div class="border-top pt-1">Sifat nazorati</div></div>
+  </div>
+</div>
+
+<style>
+.qr-box svg { width:100px; height:100px; display:block; margin:0 auto; }
+@media print { .card { box-shadow:none !important; border:0 !important; } }
+</style>
+{% endblock %}

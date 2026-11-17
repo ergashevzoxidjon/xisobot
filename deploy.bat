@@ -44,14 +44,14 @@ echo.
 echo ============================================
 echo   GITHUB'GA YUBORILDI
 echo.
-echo   Endi cPanel'da ikki qadam:
+echo   Endi cPanel'da (ikki qadam):
 echo.
-echo   1) Git Version Control -^> Manage
-echo      -^> Pull or Deploy -^> Update from Remote
+echo   1) Git Version Control -^> Manage -^> Pull or Deploy
+echo      -^> Update from Remote
 echo.
-echo   2) Setup Python App -^> RESTART
-echo.
-echo   Restart'siz sayt eski holicha ishlaydi!
+echo   2) Shu yerdan "Deploy HEAD Commit" - u ilovani o'zi
+echo      qayta ishga tushiradi va bazani yangilaydi.
+echo      (Eski usul: Setup Python App -^> RESTART ham ishlaydi.)
 echo ============================================
 echo.
 pause

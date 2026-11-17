@@ -42,6 +42,48 @@ def _call(token, method, payload):
         return False, str(e)
 
 
+def send_document(token, chat_id, file_path, caption="", filename=None):
+    """Faylni Telegramga yuboradi (multipart). Telegram chegarasi — 50 MB.
+    (muvaffaqiyat, xabar) juftligini qaytaradi."""
+    import os
+    import uuid
+
+    if not token or not chat_id:
+        return False, "Token yoki chat ID sozlanmagan"
+    if os.path.getsize(file_path) > 49 * 1024 * 1024:
+        return False, "Fayl Telegram chegarasidan (50 MB) katta"
+    boundary = uuid.uuid4().hex
+    name = filename or os.path.basename(file_path)
+
+    def field(key, value):
+        return (f'--{boundary}\r\nContent-Disposition: form-data; name="{key}"\r\n\r\n'
+                f"{value}\r\n").encode("utf-8")
+
+    with open(file_path, "rb") as fh:
+        content = fh.read()
+    body = (field("chat_id", chat_id) + field("caption", caption[:1000])
+            + (f'--{boundary}\r\nContent-Disposition: form-data; name="document"; '
+               f'filename="{name}"\r\nContent-Type: application/octet-stream\r\n\r\n').encode("utf-8")
+            + content + f"\r\n--{boundary}--\r\n".encode("utf-8"))
+    req = urllib.request.Request(
+        API_URL.format(token=token, method="sendDocument"), data=body, method="POST",
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            res = json.loads(resp.read().decode())
+            if not res.get("ok"):
+                return False, res.get("description", "noma'lum xato")
+            return True, "yuborildi"
+    except urllib.error.HTTPError as e:
+        try:
+            return False, json.loads(e.read().decode()).get("description", str(e))
+        except Exception:
+            return False, str(e)
+    except Exception as e:
+        return False, str(e)
+
+
 def send_message(token, chat_id, text, silent=False):
     """Xabar yuboradi. (muvaffaqiyat, xabar) juftligini qaytaradi."""
     if not token or not chat_id:
