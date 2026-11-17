@@ -193,10 +193,10 @@
                      placeholder="Ombordan tanlang..." autocomplete="off" value="{{ row.description }}">
               <div class="form-text exp-hint"></div>
             </td>
-            <td data-label="Soni" class="qty-cell"><input type="number" step="0.001" min="0.001" class="form-control text-end exp-qty"
+            <td data-label="Soni" class="qty-cell"><input type="number" step="any" min="0.001" class="form-control text-end exp-qty"
                        name="expense_quantity" value="{{ row.quantity }}"></td>
-            <td data-label="Narxi"><input type="number" step="0.01" min="0.01" class="form-control text-end exp-price"
-                       name="expense_unit_price" value="{{ row.price }}"></td>
+            <td data-label="Narxi"><input type="number" step="1" min="1" class="form-control text-end exp-price"
+                       name="expense_unit_price" value="{{ row.price|whole }}"></td>
             <td data-label="Jami" class="text-end num fw-semibold exp-line">0.00</td>
             <td><button type="button" class="btn btn-sm btn-outline-danger row-remove"
                         title="Qatorni o'chirish"><i class="bi bi-x-lg"></i></button></td>
@@ -237,7 +237,7 @@
                name="taxi_count" id="taxiCount" value="{{ posted_taxi_count }}"
                aria-label="Taksi soni" style="width:76px">
         <span class="text-muted small">ta ×</span>
-        <input type="number" step="0.01" min="0.01" class="form-control form-control-sm text-end"
+        <input type="number" step="1" min="1" class="form-control form-control-sm text-end"
                name="taxi_price" id="taxiPrice" value="{{ posted_taxi_price }}"
                placeholder="narxi" aria-label="Bitta taksi narxi" style="width:130px">
         <span class="text-muted small">=</span>
@@ -349,12 +349,12 @@
           </div>
           <div class="col-md-2 col-4">
             <label class="form-label" for="qrQty">Soni</label>
-            <input type="number" step="0.001" min="0.001" class="form-control text-end"
+            <input type="number" step="any" min="0.001" class="form-control text-end"
                    name="row_quantity" id="qrQty" required>
           </div>
           <div class="col-md-2 col-4">
             <label class="form-label" for="qrPrice">Narxi</label>
-            <input type="number" step="0.01" min="0.01" class="form-control text-end"
+            <input type="number" step="1" min="1" class="form-control text-end"
                    name="row_price" id="qrPrice" required>
           </div>
         </div>
@@ -375,6 +375,9 @@
           <input type="radio" class="btn-check" name="payment_method" value="naqd" id="qrPaidCash" autocomplete="off" checked>
           <label class="btn btn-outline-success btn-sm" for="qrPaidCash">
             <i class="bi bi-check-circle me-1"></i>Naqd to'landi</label>
+          <input type="radio" class="btn-check" name="payment_method" value="karta" id="qrPaidCard" autocomplete="off">
+          <label class="btn btn-outline-info btn-sm" for="qrPaidCard">
+            <i class="bi bi-credit-card me-1"></i>Karta orqali to'landi</label>
           <input type="radio" class="btn-check" name="payment_method" value="perechisleniye" id="qrPaidTransfer" autocomplete="off">
           <label class="btn btn-outline-primary btn-sm" for="qrPaidTransfer">
             <i class="bi bi-bank me-1"></i>Perechisleniye</label>
@@ -394,20 +397,8 @@
           </div>
         </div>
 
-        <div id="qrCashSourceBlock" class="mt-3">
-          <label class="form-label" for="qrCashSource">Naqd pul qaysi manbadan</label>
-          <select class="form-select" name="cash_source" id="qrCashSource">
-            <option value="">— tanlang —</option>
-            {% for h in cash_handovers %}
-            <option value="order:{{ h.order_id }}">
-              {{ h.order.order_number if h.order else '?' }} — {{ h.amount|uzs }} so'm
-              {% if h.order and h.order.client %}({{ h.order.client.name }}){% endif %}
-            </option>
-            {% endfor %}
-            {% for key, label in cash_source_labels.items() %}
-            <option value="{{ key }}">{{ label }}</option>
-            {% endfor %}
-          </select>
+        <div id="qrCashSourceBlock" class="form-text mt-2">
+          <i class="bi bi-building"></i> Pul <b id="qrOfficePart">OFIS kassasidan (naqd)</b> chiqadi.
         </div>
         <input type="hidden" name="moved_on" id="qrMovedOn">
       </div>
@@ -444,7 +435,7 @@ const totalCell = document.getElementById('expenseTotalCell');
 let activeRow = null;
 
 function money(v) {
-  return (v || 0).toLocaleString('ru-RU', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  return (v || 0).toLocaleString('ru-RU', {minimumFractionDigits: 0, maximumFractionDigits: 2});
 }
 
 const ROW_HTML = `
@@ -455,8 +446,8 @@ const ROW_HTML = `
            placeholder="Ombordan tanlang..." autocomplete="off">
     <div class="form-text exp-hint"></div>
   </td>
-  <td data-label="Soni" class="qty-cell"><input type="number" step="0.001" min="0.001" class="form-control text-end exp-qty" name="expense_quantity" value="1"></td>
-  <td data-label="Narxi"><input type="number" step="0.01" min="0.01" class="form-control text-end exp-price" name="expense_unit_price"></td>
+  <td data-label="Soni" class="qty-cell"><input type="number" step="any" min="0.001" class="form-control text-end exp-qty" name="expense_quantity" value="1"></td>
+  <td data-label="Narxi"><input type="number" step="1" min="1" class="form-control text-end exp-price" name="expense_unit_price"></td>
   <td data-label="Jami" class="text-end num fw-semibold exp-line">0.00</td>
   <td><button type="button" class="btn btn-sm btn-outline-danger row-remove" title="Qatorni o'chirish"><i class="bi bi-x-lg"></i></button></td>`;
 
@@ -530,9 +521,11 @@ function matchMaterial(tr) {
   if (generalMode) { hidden.value = ''; hint.innerHTML = ''; return; }
   const found = BY_NAME[desc.value.trim().toLowerCase()];
 
+  // dona/list — butun son, kg/metr — kasr bo'lishi mumkin
+  applyQtyStep(tr.querySelector('.exp-qty'), found ? found.unit : '');
   if (found) {
     hidden.value = found.id;
-    if (!price.value) price.value = found.price;
+    if (!price.value && parseFloat(found.price) > 0) price.value = Math.round(parseFloat(found.price));
     hint.className = 'form-text exp-hint text-success';
     hint.innerHTML = '<i class="bi bi-check-circle"></i> Omborda: ' + found.qty + ' ' + found.unit;
   } else {
@@ -595,7 +588,7 @@ function recalc() {
   body.querySelectorAll('.expense-row').forEach(tr => {
     const qty = parseFloat(tr.querySelector('.exp-qty').value) || 0;
     const price = parseFloat(tr.querySelector('.exp-price').value) || 0;
-    const line = qty * price;
+    const line = Math.round(qty * price);   // butun so'm
     tr.querySelector('.exp-line').textContent = money(line);
     sum += line;
   });
@@ -660,7 +653,7 @@ function putMaterial(m, targetRow) {
 
   tr.querySelector('.exp-desc').value = m.name;
   const price = parseFloat(m.price);
-  if (!isNaN(price) && price > 0) tr.querySelector('.exp-price').value = price;
+  if (!isNaN(price) && price > 0) tr.querySelector('.exp-price').value = Math.round(price);
   matchMaterial(tr);
   setActive(tr);
   tr.querySelector('.exp-qty').focus();
@@ -757,12 +750,14 @@ function qrMatchName() {
     qrMaterialId.value = found.id;
     qrUnit.value = found.unit;
     qrUnit.disabled = true;    // mavjud mahsulotning birligi o'zgarmaydi
-    if (!qrPrice.value && parseFloat(found.price) > 0) qrPrice.value = parseFloat(found.price);
+    if (!qrPrice.value && parseFloat(found.price) > 0) qrPrice.value = Math.round(parseFloat(found.price));
     hint.className = 'form-text text-success';
     hint.innerHTML = '<i class="bi bi-check-circle"></i> Omborda bor: ' + found.qty + ' ' + found.unit;
+    applyQtyStep(qrQty, found.unit);
   } else {
     qrMaterialId.value = '';
     qrUnit.disabled = false;
+    applyQtyStep(qrQty, qrUnit.value);
     hint.className = 'form-text';
     hint.textContent = qrName.value.trim()
       ? "Yangi mahsulot — birligini tanlang, omborga o'zi qo'shiladi."
@@ -772,14 +767,17 @@ function qrMatchName() {
 }
 
 function qrRecalc() {
-  const t = (parseFloat(qrQty.value) || 0) * (parseFloat(qrPrice.value) || 0);
+  const t = Math.round((parseFloat(qrQty.value) || 0) * (parseFloat(qrPrice.value) || 0));
   document.getElementById('qrTotal').textContent = money(t);
 }
 
 function qrSyncPayment() {
   const method = (qrForm.querySelector('input[name="payment_method"]:checked') || {}).value;
   document.getElementById('qrPaidViaBlock').style.display = method === 'perechisleniye' ? '' : 'none';
-  document.getElementById('qrCashSourceBlock').style.display = method === 'naqd' ? '' : 'none';
+  document.getElementById('qrCashSourceBlock').style.display =
+    (method === 'naqd' || method === 'karta') ? '' : 'none';
+  document.getElementById('qrOfficePart').textContent =
+    method === 'karta' ? 'OFIS kartasidan' : 'OFIS kassasidan (naqd)';
 }
 
 function openQuickReceive(name, targetRow) {
@@ -802,6 +800,7 @@ qrModalEl.addEventListener('shown.bs.modal', () => {
   (qrName.value.trim() ? qrQty : qrName).focus();
 });
 qrName.addEventListener('input', qrMatchName);
+qrUnit.addEventListener('change', () => applyQtyStep(qrQty, qrUnit.value));
 [qrQty, qrPrice].forEach(el => el.addEventListener('input', qrRecalc));
 qrForm.querySelectorAll('input[name="payment_method"]').forEach(r => r.addEventListener('change', qrSyncPayment));
 qrSupplierName.addEventListener('input', () => {
@@ -847,6 +846,9 @@ qrForm.addEventListener('submit', e => {
   e.preventDefault();
   if (!qrName.value.trim()) { qrShowError("Mahsulot nomini yozing."); qrName.focus(); return; }
   if (!(parseFloat(qrQty.value) > 0)) { qrShowError("Sonini kiriting."); qrQty.focus(); return; }
+  if (COUNTABLE_UNITS.includes(qrUnit.value) && !Number.isInteger(parseFloat(qrQty.value))) {
+    qrShowError("«" + qrUnit.value + "» soni butun son bo'lishi kerak."); qrQty.focus(); return;
+  }
   if (!(parseFloat(qrPrice.value) > 0)) { qrShowError("Narxini kiriting."); qrPrice.focus(); return; }
   if (!qrSupplierName.value.trim()) { qrShowError("Taminotchini yozing."); qrSupplierName.focus(); return; }
 
@@ -865,12 +867,12 @@ qrForm.addEventListener('submit', e => {
       upsertMaterial(res.material);
       const tr = putMaterial(res.material, qrTargetRow);
       // kirim narxi shu qatorning narxi bo'ladi
-      tr.querySelector('.exp-price').value = parseFloat(res.material.price);
+      tr.querySelector('.exp-price').value = Math.round(parseFloat(res.material.price));
       recalc();
       qrModal.hide();
       const note = document.getElementById('quickReceiveDone');
-      note.querySelector('span').textContent = res.message;
-      note.classList.remove('d-none');
+      note.querySelector('span').textContent = res.message + (res.warning ? ' ' + res.warning : '');
+      note.className = 'alert py-2 small ' + (res.warning ? 'alert-warning' : 'alert-success');
     })
     .catch(() => qrShowError("Internet aloqasini tekshiring va qayta urinib ko'ring."))
     .finally(() => { qrSubmit.disabled = false; });

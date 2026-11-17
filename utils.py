@@ -59,13 +59,28 @@ def to_money(value, default=ZERO):
     return d.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
+def whole_money(value):
+    """Butun so'mga yaxlitlangan summa (2 xonali Decimal ko'rinishida).
+
+    Kasr miqdor × narx (2.5 metr × 551) tiyin hosil qilmasligi uchun satr
+    jamlari shu bilan hisoblanadi (2026-11-17)."""
+    return to_money(value).quantize(Decimal("1"), rounding=ROUND_HALF_UP).quantize(Decimal("0.01"))
+
+
 def money_str(value):
-    """1234567.5 -> '1 234 567.50' ko'rinishida."""
+    """1234567 -> '1 234 567', 1234567.5 -> '1 234 567.50'.
+
+    So'm butun bo'lsa tiyin (".00") ko'rsatilmaydi (2026-11-17, foydalanuvchi
+    so'rovi) — yangi summalar endi faqat butun so'mda kiritiladi. Eski
+    yozuvlarda kasr qolgan bo'lsa, u yashirilmaydi: 2 xona bilan ko'rinadi.
+    """
     d = to_money(value)
     sign = "-" if d < 0 else ""
     d = abs(d)
     whole, _, frac = f"{d:.2f}".partition(".")
     grouped = f"{int(whole):,}".replace(",", " ")
+    if frac == "00":
+        return f"{sign}{grouped}"
     return f"{sign}{grouped}.{frac}"
 
 
@@ -110,9 +125,14 @@ def parse_money(raw, field, required=True, min_value=ZERO, max_value=MAX_MONEY):
         raise ValidationError(f"{field}: faqat raqam kiriting.")
     if not d.is_finite():
         raise ValidationError(f"{field}: noto'g'ri qiymat.")
-    d = d.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    # Summalar faqat butun so'mda (2026-11-17, foydalanuvchi so'rovi): tiyin
+    # yaxlitlanadi. Kasr qiymat odatda sichqoncha g'ildiragi/strelka bilan
+    # tasodifan paydo bo'lardi (0,05 so'm, 1 999,99 so'm).
+    d = d.quantize(Decimal("1"), rounding=ROUND_HALF_UP).quantize(Decimal("0.01"))
+    if ZERO < min_value < 1:
+        min_value = Decimal("1.00")
     if d < min_value:
-        raise ValidationError(f"{field}: {money_str(min_value)} dan kichik bo'lishi mumkin emas.")
+        raise ValidationError(f"{field}: {money_str(min_value)} so'mdan kichik bo'lishi mumkin emas.")
     if d > max_value:
         raise ValidationError(f"{field}: juda katta qiymat.")
     return d
@@ -137,6 +157,24 @@ def parse_qty(raw, field, required=True, min_value=QTY_ZERO, max_value=MAX_QTY):
     if d > max_value:
         raise ValidationError(f"{field}: juda katta qiymat.")
     return d
+
+
+# Sanaladigan birliklar — miqdori faqat butun son bo'ladi (0.004 dona emas).
+# kg, metr, kv.metr, litr esa kasr bo'lishi mumkin (0.5 kg).
+COUNTABLE_UNITS = ("dona", "list", "rulon", "quti")
+
+
+def is_countable_unit(unit):
+    return unit in COUNTABLE_UNITS
+
+
+def check_unit_qty(quantity, unit, field):
+    """Sanaladigan birlikda kasr miqdor kiritilsa xato beradi."""
+    if is_countable_unit(unit) and quantity != quantity.to_integral_value():
+        raise ValidationError(
+            f"{field}: «{unit}» butun son bo'lishi kerak ({qty_str(quantity)} emas)."
+        )
+    return quantity
 
 
 def parse_int(raw, field, required=True, min_value=0, max_value=10_000_000, default=0):

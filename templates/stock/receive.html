@@ -16,7 +16,6 @@
 {% set posted_supplier_name = form.get('supplier_name', '') if form and form.get is defined else '' %}
 {% set posted_payment_method = form.get('payment_method', 'naqd') if form and form.get is defined else 'naqd' %}
 {% set posted_paid_via = form.get('paid_via', '') if form and form.get is defined else '' %}
-{% set posted_cash_source = form.get('cash_source', '') if form and form.get is defined else (('order:' ~ preselected_order_id) if preselected_order_id else '') %}
 
 {% set rows = [] %}
 {% if posted_material_names %}
@@ -115,9 +114,9 @@
           <span class="cart-name-text"></span>
           <small class="cart-unit-text"></small>
         </div>
-        <input type="number" step="0.001" min="0.001" class="form-control form-control-sm row-qty"
+        <input type="number" step="any" min="0.001" class="form-control form-control-sm row-qty"
                name="row_quantity" placeholder="Soni">
-        <input type="number" step="0.01" min="0.01" class="form-control form-control-sm row-price"
+        <input type="number" step="1" min="1" class="form-control form-control-sm row-price"
                name="row_price" placeholder="Narxi">
         <div class="input-group input-group-sm row-location-wrap">
           <span class="input-group-text"><i class="bi bi-geo-alt"></i></span>
@@ -169,9 +168,14 @@
     <label class="form-label mt-3">To'lov holati</label>
     <div class="d-flex flex-wrap gap-2">
       <input type="radio" class="btn-check" name="payment_method" value="naqd" id="paidCash" autocomplete="off"
-             {% if posted_payment_method not in ['perechisleniye', 'qarzga'] %}checked{% endif %}>
+             {% if posted_payment_method not in ['perechisleniye', 'qarzga', 'karta'] %}checked{% endif %}>
       <label class="btn btn-outline-success btn-sm" for="paidCash">
         <i class="bi bi-check-circle me-1"></i>Naqd to'landi</label>
+
+      <input type="radio" class="btn-check" name="payment_method" value="karta" id="paidCard" autocomplete="off"
+             {% if posted_payment_method == 'karta' %}checked{% endif %}>
+      <label class="btn btn-outline-info btn-sm" for="paidCard">
+        <i class="bi bi-credit-card me-1"></i>Karta orqali to'landi</label>
 
       <input type="radio" class="btn-check" name="payment_method" value="perechisleniye" id="paidTransfer" autocomplete="off"
              {% if posted_payment_method == 'perechisleniye' %}checked{% endif %}>
@@ -198,22 +202,15 @@
       <div class="form-text">Xisobotda tashkilotlar bo'yicha alohida ko'rinadi.</div>
     </div>
 
-    <div id="cashSourceBlock" class="mt-3">
-      <label class="form-label">Naqd pul qaysi manbadan qoplanmoqda</label>
-      <select class="form-select" name="cash_source" id="cashSourceSelect">
-        <option value="">— tanlang —</option>
-        {% for h in cash_handovers %}
-        <option value="order:{{ h.order_id }}" {% if posted_cash_source == 'order:' ~ h.order_id %}selected{% endif %}>
-          {{ h.order.order_number if h.order else '?' }} — {{ h.amount|uzs }} so'm
-          {% if h.order and h.order.client %}({{ h.order.client.name }}){% endif %}
-        </option>
-        {% endfor %}
-        {% for key, label in cash_source_labels.items() %}
-        <option value="{{ key }}" {% if posted_cash_source == key %}selected{% endif %}>{{ label }}</option>
-        {% endfor %}
-      </select>
-      <div class="form-text">Naqd pul topshirilgan buyurtma puli hisobidanmi, yoki OFIS/Zoxidjon zaxirasidanmi — majburiy tanlanadi (hisob-kitobga ta'sir qilmaydi, faqat izlanish uchun).</div>
+    <div id="cashSourceBlock" class="form-text mt-2">
+      <i class="bi bi-building"></i> Naqd pul <b>OFIS kassasidan</b> chiqadi.
+      Hozirgi naqd qoldiq: <span class="fw-semibold {% if office_balance < 0 %}text-danger{% endif %}">{{ office_balance|uzs }} so'm</span>.
     </div>
+    <div id="cardSourceBlock" class="form-text mt-2" style="display:none">
+      <i class="bi bi-credit-card"></i> Pul <b>OFIS kartasidan</b> chiqadi.
+      Kartadagi qoldiq: <span class="fw-semibold {% if office_card_balance < 0 %}text-danger{% endif %}">{{ office_card_balance|uzs }} so'm</span>.
+    </div>
+</div>
   </div>
 
   {# ---------------- 3. SANA VA IZOH ---------------- #}
@@ -261,7 +258,7 @@ const newTile = document.getElementById('newMaterialTile');
 let newItemSeq = 0;
 
 function money(v) {
-  return (v || 0).toLocaleString('ru-RU', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  return (v || 0).toLocaleString('ru-RU', {minimumFractionDigits: 0, maximumFractionDigits: 2});
 }
 
 function recalcCart() {
@@ -269,7 +266,7 @@ function recalcCart() {
   cartBody.querySelectorAll('.cart-row').forEach(row => {
     const qty = parseFloat(row.querySelector('.row-qty').value) || 0;
     const price = parseFloat(row.querySelector('.row-price').value) || 0;
-    const line = qty * price;
+    const line = Math.round(qty * price);   // butun so'm
     row.querySelector('.cart-row-line').textContent = money(line);
     sum += line;
   });
@@ -289,8 +286,9 @@ function addCartRow(opts) {
   row.querySelector('.row-unit').value = opts.unit || '';
   row.querySelector('.cart-name-text').textContent = opts.name;
   row.querySelector('.cart-unit-text').textContent = opts.unit || '';
+  applyQtyStep(row.querySelector('.row-qty'), opts.unit || '');
   if (opts.qty) row.querySelector('.row-qty').value = opts.qty;
-  if (opts.price && parseFloat(opts.price) > 0) row.querySelector('.row-price').value = opts.price;
+  if (opts.price && parseFloat(opts.price) > 0) row.querySelector('.row-price').value = Math.round(parseFloat(opts.price));
   if (opts.location) row.querySelector('.row-location').value = opts.location;
   cartBody.appendChild(row);
   recalcCart();
@@ -463,14 +461,14 @@ document.querySelectorAll('.supplier-chip').forEach(btn => {
 
 const paidViaBlock = document.getElementById('paidViaBlock');
 const cashSourceBlock = document.getElementById('cashSourceBlock');
-const cashSourceSelect = document.getElementById('cashSourceSelect');
 function syncPaidVia() {
   const checked = document.querySelector('input[name="payment_method"]:checked');
   const isTransfer = checked && checked.value === 'perechisleniye';
   const isCash = checked && checked.value === 'naqd';
+  const isCard = checked && checked.value === 'karta';
   paidViaBlock.style.display = isTransfer ? '' : 'none';
   cashSourceBlock.style.display = isCash ? '' : 'none';
-  cashSourceSelect.required = isCash;
+  document.getElementById('cardSourceBlock').style.display = isCard ? '' : 'none';
 }
 document.querySelectorAll('input[name="payment_method"]').forEach(r => {
   r.addEventListener('change', syncPaidVia);

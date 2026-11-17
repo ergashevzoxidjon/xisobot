@@ -158,15 +158,16 @@ with app.test_client() as c:
         "supplier_name": "Plyonka MChJ", "payment_method": "naqd",
     }
 
-    r = c.post("/ombor/kirim/tezkor", data=base)
+    r = c.post("/ombor/kirim/tezkor", data={**base, "supplier_name": ""})
     res = r.get_json()
-    check("Naqd manbasisiz — 400 va xato matni",
-          r.status_code == 400 and res and not res["ok"] and "manba" in res["error"])
+    check("Taminotchisiz — 400 va xato matni",
+          r.status_code == 400 and res and not res["ok"] and "Taminotchi" in res["error"])
     with app.app_context():
         check("Xato bo'lganda hech narsa yozilmadi",
               Material.query.filter_by(name="Laminatsiya plyonka").first() is None)
 
-    r = c.post("/ombor/kirim/tezkor", data={**base, "cash_source": "ofis"})
+    # naqd — manba so'ralmaydi, har doim OFIS kassasidan (2026-11-17)
+    r = c.post("/ombor/kirim/tezkor", data=base)
     res = r.get_json()
     check("Yangi mahsulot qabul qilindi (200, ok)", r.status_code == 200 and res["ok"])
     check("Javobda mahsulot va qoldiq", res["material"]["name"] == "Laminatsiya plyonka"
@@ -284,6 +285,109 @@ with app.test_client() as c:
         transport = next((row for row in rows if row["name"] == "transport"), None)
         check("Hisobotda 'transport' turkumi 105 000",
               transport is not None and transport["amount"] == Decimal("105000.00"))
+
+# ---------------------------------------------------------------- 5
+print("\n=== 5. TIYIN VA KASR MIQDOR YO'Q (2026-11-17) ===")
+
+with app.test_client() as c:
+    login(c, "xar1")
+    common = {"supplier_name": "Plyonka MChJ", "payment_method": "naqd", "cash_source": "ofis"}
+
+    r = c.post("/ombor/kirim/tezkor", data={**common, "row_material_name": "Bakal-oq",
+                                            "row_unit": "dona", "row_quantity": "0.004",
+                                            "row_price": "100"})
+    res = r.get_json()
+    check("dona: 0.004 rad etildi (butun son)",
+          r.status_code == 400 and "butun son" in res["error"])
+
+    r = c.post("/ombor/kirim/tezkor", data={**common, "row_material_name": "Bakal-oq",
+                                            "row_unit": "dona", "row_quantity": "10",
+                                            "row_price": "1999.99"})
+    res = r.get_json()
+    with app.app_context():
+        m = Material.query.filter_by(name="Bakal-oq").first()
+        check("Narx 1999.99 -> 2000 so'mga yaxlitlandi",
+              res["ok"] and m.last_price == Decimal("2000.00"))
+        e = Expense.query.filter(Expense.description.like("Ombor kirimi: Bakal-oq%")).first()
+        check("Xarajat summasi tiyinsiz (20 000)", e.amount == Decimal("20000.00"))
+
+    r = c.post("/ombor/kirim/tezkor", data={**common, "row_material_name": "Bakal-oq",
+                                            "row_unit": "dona", "row_quantity": "1",
+                                            "row_price": "0,05"})
+    check("0,05 so'm narx rad etildi", r.status_code == 400)
+
+    r = c.post("/ombor/kirim/tezkor", data={**common, "row_material_name": "Plyonka kg",
+                                            "row_unit": "kg", "row_quantity": "2.5",
+                                            "row_price": "40000"})
+    with app.app_context():
+        m = Material.query.filter_by(name="Plyonka kg").first()
+        check("kg: 2.5 kasr miqdor qabul qilindi",
+              r.get_json()["ok"] and m.quantity == Decimal("2.5"))
+
+    # buyurtma xarajatida ham dona kasr bo'lmaydi
+    with app.app_context():
+        bakal_id = Material.query.filter_by(name="Bakal-oq").first().id
+    r = c.post("/moliya/xarajatlar/yangi", data={
+        "order_id": str(order_id), "expense_material": str(bakal_id),
+        "expense_description": "Bakal-oq", "expense_quantity": "1.5",
+        "expense_unit_price": "2000",
+    }, follow_redirects=True)
+    check("Xarajatda 1.5 dona rad etildi", "butun son" in text(r))
+
+    r = c.get(f"/moliya/xarajatlar/yangi?order_id={order_id}")
+    body = text(r)
+    check("Narx maydonlari butun so'm (step=1)",
+          'class="form-control text-end exp-price"' not in body
+          or 'step="1" min="1" class="form-control text-end exp-price"' in body)
+
+# ---------------------------------------------------------------- 6
+print("\n=== 6. BUYURTMA IKKI MARTA YARATILMAYDI (2026-11-17) ===")
+
+import re as _re
+from models import SubmitToken
+
+with app.test_client() as c:
+    login(c, "admin1")
+    r = c.get("/buyurtmalar/yangi")
+    m = _re.search(r'name="form_token" value="([0-9a-f]{32})"', text(r))
+    check("Yangi buyurtma formasida bir martalik kalit bor", m is not None)
+    token = m.group(1) if m else "x" * 32
+
+    data = {
+        "form_token": token, "client_name": "Ikki bosish MChJ",
+        "item_type": "Vizitka", "item_description": "90x50, 4+4",
+        "item_quantity": "100", "item_unit_price": "1500",
+    }
+
+    def count():
+        with app.app_context():
+            return Order.query.join(Client).filter(Client.name == "Ikki bosish MChJ").count()
+
+    # avval xato bilan (narx yo'q) — kalit "yonib" ketmasligi kerak
+    r = c.post("/buyurtmalar/yangi", data={**data, "item_unit_price": ""}, follow_redirects=True)
+    check("Xatoli yuborishda buyurtma yaratilmadi", count() == 0)
+    check("Xatoli yuborishda kalit bo'shatildi",
+          'value="%s"' % token in text(r))
+
+    r1 = c.post("/buyurtmalar/yangi", data=data, follow_redirects=True)
+    check("1-yuborish: buyurtma yaratildi", count() == 1 and "yaratildi" in text(r1))
+
+    r2 = c.post("/buyurtmalar/yangi", data=data, follow_redirects=True)
+    r3 = c.post("/buyurtmalar/yangi", data=data, follow_redirects=True)
+    check("2- va 3-yuborish: yangi buyurtma YARATILMADI", count() == 1)
+    check("Takrorda ogohlantirish va o'sha buyurtmaga yo'naltirildi",
+          "allaqachon yaratilgan" in text(r3))
+    with app.app_context():
+        check("Mijoz ham bitta", Client.query.filter_by(name="Ikki bosish MChJ").count() == 1)
+        t = SubmitToken.query.filter_by(token=token).first()
+        check("Kalit buyurtmaga bog'landi", t is not None and t.object_id is not None)
+
+    # yangi forma (yangi kalit) — ataylab ikkinchi buyurtma yaratsa bo'ladi
+    r = c.get("/buyurtmalar/yangi")
+    token2 = _re.search(r'name="form_token" value="([0-9a-f]{32})"', text(r)).group(1)
+    check("Har ochilganda yangi kalit", token2 != token)
+    c.post("/buyurtmalar/yangi", data={**data, "form_token": token2}, follow_redirects=True)
+    check("Yangi forma bilan ikkinchi buyurtma yaratiladi", count() == 2)
 
 os.unlink(db_path)
 

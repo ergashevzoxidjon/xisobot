@@ -75,6 +75,8 @@
     {% if e.supplier %}
       {% if not e.is_paid %}
       <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split me-1"></i>qarzga</span>
+      {% elif e.payment_method == 'karta' %}
+      <span class="badge text-bg-info"><i class="bi bi-credit-card me-1"></i>karta</span>
       {% elif e.payment_method == 'perechisleniye' %}
       <span class="badge bg-info text-dark"><i class="bi bi-bank me-1"></i>{{ e.paid_via or 'perechisleniye' }}</span>
       {% else %}

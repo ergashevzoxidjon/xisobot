@@ -39,6 +39,7 @@
 <form method="post" id="orderForm">
   {{ csrf() }}
   {% if order %}<input type="hidden" name="version" value="{{ order.version }}">{% endif %}
+  {% if not order %}<input type="hidden" name="form_token" value="{{ form_token|default('', true) }}">{% endif %}
   {% if pipeline_card_id is defined and pipeline_card_id %}<input type="hidden" name="pipeline_card_id" value="{{ pipeline_card_id }}">{% endif %}
 
   {# ---------------- 1. MIJOZ ---------------- #}
@@ -134,8 +135,8 @@
                        placeholder="o'lcham, rang, qog'oz..." value="{{ row.description or '' }}"></td>
             <td data-label="Miqdor"><input type="number" class="form-control text-end item-qty" name="item_quantity"
                        min="1" required value="{{ row.quantity }}"></td>
-            <td data-label="Narxi"><input type="number" step="0.01" min="0" class="form-control text-end item-price"
-                       name="item_unit_price" required value="{{ row.unit_price }}"></td>
+            <td data-label="Narxi"><input type="number" step="1" min="0" class="form-control text-end item-price"
+                       name="item_unit_price" required value="{{ row.unit_price|whole }}"></td>
             <td data-label="Summa" class="text-end num fw-semibold item-total">0.00</td>
             <td><button type="button" class="btn btn-sm btn-outline-danger row-remove"
                         title="Qatorni o'chirish"><i class="bi bi-x-lg"></i></button></td>
@@ -209,7 +210,7 @@ const grandTotalCell = document.getElementById('grandTotalCell');
 let activeRow = null;
 
 function money(value) {
-  return (value || 0).toLocaleString('ru-RU', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  return (value || 0).toLocaleString('ru-RU', {minimumFractionDigits: 0, maximumFractionDigits: 2});
 }
 
 function makeRow() {
@@ -220,7 +221,7 @@ function makeRow() {
     <td data-label="Turi"><input class="form-control item-type" name="item_type" required placeholder="Vizitka, banner..."></td>
     <td data-label="Texnik parametr"><input class="form-control item-desc" name="item_description" required placeholder="o'lcham, rang, qog'oz..."></td>
     <td data-label="Miqdor"><input type="number" class="form-control text-end item-qty" name="item_quantity" min="1" required value="1"></td>
-    <td data-label="Narxi"><input type="number" step="0.01" min="0" class="form-control text-end item-price" name="item_unit_price" required value="0"></td>
+    <td data-label="Narxi"><input type="number" step="1" min="0" class="form-control text-end item-price" name="item_unit_price" required value="0"></td>
     <td data-label="Summa" class="text-end num fw-semibold item-total">0.00</td>
     <td><button type="button" class="btn btn-sm btn-outline-danger row-remove" title="Qatorni o'chirish"><i class="bi bi-x-lg"></i></button></td>`;
   return tr;
@@ -310,7 +311,7 @@ document.querySelectorAll('.quick-type').forEach(btn => {
 
     tr.querySelector('.item-type').value = btn.dataset.name;
     const price = parseFloat(btn.dataset.price);
-    if (!isNaN(price) && price > 0) tr.querySelector('.item-price').value = price;
+    if (!isNaN(price) && price > 0) tr.querySelector('.item-price').value = Math.round(price);
     setActive(tr);
     tr.querySelector('.item-qty').focus();
     tr.querySelector('.item-qty').select();

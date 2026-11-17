@@ -539,6 +539,63 @@ if (toggle) {
   toggle.addEventListener('click', () => { sidebar.classList.add('show'); backdrop.classList.add('show'); });
   backdrop.addEventListener('click', () => { sidebar.classList.remove('show'); backdrop.classList.remove('show'); });
 }
+
+/* Raqam maydoni ustida sichqoncha g'ildiragi aylantirilsa qiymat o'zgarmasin —
+   aks holda narx bilmasdan 0,05 yoki 1 999,99 bo'lib qolardi (2026-11-17). */
+document.addEventListener('wheel', e => {
+  const el = document.activeElement;
+  if (el && el.type === 'number' && el === e.target) el.blur();
+}, {passive: true});
+
+/* Forma ikki marta yuborilmasin (2026-11-17): bir xil buyurtma 2-3 marta
+   yaratilib qolardi — javob kechiksa "Saqlash" yana bosilardi. Forma
+   yuborilgach uning tugmalari o'chadi va "Saqlanmoqda..." ko'rinadi.
+   Serverda ham himoya bor (orders: bir martalik form_token). */
+document.addEventListener('submit', e => {
+  const form = e.target;
+  if (e.defaultPrevented || !(form instanceof HTMLFormElement)) return;
+  if ((form.method || '').toLowerCase() !== 'post' || form.target === '_blank') return;
+  if (form.dataset.submitting) { e.preventDefault(); return; }
+  form.dataset.submitting = '1';
+  const clicked = e.submitter;
+  // tugmani darhol emas, keyingi tick'da o'chiramiz — aks holda bosilgan
+  // tugmaning name/value'si yuborilmay qolishi mumkin
+  setTimeout(() => {
+    form.querySelectorAll('button[type="submit"], button:not([type]), input[type="submit"]').forEach(b => {
+      b.disabled = true;
+    });
+    if (clicked && clicked.tagName === 'BUTTON' && !clicked.dataset.noSpinner) {
+      clicked.dataset.label = clicked.innerHTML;
+      clicked.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Saqlanmoqda...';
+    }
+  }, 0);
+});
+/* "Orqaga" bilan qaytilganda (sahifa keshdan) tugmalar yana ishlasin */
+window.addEventListener('pageshow', ev => {
+  if (!ev.persisted) return;
+  document.querySelectorAll('form[data-submitting]').forEach(form => {
+    delete form.dataset.submitting;
+    form.querySelectorAll('button, input[type="submit"]').forEach(b => {
+      b.disabled = false;
+      if (b.dataset.label) { b.innerHTML = b.dataset.label; delete b.dataset.label; }
+    });
+  });
+});
+
+/* Sanaladigan birliklar (dona, list, rulon, quti) — miqdor faqat butun son;
+   kg, metr, litr — kasr bo'lishi mumkin. Server ham shuni tekshiradi
+   (utils.COUNTABLE_UNITS). */
+const COUNTABLE_UNITS = ['dona', 'list', 'rulon', 'quti'];
+function applyQtyStep(input, unit) {
+  if (!input) return;
+  if (COUNTABLE_UNITS.includes(unit)) {
+    input.step = '1';
+    input.min = '1';
+  } else {
+    input.step = 'any';
+    input.min = '0.001';
+  }
+}
 </script>
 {% block scripts %}{% endblock %}
 </body>

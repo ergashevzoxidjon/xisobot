@@ -512,6 +512,15 @@ def main():
         add_column("employee_advance", "period_month INTEGER", "period_month")
         migrate_advance_period()
 
+        # --- v21: OFIS kassasini to'ldirishda manba (Zoxidjon, Karta, Bank...)
+        # ko'rsatiladi (2026-11-17, foydalanuvchi so'rovi). Eski kiritmalarda
+        # bo'sh qoladi. ---
+        add_column("cash_deposit", "source VARCHAR(100)", "source")
+
+        # --- v22: OFIS kassasi naqd va karta qismlarga bo'linadi
+        # (2026-11-17). Eski to'ldirishlar naqd deb belgilanadi. ---
+        add_column("cash_deposit", "channel VARCHAR(10) DEFAULT 'naqd' NOT NULL", "channel")
+
         migrate_paid_amount()
         ensure_upload_folder(app)
 

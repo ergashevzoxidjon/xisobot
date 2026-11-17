@@ -113,7 +113,9 @@ ROLE_PERMISSIONS = {
                    # "Pullar" — o'ziga topshirilgan naqd pulni qabul
                    # qilganini tasdiqlaydi va xarajatga sarflaydi
                    # (2026-09-07, foydalanuvchi qarori).
-                   "money.view", "money.confirm"},
+                   "money.view", "money.confirm",
+                   # OFIS hisobini to'ldirish (2026-11-17, foydalanuvchi qarori)
+                   "money.fund"},
     # Boss — korxona rahbari. Endi Buyurtmalar, Mijozlar, Taminotchilar va
     # Ombor bo'limlariga kirmaydi (2026-08-29, foydalanuvchi qarori) — faqat
     # hisobot, tahlil, menejerlar statistikasi va HR ro'yxatini ko'radi.

@@ -16,17 +16,18 @@ from models import (
     EXPENSE_CATEGORIES, GENERAL_EXPENSE_CATEGORIES, EXPENSE_ORDER_CATEGORY,
     STATUS_CANCELLED, STOCK_OUT, ZERO, PAYMENT_TRANSFER, PAYMENT_CASH,
     ORDER_PAYMENT_COMPANY_METHODS, CASH_SOURCE_OFFICE, TAXI_EXPENSE_CATEGORY,
-    Supplier, STOCK_UNITS, CASH_SOURCE_LABELS, PAYER_COMPANIES,
+    Supplier, STOCK_UNITS, PAYER_COMPANIES,
 )
 from permissions import permission_required, has_perm
 from queries import (
     top_debtors, eager_orders, materials_with_stock,
     suppliers_with_stats, all_managers_month_summary,
 )
-from stock import consume, shortage, _confirmed_handovers_for
+from stock import consume, shortage, office_shortage_warning
 from utils import (
     ValidationError, parse_money, parse_date, parse_text, parse_choice, parse_int,
     parse_qty, to_money, to_qty, today_local, month_bounds, money_str, qty_str, QTY_ZERO,
+    check_unit_qty, whole_money,
 )
 
 finance_bp = Blueprint("finance", __name__, url_prefix="/moliya")
@@ -200,6 +201,8 @@ def expense_rows_from_form(form, require_material=False, allow_empty=False):
 
         quantity = parse_qty(qty_text or "1", f"{row}-qator, soni",
                              min_value=Decimal("0.001"))
+        if material is not None:
+            check_unit_qty(quantity, material.unit, f"{row}-qator, soni")
         unit_price = parse_money(price_text, f"{row}-qator, narxi",
                                  min_value=Decimal("0.01"))
 
@@ -209,7 +212,7 @@ def expense_rows_from_form(form, require_material=False, allow_empty=False):
                 description, f"{row}-qator, nomi", required=True, max_length=255),
             "quantity": quantity,
             "unit_price": unit_price,
-            "amount": to_money(quantity * unit_price),
+            "amount": whole_money(quantity * unit_price),
         })
 
     if not rows and not allow_empty:
@@ -388,6 +391,9 @@ def new_expense():
             total += data["amount"]
 
         if taxi:
+            taxi_warning = office_shortage_warning(taxi["amount"])
+            if taxi_warning:
+                warnings.append(taxi_warning)
             record_taxi(taxi, order, exp_date)
             total += taxi["amount"]
 
@@ -437,8 +443,6 @@ def _expense_page(selected_order, expense, form):
             units=STOCK_UNITS,
             suppliers=Supplier.query.filter_by(is_active=True, is_deleted=False)
                                     .order_by(Supplier.name).all(),
-            cash_handovers=_confirmed_handovers_for(current_user),
-            cash_source_labels=CASH_SOURCE_LABELS,
             payer_companies=PAYER_COMPANIES,
         )
     return render_template(
@@ -511,7 +515,9 @@ def edit_stock_expense(move_id):
             material = db.session.get(Material, int(raw_material)) if raw_material.isdigit() else None
             if material is None:
                 raise ValidationError("Mahsulot tanlanmagan.")
-            quantity = parse_qty(request.form.get("quantity"), "Soni", min_value=Decimal("0.001"))
+            quantity = check_unit_qty(
+                parse_qty(request.form.get("quantity"), "Soni", min_value=Decimal("0.001")),
+                material.unit, "Soni")
             unit_price = parse_money(request.form.get("unit_price"), "Narxi", min_value=Decimal("0.01"))
             moved_on = parse_date(request.form.get("moved_on"), "Sana", required=False) or move.moved_on
         except ValidationError as err:

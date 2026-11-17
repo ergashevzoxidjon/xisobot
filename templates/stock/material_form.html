@@ -59,7 +59,7 @@
     <div class="row g-3">
       <div class="col-sm-5">
         <label class="form-label">Eng kam qoldiq</label>
-        <input type="number" step="0.001" min="0" class="form-control" name="min_qty"
+        <input type="number" step="any" min="0" class="form-control" name="min_qty"
                placeholder="0" value="{{ src.min_qty|default('', true) if src else '' }}">
         <div class="form-text">Qoldiq shundan tushsa ro'yxatda sariq rangda ogohlantiriladi.</div>
       </div>

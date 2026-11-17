@@ -48,15 +48,13 @@ from sqlalchemy.orm import joinedload
 from extensions import db
 from models import (
     CashHandover, HANDOVER_PENDING, HANDOVER_CONFIRMED, User, ZERO, log_action,
-    CASH_SOURCE_LABELS, CASH_SOURCE_OFFICE,
     HANDOVER_CHANNEL_CASH, HANDOVER_CHANNEL_CARD,
     CashDeposit, Expense,
+    OFFICE_CHANNELS, OFFICE_CHANNEL_CASH, OFFICE_CHANNEL_CARD,
 )
 from permissions import permission_required
 from queries import (
-    cash_balances, cash_received, cash_source_totals, total_order_cash_on_hand,
-    card_balances, total_confirmed_handover_amount,
-    office_deposited_total,
+    office_summary, office_deposit_sources,
 )
 from utils import now_local, money_str, parse_money, parse_text, ValidationError
 
@@ -83,110 +81,37 @@ def list_handovers():
     pending = [h for h in handovers if h.status == HANDOVER_PENDING]
     confirmed = [h for h in handovers if h.status == HANDOVER_CONFIRMED]
 
-    balances = cash_balances()
-    # Xarajatchi — o'zining shaxsiy naqd qo'lidagi puli (aynan qabul
-    # qilganlari). Admin/boss — kompaniya bo'yicha jami naqd (barcha
-    # xarajatchilar yig'indisi) — ular naqdni shaxsan qabul qilmaydi, lekin
-    # umumiy holatni ko'rishlari kerak (2026-09-08, foydalanuvchi qarori:
-    # "bossga naxt pul xisobi ham alohida kartochkada ko'rinishi kerak").
-    if current_user.role == "xarajatchi":
-        my_balance = balances.get(current_user.id, ZERO)
-        my_received = cash_received(current_user.id)
-    elif current_user.role in ("admin", "boss"):
-        my_balance = total_order_cash_on_hand()
-        my_received = total_confirmed_handover_amount(HANDOVER_CHANNEL_CASH)
-    else:
-        my_balance = None
-        my_received = None
-
-    # Admin/Boss — har bir ish boshqaruvchi/boshliq qo'lida hozir qancha
-    # pul borligini bitta jadvalda ko'radi (bir nechta boshliq bo'lsa foydali).
-    balance_rows = []
-    card_balance_rows = []
-    if current_user.role in ("admin", "boss"):
-        xarajatchi_users = User.query.filter_by(role="xarajatchi").order_by(User.username).all()
-        balance_rows = [
-            {"user": u, "balance": balances.get(u.id, ZERO)} for u in xarajatchi_users
-        ]
-        boss_users = User.query.filter_by(role="boss").order_by(User.username).all()
-        cbalances = card_balances()
-        card_balance_rows = [
-            {"user": u, "balance": cbalances.get(u.id, ZERO)} for u in boss_users
-        ]
-
-    # Kompaniya bo'yicha jami tasdiqlangan karta tushumi va joriy qoldiq —
-    # sahifa yuqorisidagi umumiy kartochkalar uchun (2026-09-08, foydalanuvchi
-    # qarori). Endi xarajatchi ham ko'radi ("ishboshqaruvchida ... karta
-    # xisobi yo'q ... ko'rsatadigan qilishimiz darkor") — u kartani shaxsan
-    # ushlamaydi, lekin umumiy holatni bilishi kerak. Hozircha kartadan
-    # sarflash mexanizmi yo'q, shuning uchun ikkalasi bir xil — struktura
-    # kelajakda ajralishga tayyor.
-    card_total_received = None
-    card_total_balance = None
-    if current_user.role in ("admin", "boss", "xarajatchi"):
-        card_total_received = total_confirmed_handover_amount(HANDOVER_CHANNEL_CARD)
-        card_total_balance = card_total_received
-
-    # OFIS/Zoxidjon zaxirasidan qancha sarflangani (2026-09-07, foydalanuvchi
-    # qarori) — admin/boss/xarajatchi ko'radi (menejer moliya bilan
-    # ishlamaydi, faqat o'z topshirgan pulini kuzatadi). OFIS endi balans
-    # sifatida ko'rsatiladi (kiritilgan - sarflangan) — Zoxidjon shaxsiy
-    # mablag'i cheklanmagan deb hisoblangani uchun faqat "sarflangan" bo'lib
-    # qoladi (2026-09-08).
-    source_totals = None
-    office_info = None
-    office_deposits = None
-    if current_user.role in ("admin", "boss", "xarajatchi"):
-        totals = cash_source_totals()
-        source_totals = {
-            CASH_SOURCE_LABELS[key]: amount
-            for key, amount in totals.items() if key != CASH_SOURCE_OFFICE
-        }
-        deposited = office_deposited_total()
-        office_info = {
-            "deposited": deposited,
-            "spent": totals[CASH_SOURCE_OFFICE],
-            "balance": deposited - totals[CASH_SOURCE_OFFICE],
-        }
-        # Xato kiritilgan summani admin tuzata olishi uchun har bir
-        # kiritmani alohida ko'rsatamiz (2026-09-16, foydalanuvchi so'rovi).
-        office_deposits = (
-            CashDeposit.query.order_by(CashDeposit.created_at.desc()).limit(100).all()
-        )
-
-    # Ish boshqaruvchi qabul qilgan naqd pulni qayerga sarflaganini kuzatish
-    # (2026-09-16, foydalanuvchi so'rovi) — faqat o'z qo'lidagi naqddan
-    # qilingan xarajatlar (`cash_spent_subq()` bilan bir xil filtr; OFIS/
-    # Zoxidjon zaxirasidan qoplanganlar bu yerga kirmaydi — ular OFIS
-    # tarixida alohida ko'rinadi).
-    cash_expenses = None
-    cash_expenses_query = Expense.query.options(
-        joinedload(Expense.creator), joinedload(Expense.order), joinedload(Expense.supplier),
-    ).filter(
-        Expense.payment_method == "naqd", Expense.is_paid.is_(True),
-        Expense.cash_source.is_(None),
+    # OFIS kassasi (2026-11-17, foydalanuvchi qarori): buyurtmalardan
+    # tushgan naqd + qo'lda to'ldirishlar − barcha naqd xarajatlar. Ish
+    # boshqaruvchining "shaxsiy" naqd qoldig'i endi alohida yuritilmaydi.
+    sees_office = current_user.role in ("admin", "boss", "xarajatchi")
+    office = office_summary() if sees_office else None
+    office_deposits = (
+        CashDeposit.query.options(joinedload(CashDeposit.creator))
+        .order_by(CashDeposit.created_at.desc()).limit(100).all()
+        if sees_office else None
     )
-    if current_user.role == "xarajatchi":
+
+    cash_expenses = None
+    if sees_office:
         cash_expenses = (
-            cash_expenses_query.filter(Expense.created_by == current_user.id)
-            .order_by(Expense.date.desc(), Expense.id.desc()).limit(100).all()
-        )
-    elif current_user.role in ("admin", "boss"):
-        cash_expenses = (
-            cash_expenses_query.order_by(Expense.date.desc(), Expense.id.desc())
+            Expense.query.options(
+                joinedload(Expense.creator), joinedload(Expense.order),
+                joinedload(Expense.supplier),
+            )
+            .filter(Expense.payment_method.in_(OFFICE_CHANNELS), Expense.is_paid.is_(True))
+            .order_by(Expense.date.desc(), Expense.id.desc())
             .limit(100).all()
         )
 
     return render_template(
         "money/list.html",
         pending=pending, confirmed=confirmed,
-        my_balance=my_balance, my_received=my_received,
-        balance_rows=balance_rows, card_balance_rows=card_balance_rows,
-        card_total_received=card_total_received, card_total_balance=card_total_balance,
-        source_totals=source_totals, office_info=office_info,
-        office_deposits=office_deposits,
+        office=office, office_deposits=office_deposits,
+        deposit_sources=office_deposit_sources() if sees_office else [],
         cash_expenses=cash_expenses,
         can_confirm=current_user.role in ("admin", "xarajatchi", "boss"),
+        now=now_local(),
     )
 
 
@@ -219,23 +144,35 @@ def confirm_handover(handover_id):
 @login_required
 @permission_required("money.fund")
 def fund_office():
-    """Boshliq OFIS zaxirasiga pul kiritadi (2026-09-08, foydalanuvchi
-    qarori) — ish boshqaruvchi ombor kirimida "Naqd to'landi -> OFIS
-    xisobidan" tanlaganda shu zaxiradan sarflanadi."""
+    """OFIS hisobini to'ldirish (2026-11-17, foydalanuvchi so'rovi):
+    buyurtmalardan tushgan naqd yetmay qolganda qo'shimcha pul kiritiladi.
+    Sana-vaqt avtomatik yoziladi, manba (Zoxidjon, Karta, Bank...) majburiy.
+    Boss, admin va ish boshqaruvchi kirita oladi (money.fund)."""
     try:
-        amount = parse_money(request.form.get("amount"), "Summa", min_value=Decimal("0.01"))
+        amount = parse_money(request.form.get("amount"), "Summa", min_value=Decimal("1"))
+        source = parse_text(request.form.get("source"), "Manba", required=True, max_length=100)
         note = parse_text(request.form.get("note"), "Izoh", required=False, max_length=255)
     except ValidationError as e:
         flash(str(e), "danger")
         return redirect(url_for("money.list_handovers"))
 
-    db.session.add(CashDeposit(amount=amount, note=note, created_by=current_user.id))
+    channel = request.form.get("channel") or OFFICE_CHANNEL_CASH
+    if channel not in OFFICE_CHANNELS:
+        flash("Pul naqd yoki kartaga tushganini tanlang.", "danger")
+        return redirect(url_for("money.list_handovers"))
+
+    d = CashDeposit(amount=amount, source=source, note=note, channel=channel,
+                    created_by=current_user.id)
+    db.session.add(d)
+    db.session.flush()
     log_action(
-        current_user, "create", "cash_deposit", None,
-        f"OFIS zaxirasiga {money_str(amount)} so'm qo'shildi" + (f" — {note}" if note else ""),
+        current_user, "create", "cash_deposit", d.id,
+        f"OFIS hisobi ({channel}) to'ldirildi: {money_str(amount)} so'm, manba: {source}"
+        + (f" — {note}" if note else ""),
     )
     db.session.commit()
-    flash(f"OFIS zaxirasiga {money_str(amount)} so'm qo'shildi.", "success")
+    part = "kartasiga" if channel == OFFICE_CHANNEL_CARD else "kassasiga (naqd)"
+    flash(f"OFIS {part} {money_str(amount)} so'm qo'shildi (manba: {source}).", "success")
     return redirect(url_for("money.list_handovers"))
 
 
@@ -253,11 +190,19 @@ def adjust_deposit(deposit_id):
     try:
         new_amount = parse_money(request.form.get("amount"), "Summa", min_value=Decimal("0.01"))
         new_note = parse_text(request.form.get("note"), "Izoh", required=False, max_length=255)
+        new_source = parse_text(request.form.get("source"), "Manba", required=False, max_length=100)
     except ValidationError as e:
         flash(str(e), "danger")
         return redirect(url_for("money.list_handovers"))
 
     changes = []
+    new_channel = request.form.get("channel") or d.channel
+    if new_channel in OFFICE_CHANNELS and new_channel != d.channel:
+        changes.append(f"qism {d.channel} -> {new_channel}")
+        d.channel = new_channel
+    if (new_source or "") != (d.source or ""):
+        changes.append(f"manba «{d.source or '-'}» -> «{new_source or '-'}»")
+        d.source = new_source
     if new_amount != d.amount:
         changes.append(f"summa {money_str(d.amount)} -> {money_str(new_amount)}")
         d.amount = new_amount

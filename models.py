@@ -140,8 +140,16 @@ STOCK_EXPENSE_CATEGORY = "xomashyo"
 
 PAYMENT_CASH = "naqd"
 PAYMENT_TRANSFER = "perechisleniye"
+# OFIS kartasidan to'langan (2026-11-17, foydalanuvchi so'rovi) — OFIS
+# kassasining "kartada" qismidan ayriladi.
+PAYMENT_CARD = "karta"
 # Faqat is_paid=True bo'lganda mantiqiy — qarzga olinganda bo'sh qoladi.
-PAYMENT_METHODS = [PAYMENT_CASH, PAYMENT_TRANSFER]
+PAYMENT_METHODS = [PAYMENT_CASH, PAYMENT_CARD, PAYMENT_TRANSFER]
+
+# OFIS kassasining ikki qismi: naqd va karta.
+OFFICE_CHANNEL_CASH = "naqd"
+OFFICE_CHANNEL_CARD = "karta"
+OFFICE_CHANNELS = [OFFICE_CHANNEL_CASH, OFFICE_CHANNEL_CARD]
 
 # Perechisleniye qilinganda pul shu tashkilotlardan birining hisobidan
 # ketadi — hisobot/tahlilda qaysi tashkilot orqali qancha to'langani
@@ -612,17 +620,16 @@ HANDOVER_CHANNEL_CASH = "naqd"
 HANDOVER_CHANNEL_CARD = "karta"
 HANDOVER_CHANNELS = [HANDOVER_CHANNEL_CASH, HANDOVER_CHANNEL_CARD]
 
-# Ombor kirimida "Naqd to'landi" tanlansa, pul albatta BITTA manbadan
-# qoplanadi: yoki muayyan buyurtmaning topshirilgan puli (Expense.
-# source_order_id), yoki ikkita umumiy zaxiradan biri — OFIS kassasi yoki
-# Zoxidjon (rahbar) shaxsan qoplagan pul. Bu ikkovi uchun "kirim" (to'ldirish)
-# alohida yozilmaydi — faqat shu manbadan qancha sarflangani hisoblanadi
-# (2026-09-07, foydalanuvchi qarori). Manba tanlash MAJBURIY.
+# Naqd xarajat qayerdan qoplangani. 2026-11-17 dan (foydalanuvchi qarori)
+# BARCHA naqd xarajat OFIS kassasidan chiqadi — manba tanlanmaydi.
+# OFIS kassasi: ish boshqaruvchi qabul qilgan naqd to'lovlar (CashHandover)
+# + qo'lda to'ldirishlar (CashDeposit) − barcha naqd xarajatlar
+# (queries.office_balance). Eski yozuvlarda "zoxidjon" yoki source_order_id
+# qolgan — ular ham OFISdan chiqqan deb hisoblanadi (foydalanuvchi qarori).
 CASH_SOURCE_OFFICE = "ofis"
-CASH_SOURCE_OWNER = "zoxidjon"
+CASH_SOURCE_OWNER = "zoxidjon"   # faqat eski yozuvlar uchun, yangisi yozilmaydi
 CASH_SOURCE_LABELS = {
     CASH_SOURCE_OFFICE: "OFIS xisobidan",
-    CASH_SOURCE_OWNER: "Zoxidjon xisobidan",
 }
 
 
@@ -669,17 +676,21 @@ class CashHandover(db.Model):
 
 
 class CashDeposit(db.Model):
-    """Boshliq (boss) tomonidan OFIS zaxirasiga qo'shilgan pul (2026-09-08,
-    foydalanuvchi qarori). Ish boshqaruvchi ombor kirimida "Naqd to'landi ->
-    OFIS xisobidan" tanlaganda sarflanadigan zaxira shu yerdan to'ladi —
-    OFIS balansi endi shu kiritmalar minus shu manbadan qilingan xarajatlar
-    sifatida hisoblanadi (avval faqat "jami sarflangan" ko'rsatilardi,
-    kiritish/to'ldirish umuman kuzatilmasdi). Zoxidjon (rahbar) shaxsiy
-    mablag'i cheklanmagan deb hisoblanadi — shu sabab faqat OFIS uchun."""
+    """OFIS kassasini qo'lda to'ldirish (2026-09-08; 2026-11-17 dan manba
+    bilan). Buyurtmalardan kelgan naqd pul (ish boshqaruvchi "qabul qildim"
+    deganda) OFIS kassasiga o'zi tushadi; u yetmay qolganda shu yerda
+    qo'shimcha pul kiritiladi. Sana-vaqt avtomatik (`created_at`), manba
+    (`source`, masalan "Zoxidjon", "Karta", "Bank") majburiy."""
     __tablename__ = "cash_deposit"
 
     id = db.Column(db.Integer, primary_key=True)
     amount = db.Column(MONEY, nullable=False)
+    # Pul qayerdan keldi — eski yozuvlarda bo'sh bo'lishi mumkin
+    source = db.Column(db.String(100))
+    # Kassaning qaysi qismiga tushdi: "naqd" yoki "karta" (2026-11-17).
+    # Eski yozuvlar migratsiyada "naqd" bo'ladi.
+    channel = db.Column(db.String(10), nullable=False, default="naqd",
+                        server_default="naqd")
     note = db.Column(db.String(255))
     created_at = db.Column(db.DateTime, default=now_local)
     created_by = db.Column(db.Integer, db.ForeignKey("user.id"))
@@ -899,6 +910,27 @@ class LoginAttempt(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), index=True)
     ip_address = db.Column(db.String(45), index=True)
+    created_at = db.Column(db.DateTime, default=now_local, index=True)
+
+
+class SubmitToken(db.Model):
+    """Formaning bir martalik kaliti — bitta forma ikki marta yuborilsa,
+    ikkinchi nusxa yaratilmasligi uchun (2026-11-17, foydalanuvchi so'rovi:
+    bir xil buyurtma 2-3 marta yaratilib qolardi).
+
+    Forma ochilganda tasodifiy `token` beriladi. Saqlashda shu kalit avval
+    bazaga yoziladi — `token` unique bo'lgani uchun bir vaqtda kelgan ikkinchi
+    so'rov ham o'tolmaydi. Yaratilgan yozuv `object_id` da saqlanadi va
+    takror yuborilganda foydalanuvchi o'sha yozuvga yo'naltiriladi.
+    Yangi jadval — `db.create_all()` o'zi yaratadi, migratsiya shart emas.
+    """
+    __tablename__ = "submit_token"
+
+    id = db.Column(db.Integer, primary_key=True)
+    token = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    kind = db.Column(db.String(20), nullable=False)
+    object_id = db.Column(db.Integer)
+    created_by = db.Column(db.Integer, db.ForeignKey("user.id"))
     created_at = db.Column(db.DateTime, default=now_local, index=True)
 
 
