@@ -264,6 +264,8 @@ def stock_shortages(rows):
 
     Bir mahsulot bir necha qatorda kelsa, miqdorlar qo'shib tekshiriladi.
     Yozuvdan OLDIN chaqiriladi — aks holda yangi chiqimlar qoldiqni buzadi.
+    Qoldiq minusga tushishi mumkin emas (2026-11-17, foydalanuvchi qarori):
+    ro'yxat bo'sh bo'lmasa chaqiruvchi hech narsa yozmasdan xato ko'rsatadi.
     """
     needed = {}
     for data in rows:
@@ -277,7 +279,7 @@ def stock_shortages(rows):
         if missing > QTY_ZERO:
             messages.append(
                 f"«{material.name}»: omborda {qty_str(material.quantity)} {material.unit} "
-                f"bor, {qty_str(missing)} {material.unit} yetishmadi — qoldiq minusga o'tdi."
+                f"bor, {qty_str(missing)} {material.unit} yetishmaydi — qoldiq minusga tushishi mumkin emas."
             )
     return messages
 
@@ -365,8 +367,14 @@ def new_expense():
             flash("Xarajat sanasi kelajakda bo'lishi mumkin emas.", "danger")
             return _expense_page(selected_order=order, expense=None, form=request.form)
 
-        # yozuvdan oldin: qoldiq yetadimi
-        warnings = stock_shortages(rows)
+        # yozuvdan oldin: qoldiq yetadimi. Yetmasa HECH NARSA yozilmaydi —
+        # ombor qoldig'i minusga tushishi mumkin emas.
+        shortages = stock_shortages(rows)
+        if shortages:
+            for message in shortages:
+                flash(message, "danger")
+            return _expense_page(selected_order=order, expense=None, form=request.form)
+        warnings = []
 
         total = ZERO
         from_stock = 0
@@ -542,9 +550,11 @@ def edit_stock_expense(move_id):
         if missing > QTY_ZERO:
             flash(
                 f"«{material.name}»: omborda {qty_str(available)} {material.unit} bor, "
-                f"{qty_str(missing)} {material.unit} yetishmadi — qoldiq minusga o'tdi.",
-                "warning",
+                f"{qty_str(missing)} {material.unit} yetishmaydi — qoldiq minusga tushishi mumkin emas.",
+                "danger",
             )
+            return render_template("finance/stock_expense_form.html", move=move, order=order,
+                                   materials=materials_with_stock(only_active=True))
 
         move.material_id = material.id
         move.quantity = quantity

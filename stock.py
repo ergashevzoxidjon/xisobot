@@ -596,7 +596,8 @@ def _receive_page(form):
 def consume(material, quantity, unit_price, order, moved_on, note=None):
     """Ombordan mahsulot chiqarish. Yangi xarajat YOZILMAYDI.
 
-    Qoldiq yetmasa ish to'xtamaydi — chaqiruvchi ogohlantirish ko'rsatadi.
+    Qoldiq minusga tushmasligi uchun chaqiruvchi OLDIN `shortage()` bilan
+    tekshirishi shart (finance.stock_shortages) — bu funksiya o'zi tekshirmaydi.
     """
     move = StockMove(
         material_id=material.id, kind=STOCK_OUT,
