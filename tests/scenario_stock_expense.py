@@ -285,6 +285,60 @@ with app.test_client() as c:
         check("Hisobotda 'transport' turkumi 105 000",
               transport is not None and transport["amount"] == Decimal("105000.00"))
 
+# ---------------------------------------------------------------- 5
+print("\n=== 5. TIYIN VA KASR MIQDOR YO'Q (2026-11-17) ===")
+
+with app.test_client() as c:
+    login(c, "xar1")
+    common = {"supplier_name": "Plyonka MChJ", "payment_method": "naqd", "cash_source": "ofis"}
+
+    r = c.post("/ombor/kirim/tezkor", data={**common, "row_material_name": "Bakal-oq",
+                                            "row_unit": "dona", "row_quantity": "0.004",
+                                            "row_price": "100"})
+    res = r.get_json()
+    check("dona: 0.004 rad etildi (butun son)",
+          r.status_code == 400 and "butun son" in res["error"])
+
+    r = c.post("/ombor/kirim/tezkor", data={**common, "row_material_name": "Bakal-oq",
+                                            "row_unit": "dona", "row_quantity": "10",
+                                            "row_price": "1999.99"})
+    res = r.get_json()
+    with app.app_context():
+        m = Material.query.filter_by(name="Bakal-oq").first()
+        check("Narx 1999.99 -> 2000 so'mga yaxlitlandi",
+              res["ok"] and m.last_price == Decimal("2000.00"))
+        e = Expense.query.filter(Expense.description.like("Ombor kirimi: Bakal-oq%")).first()
+        check("Xarajat summasi tiyinsiz (20 000)", e.amount == Decimal("20000.00"))
+
+    r = c.post("/ombor/kirim/tezkor", data={**common, "row_material_name": "Bakal-oq",
+                                            "row_unit": "dona", "row_quantity": "1",
+                                            "row_price": "0,05"})
+    check("0,05 so'm narx rad etildi", r.status_code == 400)
+
+    r = c.post("/ombor/kirim/tezkor", data={**common, "row_material_name": "Plyonka kg",
+                                            "row_unit": "kg", "row_quantity": "2.5",
+                                            "row_price": "40000"})
+    with app.app_context():
+        m = Material.query.filter_by(name="Plyonka kg").first()
+        check("kg: 2.5 kasr miqdor qabul qilindi",
+              r.get_json()["ok"] and m.quantity == Decimal("2.5"))
+
+    # buyurtma xarajatida ham dona kasr bo'lmaydi
+    with app.app_context():
+        bakal_id = Material.query.filter_by(name="Bakal-oq").first().id
+    r = c.post("/moliya/xarajatlar/yangi", data={
+        "order_id": str(order_id), "expense_material": str(bakal_id),
+        "expense_description": "Bakal-oq", "expense_quantity": "1.5",
+        "expense_unit_price": "2000",
+    }, follow_redirects=True)
+    check("Xarajatda 1.5 dona rad etildi", "butun son" in text(r))
+
+    r = c.get(f"/moliya/xarajatlar/yangi?order_id={order_id}")
+    body = text(r)
+    check("Narx maydonlari butun so'm (step=1)",
+          'class="form-control text-end exp-price"' not in body
+          or 'step="1" min="1" class="form-control text-end exp-price"' in body)
+
 os.unlink(db_path)
 
 print()

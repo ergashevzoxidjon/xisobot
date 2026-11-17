@@ -17,7 +17,8 @@ sys.path.insert(0, APP)
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from template_helpers import (
-    status_color, payment_color, status_icon, category_icon, uzs, qty, date_uz, datetime_uz,
+    status_color, payment_color, status_icon, category_icon, uzs, whole, qty, date_uz,
+    datetime_uz,
 )
 from utils import today_local
 
@@ -628,6 +629,7 @@ def make_env(role, perms):
     env.filters["status_icon"] = status_icon
     env.filters["category_icon"] = category_icon
     env.filters["uzs"] = uzs
+    env.filters["whole"] = whole
     env.filters["qty"] = qty
     env.filters["date_uz"] = date_uz
     env.filters["datetime_uz"] = datetime_uz
@@ -749,7 +751,7 @@ for role, perms in ROLE_PERMISSIONS.items():
     })
     for n, f in [("status_color", status_color), ("payment_color", payment_color),
                  ("status_icon", status_icon), ("category_icon", category_icon),
-                 ("uzs", uzs), ("qty", qty), ("date_uz", date_uz), ("datetime_uz", datetime_uz)]:
+                 ("uzs", uzs), ("whole", whole), ("qty", qty), ("date_uz", date_uz), ("datetime_uz", datetime_uz)]:
         env.filters[n] = f
 
     out = env.get_template("dashboard.html").render(**CONTEXTS["dashboard.html"])
@@ -780,7 +782,7 @@ def render_for(role, tpl):
     })
     for n, f in [("status_color", status_color), ("payment_color", payment_color),
                  ("status_icon", status_icon), ("category_icon", category_icon),
-                 ("uzs", uzs), ("qty", qty), ("date_uz", date_uz), ("datetime_uz", datetime_uz)]:
+                 ("uzs", uzs), ("whole", whole), ("qty", qty), ("date_uz", date_uz), ("datetime_uz", datetime_uz)]:
         env.filters[n] = f
     return env.get_template(tpl).render(**CONTEXTS[tpl])
 

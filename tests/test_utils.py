@@ -37,8 +37,9 @@ def check(name, fn, expect=None, should_raise=False):
 
 print("=== PUL (parse_money) ===")
 check("oddiy son", lambda: parse_money("15000", "Summa"), Decimal("15000.00"))
-check("kasr son", lambda: parse_money("1500.55", "Summa"), Decimal("1500.55"))
-check("vergul kasr", lambda: parse_money("1500,55", "Summa"), Decimal("1500.55"))
+check("kasr son -> butun so'm", lambda: parse_money("1500.55", "Summa"), Decimal("1501.00"))
+check("vergul kasr -> butun so'm", lambda: parse_money("1500,45", "Summa"), Decimal("1500.00"))
+check("0,05 so'm (tasodifiy) rad etiladi", lambda: parse_money("0,05", "Summa", min_value=Decimal("0.01")), should_raise=True)
 check("probel bilan", lambda: parse_money("1 500 000", "Summa"), Decimal("1500000.00"))
 check("HARF kiritildi", lambda: parse_money("abc", "Summa"), should_raise=True)
 check("MANFIY son", lambda: parse_money("-500", "Summa"), should_raise=True)
@@ -72,8 +73,9 @@ check("RUXSAT ETILMAGAN", lambda: parse_choice("hacker", "Holat", ["yangi", "tay
 
 print("\n=== PUL FORMATLASH ===")
 check("format 1", lambda: money_str(Decimal("1234567.5")), "1 234 567.50")
-check("format 2", lambda: money_str(0), "0.00")
-check("format manfiy", lambda: money_str(Decimal("-5000")), "-5 000.00")
+check("format 2", lambda: money_str(0), "0")
+check("format manfiy", lambda: money_str(Decimal("-5000")), "-5 000")
+check("butun summa tiyinsiz", lambda: money_str(Decimal("99999.00")), "99 999")
 check("Decimal aniqligi", lambda: to_money("0.1") + to_money("0.2"), Decimal("0.30"))
 
 print("\n=== OY CHEGARALARI ===")

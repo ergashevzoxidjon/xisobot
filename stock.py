@@ -34,7 +34,8 @@ from queries import materials_with_stock, cash_balance
 from suppliers import supplier_from_form
 from utils import (
     ValidationError, parse_text, parse_money, parse_qty, parse_date, parse_choice,
-    to_money, to_qty, money_str, qty_str, today_local, QTY_ZERO,
+    to_money, to_qty, money_str, qty_str, today_local, QTY_ZERO, check_unit_qty,
+    whole_money,
 )
 
 stock_bp = Blueprint("stock", __name__, url_prefix="/ombor")
@@ -179,7 +180,8 @@ def adjust_material(material_id):
     raw_qty = (request.form.get("target_quantity") or "").strip()
     raw_price = (request.form.get("target_price") or "").strip()
     try:
-        new_qty = parse_qty(raw_qty, "Yangi qoldiq") if raw_qty else None
+        new_qty = (check_unit_qty(parse_qty(raw_qty, "Yangi qoldiq"), m.unit, "Yangi qoldiq")
+                   if raw_qty else None)
         new_price = parse_money(raw_price, "Yangi narx") if raw_price else None
     except ValidationError as e:
         flash(str(e), "danger")
@@ -358,8 +360,9 @@ def receipt_rows_from_form(form):
 
         rows.append({
             "material": material,
-            "quantity": parse_qty(qty_text, f"{row}-qator, soni",
-                                  min_value=Decimal("0.001")),
+            "quantity": check_unit_qty(
+                parse_qty(qty_text, f"{row}-qator, soni", min_value=Decimal("0.001")),
+                material.unit, f"{row}-qator, soni"),
             "unit_price": parse_money(price_text, f"{row}-qator, narxi",
                                       min_value=Decimal("0.01")),
             "location": parse_text(location_text, f"{row}-qator, joylashuvi",
@@ -451,7 +454,7 @@ def _record_receipt(rows, payment, moved_on, note):
     total = ZERO
     for data in rows:
         material = data["material"]
-        amount = to_money(data["quantity"] * data["unit_price"])
+        amount = whole_money(data["quantity"] * data["unit_price"])
 
         # pul chiqdi (yoki qarzga olindi) — xarajat sifatida yoziladi
         expense = Expense(
@@ -489,7 +492,7 @@ def _record_receipt(rows, payment, moved_on, note):
 
 
 def _receipt_total(rows):
-    return to_money(sum((d["quantity"] * d["unit_price"] for d in rows), Decimal("0")))
+    return sum((whole_money(d["quantity"] * d["unit_price"]) for d in rows), ZERO)
 
 
 @stock_bp.route("/kirim", methods=["GET", "POST"])

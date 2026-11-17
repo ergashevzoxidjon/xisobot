@@ -115,9 +115,9 @@
           <span class="cart-name-text"></span>
           <small class="cart-unit-text"></small>
         </div>
-        <input type="number" step="0.001" min="0.001" class="form-control form-control-sm row-qty"
+        <input type="number" step="any" min="0.001" class="form-control form-control-sm row-qty"
                name="row_quantity" placeholder="Soni">
-        <input type="number" step="0.01" min="0.01" class="form-control form-control-sm row-price"
+        <input type="number" step="1" min="1" class="form-control form-control-sm row-price"
                name="row_price" placeholder="Narxi">
         <div class="input-group input-group-sm row-location-wrap">
           <span class="input-group-text"><i class="bi bi-geo-alt"></i></span>
@@ -261,7 +261,7 @@ const newTile = document.getElementById('newMaterialTile');
 let newItemSeq = 0;
 
 function money(v) {
-  return (v || 0).toLocaleString('ru-RU', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  return (v || 0).toLocaleString('ru-RU', {minimumFractionDigits: 0, maximumFractionDigits: 2});
 }
 
 function recalcCart() {
@@ -269,7 +269,7 @@ function recalcCart() {
   cartBody.querySelectorAll('.cart-row').forEach(row => {
     const qty = parseFloat(row.querySelector('.row-qty').value) || 0;
     const price = parseFloat(row.querySelector('.row-price').value) || 0;
-    const line = qty * price;
+    const line = Math.round(qty * price);   // butun so'm
     row.querySelector('.cart-row-line').textContent = money(line);
     sum += line;
   });
@@ -289,8 +289,9 @@ function addCartRow(opts) {
   row.querySelector('.row-unit').value = opts.unit || '';
   row.querySelector('.cart-name-text').textContent = opts.name;
   row.querySelector('.cart-unit-text').textContent = opts.unit || '';
+  applyQtyStep(row.querySelector('.row-qty'), opts.unit || '');
   if (opts.qty) row.querySelector('.row-qty').value = opts.qty;
-  if (opts.price && parseFloat(opts.price) > 0) row.querySelector('.row-price').value = opts.price;
+  if (opts.price && parseFloat(opts.price) > 0) row.querySelector('.row-price').value = Math.round(parseFloat(opts.price));
   if (opts.location) row.querySelector('.row-location').value = opts.location;
   cartBody.appendChild(row);
   recalcCart();

@@ -544,6 +544,28 @@ if (toggle) {
   toggle.addEventListener('click', () => { sidebar.classList.add('show'); backdrop.classList.add('show'); });
   backdrop.addEventListener('click', () => { sidebar.classList.remove('show'); backdrop.classList.remove('show'); });
 }
+
+/* Raqam maydoni ustida sichqoncha g'ildiragi aylantirilsa qiymat o'zgarmasin —
+   aks holda narx bilmasdan 0,05 yoki 1 999,99 bo'lib qolardi (2026-11-17). */
+document.addEventListener('wheel', e => {
+  const el = document.activeElement;
+  if (el && el.type === 'number' && el === e.target) el.blur();
+}, {passive: true});
+
+/* Sanaladigan birliklar (dona, list, rulon, quti) — miqdor faqat butun son;
+   kg, metr, litr — kasr bo'lishi mumkin. Server ham shuni tekshiradi
+   (utils.COUNTABLE_UNITS). */
+const COUNTABLE_UNITS = ['dona', 'list', 'rulon', 'quti'];
+function applyQtyStep(input, unit) {
+  if (!input) return;
+  if (COUNTABLE_UNITS.includes(unit)) {
+    input.step = '1';
+    input.min = '1';
+  } else {
+    input.step = 'any';
+    input.min = '0.001';
+  }
+}
 </script>
 {% block scripts %}{% endblock %}
 </body>

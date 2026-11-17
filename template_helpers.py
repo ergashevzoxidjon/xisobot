@@ -1,3 +1,4 @@
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from utils import money_str, qty_str, today_local
 
 ORDER_STATUS_COLORS = {
@@ -60,6 +61,24 @@ def uzs(value):
     return money_str(value)
 
 
+def whole(value):
+    """Maydonga qo'yiladigan summa — butun so'mga yaxlitlanadi.
+
+    Narx maydonlari endi butun son qabul qiladi (step=1); bazadagi eski kasr
+    qiymat (276271.36) to'g'ridan-to'g'ri qo'yilsa, brauzer saqlashni to'xtatib
+    qo'yardi. Raqam bo'lmagan qiymat (bo'sh satr) o'zgarishsiz qaytadi.
+    """
+    if value is None or value == "":
+        return ""
+    try:
+        d = Decimal(str(value).replace(" ", "").replace(",", "."))
+    except (InvalidOperation, ValueError):
+        return value
+    if not d.is_finite():
+        return value
+    return str(d.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+
 def qty(value):
     """Ombor miqdori: 240.000 -> '240', 1.500 -> '1.5'."""
     return qty_str(value)
@@ -83,6 +102,7 @@ def register_template_helpers(app):
     app.jinja_env.filters["status_icon"] = status_icon
     app.jinja_env.filters["category_icon"] = category_icon
     app.jinja_env.filters["uzs"] = uzs
+    app.jinja_env.filters["whole"] = whole
     app.jinja_env.filters["qty"] = qty
     app.jinja_env.filters["date_uz"] = date_uz
     app.jinja_env.filters["datetime_uz"] = datetime_uz

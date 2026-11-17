@@ -27,6 +27,7 @@ from stock import consume, shortage, _confirmed_handovers_for
 from utils import (
     ValidationError, parse_money, parse_date, parse_text, parse_choice, parse_int,
     parse_qty, to_money, to_qty, today_local, month_bounds, money_str, qty_str, QTY_ZERO,
+    check_unit_qty, whole_money,
 )
 
 finance_bp = Blueprint("finance", __name__, url_prefix="/moliya")
@@ -200,6 +201,8 @@ def expense_rows_from_form(form, require_material=False, allow_empty=False):
 
         quantity = parse_qty(qty_text or "1", f"{row}-qator, soni",
                              min_value=Decimal("0.001"))
+        if material is not None:
+            check_unit_qty(quantity, material.unit, f"{row}-qator, soni")
         unit_price = parse_money(price_text, f"{row}-qator, narxi",
                                  min_value=Decimal("0.01"))
 
@@ -209,7 +212,7 @@ def expense_rows_from_form(form, require_material=False, allow_empty=False):
                 description, f"{row}-qator, nomi", required=True, max_length=255),
             "quantity": quantity,
             "unit_price": unit_price,
-            "amount": to_money(quantity * unit_price),
+            "amount": whole_money(quantity * unit_price),
         })
 
     if not rows and not allow_empty:
@@ -511,7 +514,9 @@ def edit_stock_expense(move_id):
             material = db.session.get(Material, int(raw_material)) if raw_material.isdigit() else None
             if material is None:
                 raise ValidationError("Mahsulot tanlanmagan.")
-            quantity = parse_qty(request.form.get("quantity"), "Soni", min_value=Decimal("0.001"))
+            quantity = check_unit_qty(
+                parse_qty(request.form.get("quantity"), "Soni", min_value=Decimal("0.001")),
+                material.unit, "Soni")
             unit_price = parse_money(request.form.get("unit_price"), "Narxi", min_value=Decimal("0.01"))
             moved_on = parse_date(request.form.get("moved_on"), "Sana", required=False) or move.moved_on
         except ValidationError as err:
