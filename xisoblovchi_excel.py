@@ -19,18 +19,25 @@ Faqat qiymatlar yangilanadi va yangi qatorlar qo'shiladi; Excelda yo'q qatorlar 
 
 import io
 import re
+from functools import lru_cache
 
-from openpyxl import Workbook, load_workbook
-from openpyxl.styles import Alignment, Font, PatternFill
-from openpyxl.utils import get_column_letter
+# openpyxl og'ir (~0,6 soniya) — ilova ishga tushishini sekinlashtirmasligi uchun
+# faqat Excel eksport/import qilinganda yuklanadi (2026-11-18).
 
 MAX_FILE_BYTES = 5 * 1024 * 1024
 MAX_STR_LEN = 300          # undan uzun matnlar (rasm base64 va h.k.) Excelga chiqarilmaydi
 MAX_ROWS_PER_SHEET = 20000
-HEAD_FILL = PatternFill("solid", fgColor="E31C79")
-HEAD_FONT = Font(bold=True, color="FFFFFF")
-KEY_FONT = Font(color="999999", italic=True)
-PATH_FONT = Font(color="555555")
+
+
+@lru_cache(maxsize=1)
+def _styles():
+    from openpyxl.styles import Font, PatternFill
+    return {
+        "head_fill": PatternFill("solid", fgColor="E31C79"),
+        "head_font": Font(bold=True, color="FFFFFF"),
+        "key_font": Font(color="999999", italic=True),
+        "path_font": Font(color="555555"),
+    }
 
 BAD_SHEET_CHARS = re.compile(r"[\[\]:*?/\\]")
 TOKEN_RE = re.compile(r"^([^.\[\]]+)|\.([^.\[\]]+)|\[(\d+)\]")
@@ -86,14 +93,20 @@ def _sheet_title(nom, used):
 
 
 def _style_header(ws, row, ncols):
+    from openpyxl.styles import Alignment
+    st = _styles()
     for c in range(1, ncols + 1):
         cell = ws.cell(row=row, column=c)
-        cell.fill, cell.font = HEAD_FILL, HEAD_FONT
+        cell.fill, cell.font = st["head_fill"], st["head_font"]
         cell.alignment = Alignment(vertical="center")
 
 
 def build_workbook(sections):
     """sections: [{"kalit": "erp_x", "nom": "Qog'oz", "qiymat": <JSON>}] -> xlsx baytlari."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+    from openpyxl.utils import get_column_letter
+    st = _styles()
     wb = Workbook()
     help_ws = wb.active
     help_ws.title = "Yo'riqnoma"
@@ -123,7 +136,7 @@ def build_workbook(sections):
             continue
         ws = wb.create_sheet(_sheet_title(nom, used))
         ws["A1"], ws["B1"] = key, None
-        ws["A1"].font = KEY_FONT
+        ws["A1"].font = st["key_font"]
         if isinstance(val, list) and val and all(isinstance(x, dict) for x in val):
             ws["B1"] = "jadval"
             rows = [flatten(x) for x in val[:MAX_ROWS_PER_SHEET]]
@@ -155,7 +168,7 @@ def build_workbook(sections):
             else:
                 leaves = flatten(val)
             for ri, (path, v) in enumerate(list(leaves.items())[:MAX_ROWS_PER_SHEET], 3):
-                ws.cell(row=ri, column=1, value=path).font = PATH_FONT
+                ws.cell(row=ri, column=1, value=path).font = st["path_font"]
                 ws.cell(row=ri, column=2, value=v)
             ws.column_dimensions["A"].width = 60
             ws.column_dimensions["B"].width = 24
@@ -185,6 +198,7 @@ def parse_workbook(data):
     ValueError — fayl yaroqsiz."""
     if len(data) > MAX_FILE_BYTES:
         raise ValueError("Fayl juda katta (5 MB gacha).")
+    from openpyxl import load_workbook
     try:
         wb = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
     except Exception:

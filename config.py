@@ -40,6 +40,9 @@ class Config:
 
     WTF_CSRF_TIME_LIMIT = None  # sessiya davomida token amal qiladi
 
+    # Statik fayllar (logo) brauzer keshida turadi — har sahifada qayta so'ralmaydi
+    SEND_FILE_MAX_AGE_DEFAULT = 7 * 24 * 3600
+
     # Ro'yxatlarda bir sahifadagi qatorlar soni
     PER_PAGE = int(os.environ.get("PER_PAGE", 25))
 

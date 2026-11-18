@@ -1,6 +1,8 @@
 import os
+import time
 
-from flask import Flask, render_template
+from flask import Flask, g, has_request_context, render_template, request
+from flask_login import current_user
 
 from config import Config
 from extensions import db, login_manager, csrf
@@ -69,9 +71,71 @@ def create_app(config_object=Config):
     register_error_handlers(app)
 
     with app.app_context():
-        db.create_all()
+        _create_missing_tables()
+
+    register_timing(app)
 
     return app
+
+
+def _create_missing_tables():
+    """Jadvallar bor bo'lsa `create_all()` chaqirilmaydi: u har jadval uchun alohida
+    so'rov yuboradi (~30 ta) va ilovaning sovuq startini sekinlashtiradi (2026-11-18).
+    Bitta so'rov bilan jadvallar ro'yxati olinadi, yangi jadval bo'lsagina yaratiladi."""
+    from sqlalchemy import inspect
+    existing = set(inspect(db.engine).get_table_names())
+    if any(name not in existing for name in db.metadata.tables):
+        db.create_all()
+
+
+SLOW_REQUEST_MS = 1500
+_sql_timing_ready = False
+
+
+def register_timing(app):
+    """Har javobga `Server-Timing` sarlavhasi (faqat kirgan foydalanuvchiga):
+    ilova vaqti, SQL vaqti va so'rovlar soni. Brauzerda DevTools -> Network -> Timing
+    yoki fetch(...).headers.get('server-timing') orqali ko'rinadi — sekinlik
+    tarmoqdami, ilovadami yoki bazadami, shuni ajratish uchun (2026-11-18).
+    Juda sekin so'rovlar jurnalga ham yoziladi."""
+    global _sql_timing_ready
+    if not _sql_timing_ready:
+        from sqlalchemy import event
+        from sqlalchemy.engine import Engine
+
+        @event.listens_for(Engine, "before_cursor_execute")
+        def _sql_start(conn, cursor, statement, parameters, context, executemany):
+            if has_request_context():
+                context._t0 = time.perf_counter()
+
+        @event.listens_for(Engine, "after_cursor_execute")
+        def _sql_end(conn, cursor, statement, parameters, context, executemany):
+            t0 = getattr(context, "_t0", None)
+            if t0 is not None and has_request_context():
+                g.sql_count = getattr(g, "sql_count", 0) + 1
+                g.sql_time = getattr(g, "sql_time", 0.0) + (time.perf_counter() - t0)
+
+        _sql_timing_ready = True
+
+    @app.before_request
+    def _timing_start():
+        g.req_t0 = time.perf_counter()
+
+    @app.after_request
+    def _timing_end(response):
+        t0 = getattr(g, "req_t0", None)
+        if t0 is None:
+            return response
+        total_ms = (time.perf_counter() - t0) * 1000
+        sql_ms = getattr(g, "sql_time", 0.0) * 1000
+        sql_n = getattr(g, "sql_count", 0)
+        if current_user.is_authenticated:
+            response.headers["Server-Timing"] = (
+                f'app;dur={total_ms:.0f}, db;dur={sql_ms:.0f};desc="{sql_n} queries"')
+        if total_ms > SLOW_REQUEST_MS:
+            app.logger.warning("Sekin so'rov: %s %s — %.0f ms (SQL: %d ta, %.0f ms)",
+                               request.method, request.path, total_ms, sql_n, sql_ms)
+        return response
 
 
 def register_error_handlers(app):
