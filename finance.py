@@ -11,6 +11,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import joinedload, selectinload
 
 from extensions import db
+from idempotency import commit_once, find_submission, flash_duplicate
 from models import (
     Expense, Order, OrderItem, Payment, Client, Material, StockMove, log_action,
     EXPENSE_CATEGORIES, GENERAL_EXPENSE_CATEGORIES, EXPENSE_ORDER_CATEGORY,
@@ -349,6 +350,12 @@ def expenses_list():
 @permission_required("expenses.create")
 def new_expense():
     if request.method == "POST":
+        if find_submission() is not None:     # forma ikki marta yuborilgan
+            flash_duplicate()
+            order_id = request.form.get("order_id", type=int)
+            if order_id:
+                return redirect(url_for("orders.order_detail", order_id=order_id))
+            return redirect(url_for("finance.expenses_list"))
         order = None
         try:
             order = parse_expense_order(request.form)
@@ -405,7 +412,11 @@ def new_expense():
             record_taxi(taxi, order, exp_date)
             total += taxi["amount"]
 
-        db.session.commit()
+        if not commit_once("expense", order.id if order else None):
+            flash_duplicate()
+            if order:
+                return redirect(url_for("orders.order_detail", order_id=order.id))
+            return redirect(url_for("finance.expenses_list"))
         for message in warnings:
             flash(message, "warning")
 

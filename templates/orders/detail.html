@@ -296,7 +296,7 @@
             onsubmit="if(this.dataset.sent)return false; this.dataset.sent='1';
                       var b=this.querySelector('button[type=submit],button:not([type])');
                       if(b){b.disabled=true; b.innerHTML='<i class=\'bi bi-hourglass-split\'></i> Yuborilmoqda...';}">
-        {{ csrf() }}
+        {{ csrf() }}{{ once() }}
         <div class="row g-2">
           <div class="col-sm-5">
             <input type="number" step="1" min="1" name="amount" class="form-control" placeholder="Summa" required>

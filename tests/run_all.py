@@ -23,6 +23,7 @@ TESTS = [
     ("scenario_stock_nonnegative.py", "Ombor qoldig'i minusga tushmaydi (2026-11-17)"),
     ("scenario_partial_transfer.py", "Kirim: perechisleniyeda to'langan summa va qarz qismi (2026-11-17)"),
     ("scenario_yangiliklar.py", "Kirish limiti, audit, zaxira, kechikkan, varaqa, dublikat, foyda-zarar, SMS, avto-migratsiya (2026-11-17)"),
+    ("scenario_double_submit.py", "Pul formalarini takror yuborishdan himoya: kalit, poyga, tezkor kirim (2026-11-18)"),
     ("scenario_xisoblovchi.py", "Xisoblovchi Xisobot ichida: kirish, rejim, bazaga saqlash, zaxira (2026-11-17)"),
 ]
 

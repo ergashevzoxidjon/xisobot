@@ -76,7 +76,7 @@
 <div class="col-12 col-xl-8" id="expenseMainCol">
 <div class="card p-4">
 <form method="post" id="expenseForm">
-  {{ csrf() }}
+  {{ csrf() }}{{ once() }}
 
   {# ---------------- 1. BUYURTMA ---------------- #}
   <div class="form-step">
@@ -321,7 +321,7 @@
 <div class="modal fade" id="quickReceiveModal" tabindex="-1" aria-labelledby="quickReceiveTitle" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered modal-lg">
     <form class="modal-content" id="quickReceiveForm" novalidate>
-      {{ csrf() }}
+      {{ csrf() }}{{ once() }}
       <div class="modal-header">
         <div>
           <h5 class="modal-title" id="quickReceiveTitle">
@@ -726,6 +726,10 @@ document.querySelectorAll('input[name="category"]').forEach(radio => {
 
 /* ---------------- tezkor kirim: formadan chiqmasdan omborga qabul qilish ---------------- */
 {% if quick_receive %}
+function newFormToken() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID().replace(/-/g, '');
+  return Array.from({length: 32}, () => Math.floor(Math.random() * 16).toString(16)).join('');
+}
 const QUICK_RECEIVE_URL = "{{ url_for('stock.quick_receive') }}";
 {% set supplier_json = [] %}
 {% for s in suppliers %}{% set _ = supplier_json.append({'id': s.id, 'name': s.name}) %}{% endfor %}
@@ -901,6 +905,8 @@ qrForm.addEventListener('submit', e => {
     .then(r => r.json().catch(() => ({ok: false, error: "Server javobi tushunarsiz (" + r.status + ")."})))
     .then(res => {
       if (!res.ok) { qrShowError(res.error || "Saqlab bo'lmadi."); return; }
+      // kalit ishlatildi — keyingi tezkor kirim yangi kalit bilan ketadi
+      qrForm.querySelector('input[name="form_token"]').value = newFormToken();
       upsertMaterial(res.material);
       const tr = putMaterial(res.material, qrTargetRow);
       // kirim narxi shu qatorning narxi bo'ladi

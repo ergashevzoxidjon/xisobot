@@ -86,7 +86,7 @@
 
   {% if has_perm('money.fund') %}
   <form method="post" action="{{ url_for('money.fund_office') }}" class="no-print">
-    {{ csrf() }}
+    {{ csrf() }}{{ once() }}
     <div class="mb-2">
       <span class="form-label small text-muted me-2">Pul qayerga tushdi:</span>
       <div class="btn-group btn-group-sm" role="group" aria-label="Naqd yoki karta">

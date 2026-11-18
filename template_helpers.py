@@ -107,3 +107,6 @@ def register_template_helpers(app):
     app.jinja_env.filters["date_uz"] = date_uz
     app.jinja_env.filters["datetime_uz"] = datetime_uz
     app.jinja_env.globals["today"] = today_local
+    # takror yuborishdan himoya: `{{ once() }}` forma ichida yashirin kalit beradi
+    from idempotency import new_token
+    app.jinja_env.globals["new_form_token"] = new_token

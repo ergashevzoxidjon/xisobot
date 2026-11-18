@@ -22,6 +22,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import joinedload
 
 from extensions import db
+from idempotency import commit_once, find_submission, flash_duplicate
 from models import (
     Material, StockMove, Expense, Order, Supplier, log_action,
     STOCK_IN, STOCK_OUT, STOCK_UNITS, STOCK_EXPENSE_CATEGORY, ZERO,
@@ -526,6 +527,9 @@ def _receipt_total(rows):
 def receive():
     """Omborga mahsulot qabul qilish. Har bir qator xarajat sifatida yoziladi."""
     if request.method == "POST":
+        if find_submission() is not None:     # forma ikki marta yuborilgan
+            flash_duplicate()
+            return redirect(url_for("stock.list_materials"))
         try:
             rows = receipt_rows_from_form(request.form)
             moved_on = parse_date(request.form.get("moved_on"), "Sana",
@@ -542,7 +546,9 @@ def receive():
             return _receive_page(form=request.form)
 
         total = _record_receipt(rows, payment, moved_on, note)
-        db.session.commit()
+        if not commit_once("receipt", rows[0]["material"].id):
+            flash_duplicate()
+            return redirect(url_for("stock.list_materials"))
         if payment["warning"]:
             flash(payment["warning"], "warning")
 
@@ -586,6 +592,11 @@ def quick_receive():
     qatorga qo'yadi.
     """
     form = request.form
+    earlier = find_submission()
+    if earlier is not None:
+        # birinchi so'rov saqlangan, lekin javobi yetib bormagan bo'lishi mumkin:
+        # xato ko'rsatmaymiz — mahsulotning hozirgi holatini qaytaramiz
+        return _quick_receive_duplicate(earlier)
     try:
         rows = receipt_rows_from_form(form)
         if len(rows) != 1:
@@ -602,7 +613,8 @@ def quick_receive():
     if not material.is_active:
         material.is_active = True   # arxivdagi mahsulot qayta qabul qilindi
     total = _record_receipt(rows, payment, moved_on, "Xarajat formasidan tezkor kirim")
-    db.session.commit()
+    if not commit_once("receipt", material.id):
+        return _quick_receive_duplicate(find_submission())
 
     material = db.session.get(Material, material.id)
     return jsonify({
@@ -616,6 +628,25 @@ def quick_receive():
             "id": material.id,
             "name": material.name,
             "unit": material.unit,
+            "qty": qty_str(material.quantity),
+            "price": str(to_money(material.last_price)),
+        },
+    })
+
+
+def _quick_receive_duplicate(earlier):
+    """Tezkor kirim takror yuborildi: yangi yozuv yo'q, forma esa muvaffaqiyatli
+    holatda davom etishi uchun mahsulotning hozirgi holati qaytariladi."""
+    material = db.session.get(Material, earlier.object_id) if earlier and earlier.object_id else None
+    if material is None:
+        return jsonify({"ok": False, "error": "Bu kirim allaqachon yozilgan. "
+                        "Omborni yangilab, tekshirib ko'ring."}), 409
+    return jsonify({
+        "ok": True,
+        "message": f"«{material.name}» kirimi allaqachon yozilgan — ikkinchi marta yozilmadi.",
+        "warning": "",
+        "material": {
+            "id": material.id, "name": material.name, "unit": material.unit,
             "qty": qty_str(material.quantity),
             "price": str(to_money(material.last_price)),
         },

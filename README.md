@@ -128,6 +128,10 @@ python tests/run_all.py
 
 Flask o'rnatilmagan bo'lsa ham ishlaydi. Tekshiradi: ma'lumot validatsiyasi, moliyaviy hisob-kitob, barcha shablonlar × 4 rol, url_for endpointlari, CSRF tokenlari, route himoyasi, model tuzilishi.
 
+### Pul formalarini takror yuborishdan himoya
+
+To'lov, xarajat, ombor kirimi, taminotchiga to'lov, OFIS to'ldirish va avans formalarida yashirin `form_token` bor (shablonda `{{ once() }}`). Marshrut POST boshida `find_submission()` bilan kalit ishlatilmaganini tekshiradi, yozuvlarni esa `commit_once(kind)` bilan kalitning o'zi bilan bitta tranzaksiyada saqlaydi — parallel ikkinchi so'rov commit'da to'xtaydi va hamma yozuvlari bekor bo'ladi. Xato bilan qaytgan forma kalitni yondirmaydi. Kalit kelmasa himoya o'chiq (eski sahifa, tashqi mijoz). **Yangi pul formasi qo'shsangiz:** shablonga `{{ once() }}`, marshrutga shu ikki chaqiruv. Sinov: `tests/scenario_double_submit.py`.
+
 ---
 
 ## Xisoblovchi (narx hisoblagich)
@@ -187,6 +191,7 @@ ulang, aks holda har deploy'da fayllar yo'qoladi. cPanel'da bu muammo yo'q.
 | `models.py` | Jadvallar va biznes qoidalari |
 | `queries.py` | Agregat so'rovlar (N+1 oldini olish) |
 | `utils.py` | Pul (Decimal), Toshkent vaqti, validatsiya |
+| `idempotency.py` | Pul formalarini takror yuborishdan himoya (bir martalik `form_token`) |
 | `permissions.py` | 4 rol va 14 ruxsat |
 | `orders.py` | Buyurtmalar, to'lovlar, fayllar, hisob-faktura |
 | `finance.py` | Xarajatlar, hisobot, tahlil, Excel |

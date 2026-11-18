@@ -88,7 +88,7 @@
     <div class="card p-4 no-print">
       <h6 class="fw-bold mb-3"><i class="bi bi-cash-coin me-1 text-muted"></i> To'lov qilish</h6>
       <form method="post" action="{{ url_for('suppliers.pay_supplier', supplier_id=supplier.id) }}">
-        {{ csrf() }}
+        {{ csrf() }}{{ once() }}
         <div class="row g-2">
           <div class="col-sm-5">
             <input type="number" step="1" min="1" name="amount" class="form-control" placeholder="Summa" required>

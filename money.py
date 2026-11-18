@@ -46,6 +46,7 @@ from flask_login import login_required, current_user
 from sqlalchemy.orm import joinedload
 
 from extensions import db
+from idempotency import commit_once, find_submission, flash_duplicate
 from models import (
     CashHandover, HANDOVER_PENDING, HANDOVER_CONFIRMED, User, ZERO, log_action,
     HANDOVER_CHANNEL_CASH, HANDOVER_CHANNEL_CARD,
@@ -148,6 +149,9 @@ def fund_office():
     buyurtmalardan tushgan naqd yetmay qolganda qo'shimcha pul kiritiladi.
     Sana-vaqt avtomatik yoziladi, manba (Zoxidjon, Karta, Bank...) majburiy.
     Boss, admin va ish boshqaruvchi kirita oladi (money.fund)."""
+    if find_submission() is not None:     # forma ikki marta yuborilgan
+        flash_duplicate()
+        return redirect(url_for("money.list_handovers"))
     try:
         amount = parse_money(request.form.get("amount"), "Summa", min_value=Decimal("1"))
         source = parse_text(request.form.get("source"), "Manba", required=True, max_length=100)
@@ -170,7 +174,9 @@ def fund_office():
         f"OFIS hisobi ({channel}) to'ldirildi: {money_str(amount)} so'm, manba: {source}"
         + (f" — {note}" if note else ""),
     )
-    db.session.commit()
+    if not commit_once("deposit", d.id):
+        flash_duplicate()
+        return redirect(url_for("money.list_handovers"))
     part = "kartasiga" if channel == OFFICE_CHANNEL_CARD else "kassasiga (naqd)"
     flash(f"OFIS {part} {money_str(amount)} so'm qo'shildi (manba: {source}).", "success")
     return redirect(url_for("money.list_handovers"))

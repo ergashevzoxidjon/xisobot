@@ -23,6 +23,7 @@ from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 
 from extensions import db
+from idempotency import commit_once, find_submission, flash_duplicate
 from models import (
     Employee, EmployeeSalary, EmployeeAdvance, Expense, User, ManagerPlan,
     log_action, ZERO, SALARY_EXPENSE_CATEGORY,
@@ -267,6 +268,10 @@ def add_advance(employee_id):
     tanlanadi (2026-08-29, foydalanuvchi qarori)."""
     emp = Employee.query.get_or_404(employee_id)
 
+    if find_submission() is not None:     # forma ikki marta yuborilgan
+        flash_duplicate()
+        return redirect(url_for("hr.employee_detail", employee_id=employee_id))
+
     try:
         kind = request.form.get("kind") or PAYMENT_KIND_AVANS
         if kind not in PAYMENT_KINDS:
@@ -317,7 +322,9 @@ def add_advance(employee_id):
     db.session.add(advance)
     log_action(current_user, "create", "employee_advance", emp.id,
                f"{emp.full_name}: {money_str(amount)} so'm ({kind_label}, {period_text} uchun)")
-    db.session.commit()
+    if not commit_once("advance", advance.id):
+        flash_duplicate()
+        return redirect(url_for("hr.employee_detail", employee_id=employee_id))
     flash(f"{emp.full_name}ga {money_str(amount)} so'm ({kind_label}, {period_text} uchun) yozildi.", "success")
     return redirect(url_for("hr.employee_detail", employee_id=employee_id, year=period_year))
 

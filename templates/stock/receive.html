@@ -52,7 +52,7 @@
 
 <div class="card p-4" style="max-width:1000px">
 <form method="post" id="receiveForm">
-  {{ csrf() }}
+  {{ csrf() }}{{ once() }}
 
   {# ---------------- 1. QABUL QILINGAN MAHSULOTLAR — KATALOG + SAVAT ---------------- #}
   <div class="form-step">

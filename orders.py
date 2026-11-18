@@ -11,6 +11,7 @@ from flask import (
 from flask_login import login_required, current_user
 from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
+from idempotency import commit_once, find_submission, flash_duplicate
 from sqlalchemy.orm import joinedload, selectinload
 from werkzeug.utils import secure_filename
 
@@ -824,6 +825,10 @@ def add_payment(order_id):
     if guard:
         return guard
 
+    if find_submission() is not None:     # forma ikki marta yuborilgan
+        flash_duplicate()
+        return redirect(url_for("orders.order_detail", order_id=order_id))
+
     if o.status == STATUS_CANCELLED:
         flash("Bekor qilingan buyurtmaga to'lov qo'shib bo'lmaydi.", "danger")
         return redirect(url_for("orders.order_detail", order_id=order_id))
@@ -905,7 +910,9 @@ def add_payment(order_id):
             )
 
     log_action(current_user, "payment", "order", o.id, f"{amount} so'm to'lov")
-    db.session.commit()
+    if not commit_once("payment", p.id):  # parallel takror — hech narsa yozilmadi
+        flash_duplicate()
+        return redirect(url_for("orders.order_detail", order_id=order_id))
     notify_payment(o, amount)
 
     overpaid = o.overpaid

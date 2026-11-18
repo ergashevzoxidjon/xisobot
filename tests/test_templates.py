@@ -648,6 +648,7 @@ def make_env(role, perms):
     )
     env.globals["request"] = SimpleNamespace(endpoint="main.dashboard", args={})
     env.globals["csrf_token"] = lambda: "TEST-CSRF-TOKEN"
+    env.globals["new_form_token"] = lambda: "0" * 32
     env.globals["has_perm"] = lambda p, _p=perms: p in _p
     env.globals["role_label"] = lambda r: ROLE_LABELS.get(r, r)
     env.globals["role_description"] = lambda r: "tavsif"
@@ -776,6 +777,7 @@ for role, perms in ROLE_PERMISSIONS.items():
                                         full_name="T", display_name="T", role=role),
         "request": SimpleNamespace(endpoint="main.dashboard", args={}),
         "csrf_token": lambda: "T",
+        "new_form_token": lambda: "0" * 32,
         "has_perm": lambda p, _p=perms: p in _p,
         "role_label": lambda r: r, "role_description": lambda r: "",
         "today": today_local,
@@ -807,6 +809,7 @@ def render_for(role, tpl):
                                         full_name="T", display_name="T", role=role),
         "request": SimpleNamespace(endpoint="orders.list_orders", args={}),
         "csrf_token": lambda: "T",
+        "new_form_token": lambda: "0" * 32,
         "has_perm": lambda p, _p=perms: p in _p,
         "role_label": lambda r: r, "role_description": lambda r: "",
         "today": today_local,

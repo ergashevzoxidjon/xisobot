@@ -23,6 +23,7 @@ from flask import (
 from flask_login import login_required, current_user
 
 from extensions import db
+from idempotency import commit_once, find_submission, flash_duplicate
 from models import Supplier, SupplierPayment, Expense, log_action
 from permissions import permission_required
 from queries import suppliers_with_stats, top_suppliers
@@ -187,6 +188,9 @@ def edit_supplier(supplier_id):
 @permission_required("suppliers.manage")
 def pay_supplier(supplier_id):
     s = Supplier.query.get_or_404(supplier_id)
+    if find_submission() is not None:     # forma ikki marta yuborilgan
+        flash_duplicate()
+        return redirect(url_for("suppliers.supplier_detail", supplier_id=s.id))
     try:
         amount = parse_money(request.form.get("amount"), "Summa", min_value=Decimal("0.01"))
         paid_on = parse_date(request.form.get("paid_on"), "Sana", required=False) or today_local()
@@ -205,7 +209,9 @@ def pay_supplier(supplier_id):
     ))
     log_action(current_user, "create", "supplier_payment", s.id,
                f"{s.name}: {money_str(amount)} so'm")
-    db.session.commit()
+    if not commit_once("supplier_pay", s.id):
+        flash_duplicate()
+        return redirect(url_for("suppliers.supplier_detail", supplier_id=s.id))
     flash(f"{money_str(amount)} so'm to'lov yozildi.", "success")
     return redirect(url_for("suppliers.supplier_detail", supplier_id=s.id))
 

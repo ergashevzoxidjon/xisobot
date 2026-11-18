@@ -378,6 +378,8 @@ a{ text-decoration:none; }
 <body>
 
 {% macro csrf() %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endmacro %}
+{# Pul yoziladigan formalar: bir martalik kalit — takror yuborilsa ikkinchi marta yozilmaydi (idempotency.py) #}
+{% macro once() %}<input type="hidden" name="form_token" value="{{ new_form_token() }}">{% endmacro %}
 
 {% macro pager(pagination, endpoint, params={}) %}
   {% if pagination and pagination.pages > 1 %}
