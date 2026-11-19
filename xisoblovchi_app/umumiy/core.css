@@ -193,6 +193,11 @@ h2 { font-size: 1.4rem; }
     overflow: hidden;
 }
 .admin-cat-section:last-child { margin-bottom: 0; }
+/* Ikki bo'lim yonma-yon (Ofset pechat | Qog'oz bo'limi): har biri qatorning yarmi */
+.admin-cat-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; align-items: start; margin-bottom: 22px; }
+.admin-cat-row > .admin-cat-section { margin-bottom: 0; }
+.admin-cat-row .admin-cat-grid { grid-template-columns: 1fr; }
+@media (max-width: 760px) { .admin-cat-row { grid-template-columns: 1fr; gap: 16px; } }
 .admin-cat-section::before {
     content: "";
     position: absolute; top: 0; left: 0; right: 0; height: 5px;

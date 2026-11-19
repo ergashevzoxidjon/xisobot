@@ -871,9 +871,11 @@
         souvenir:    { title: 'Suvenir mahsulotlari',     icon: '🎁', accent: 'yellow' },
         reklama:     { title: 'Reklama mahsulotlari',     icon: '🖼️', accent: 'ink' },
         ofset:       { title: 'Ofset pechat',             icon: '⚙️', accent: 'green' },
-        sifravoy:    { title: 'Sifravoy pechat',          icon: '⚡', accent: 'violet' },
         qogoz:       { title: "Qog'oz bo'limi",           icon: '📄', accent: 'green' }
     };
+    // Sifravoy pechat admin ekranida alohida bo'lim emas: uning qog'oz narxlari Qog'oz bo'limida.
+    // Bu bo'limlar admin ekranida yonma-yon (yarim-yarim) chiqadi.
+    const adminCatYonmaYon = ['ofset', 'qogoz'];
 
     function renderAdminCategoryGrid() {
         let container = document.getElementById('adminCategoryGridContainer');
@@ -900,9 +902,12 @@
         `;
         };
 
-        container.innerHTML = Object.keys(adminCatMeta).map(catKey => renderSection(catKey, allCategories[catKey])).join('');
+        let yonmaYon = Object.keys(adminCatMeta).filter(k => adminCatYonmaYon.includes(k));
+        container.innerHTML = Object.keys(adminCatMeta).filter(k => !adminCatYonmaYon.includes(k))
+            .map(catKey => renderSection(catKey, allCategories[catKey])).join('')
+            + `<div class="admin-cat-row">${yonmaYon.map(catKey => renderSection(catKey, allCategories[catKey])).join('')}</div>`;
 
-        let totalItems = Object.values(allCategories).reduce((sum, arr) => sum + arr.length, 0);
+        let totalItems = Object.keys(adminCatMeta).reduce((sum, k) => sum + allCategories[k].length, 0);
         let summaryEl = document.getElementById('adminCatSummary');
         if (summaryEl) summaryEl.innerText = `${totalItems} ta mahsulot turi · ${Object.keys(adminCatMeta).length} ta bo'lim`;
 
@@ -931,6 +936,10 @@
             });
             section.style.display = sectionHasMatch ? 'block' : 'none';
             if (sectionHasMatch) anyVisible = true;
+        });
+        // Yonma-yon qatorda ikkala bo'lim ham yashirin bo'lsa, qatorning o'zi ham bo'sh joy qoldirmasin
+        document.querySelectorAll('#adminCategoryGridContainer .admin-cat-row').forEach(row => {
+            row.style.display = [...row.children].some(s => s.style.display !== 'none') ? '' : 'none';
         });
         let emptyState = document.getElementById('adminCatEmptyState');
         if (emptyState) emptyState.style.display = anyVisible ? 'none' : 'block';
@@ -986,7 +995,6 @@
 
         document.getElementById('ofsetAdminPanelBox').style.display = isOfset ? 'block' : 'none';
         document.getElementById('qogozAdminBox').style.display = isQogoz ? 'block' : 'none';
-        document.getElementById('digitalAdminPanelBox').style.display = isDigital ? 'block' : 'none';
         document.getElementById('poligrafiyaSizeAdminBox').style.display = isPoligrafiya ? 'block' : 'none';
         document.getElementById('bloknotAdminBox').style.display = isBloknot ? 'block' : 'none';
         document.getElementById('papkaAdminBox').style.display = isPapka ? 'block' : 'none';

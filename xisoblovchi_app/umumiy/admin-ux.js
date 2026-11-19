@@ -153,7 +153,7 @@
         if (yol) yol.textContent = `Admin panel › ${ADMIN_BOLIM_NOMI[cat] || (key === 'ofset_pechat' ? 'Ofset pechat' : key === 'sifravoy_pechat' ? 'Sifravoy pechat' : "Bo'lim")}`;
         let sel = document.getElementById('adminProductSwitcher');
         if (sel) {
-            sel.innerHTML = Object.keys(allCategories).map(c => `
+            sel.innerHTML = Object.keys(allCategories).filter(c => adminCatMeta[c]).map(c => `
                 <optgroup label="${ADMIN_BOLIM_NOMI[c] || c}">
                     ${allCategories[c].map(p => `<option value="${p.key}" ${p.key === key ? 'selected' : ''}>${p.icon || ''} ${p.name}</option>`).join('')}
                 </optgroup>`).join('');
