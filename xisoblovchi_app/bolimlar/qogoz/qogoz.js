@@ -25,6 +25,8 @@
     // core.js → openProductManager('qogoz_bolimi') chaqiradi
     function renderAdminQogozBolimi() {
         if (typeof renderAdminOfsetPapersMatrix === 'function') renderAdminOfsetPapersMatrix();
+        // Sifravoy (raqamli) qog'ozlari — ma'lumot va hisob sifravoy.js da, bu yerda faqat admin ko'rinishi
+        if (typeof renderAdminDigitalPaperTable === 'function') renderAdminDigitalPaperTable();
         Object.keys(QOGOZ_ROYXAT_NOMLARI).forEach(renderQogozJadvali);
     }
 

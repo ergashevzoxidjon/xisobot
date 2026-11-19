@@ -1041,7 +1041,7 @@
             return;
         }
         if (isDigital) {
-            renderAdminDigitalPaperTable();
+            // Qog'oz jadvali endi Qog'oz bo'limida; bu yerda faqat yo'naltiruvchi izoh
             return;
         }
         if (isStend) {

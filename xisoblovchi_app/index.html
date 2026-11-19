@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- DIQQAT: bu fayl AVTOMATIK yig'ilgan (.deploy/yigish.py). To'g'ridan-to'g'ri tahrirlamang - o'zgarishlarni umumiy/ va bolimlar/ papkalarida qiling, so'ng python3 .deploy/yigish.py ni ishga tushiring. yigish-hash: 6e36b941468d38df -->
+<!-- DIQQAT: bu fayl AVTOMATIK yig'ilgan (.deploy/yigish.py). To'g'ridan-to'g'ri tahrirlamang - o'zgarishlarni umumiy/ va bolimlar/ papkalarida qiling, so'ng python3 .deploy/yigish.py ni ishga tushiring. yigish-hash: caf6af3cbbec962b -->
 <html lang="uz">
 <head>
     <meta charset="UTF-8">
@@ -380,38 +380,15 @@
 
             <!-- RAQAMLI PECHAT ADMIN PANEL BLOKI -->
             <div id="digitalAdminPanelBox" style="display: none; margin-bottom: 28px;">
-                <div class="add-pen-card" style="margin-bottom: 16px;">
-                    <div class="add-pen-card-title">📦 Raqamli Pechat Qog'ozlari va Narxlarini Boshqarish</div>
-                    <div class="table-card" style="margin-bottom: 16px;">
-                        <div class="table-scroll">
-                        <table class="admin-table">
-                            <thead>
-                                <tr>
-                                    <th>Nomi / Grammi</th>
-                                    <th style="width: 120px;">Qog'oz Eni</th>
-                                    <th style="width: 120px;">Qog'oz Bo'yi</th>
-                                    <th style="width: 120px;">Pechat Eni</th>
-                                    <th style="width: 120px;">Pechat Bo'yi</th>
-                                    <th style="width: 135px;">1 tomon. narxi</th>
-                                    <th style="width: 135px;">2 tomon. narxi</th>
-                                    <th style="width: 90px; text-align: right;">Amallar</th>
-                                </tr>
-                            </thead>
-                            <tbody id="adminDigitalPaperTableBody"></tbody>
-                        </table>
-                        </div>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
-                        <button class="btn" style="background: #4f46e5;" onclick="addDigitalPaperRow()">+ Yangi qog'oz qo'shish</button>
-                        <button class="btn btn-success" onclick="saveAllDigitalPapers()">💾 Barcha o'zgarishlarni saqlash</button>
-                    </div>
-                </div>
+                <div class="admin-link-hint">📄 Raqamli pechat qog'ozlari va narxlari endi alohida
+                    <a href="#" onclick="openProductManager('qogoz_bolimi', 'Qog\'oz narxlari'); return false;">Qog'oz narxlari</a>
+                    bo'limida boshqariladi.</div>
             </div>
 
             <!-- QOG'OZ BO'LIMI ADMIN PANEL BLOKI -->
             <div id="qogozAdminBox" style="display: none; margin-bottom: 28px;">
                 <div class="admin-link-hint">📄 Barcha qog'oz narxlari shu yerda. Ofset qog'ozlari — Ofset hisobida (Flayer, Paket, Papka,
-                    Bloknot...) xom varoq narxi sifatida; Konvert qog'ozlari — Konvert kalkulyatorida.</div>
+                    Bloknot...) xom varoq narxi sifatida; Sifravoy qog'ozlari — Raqamli pechatda; Konvert qog'ozlari — Konvert kalkulyatorida.</div>
 
                 <div class="add-pen-card" style="margin-bottom: 16px;">
                     <div class="add-pen-card-title">🖨️ Ofset Qog'ozi</div>
@@ -493,6 +470,36 @@
                 </div>
                 <div class="admin-card-actions" style="margin-bottom: 24px;">
                     <button class="btn btn-success" onclick="saveOfsetQogozNarxlari()">💾 Ofset qog'oz narxlarini saqlash</button>
+                </div>
+
+                <div class="add-pen-card" style="margin-bottom: 16px;">
+                    <div class="add-pen-card-title">⚡ Sifravoy (Raqamli) Pechat Qog'ozlari</div>
+                    <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 12px;">
+                        Raqamli pechat, Katalog, Kalendar va Konvert hisobida ishlatiladi. Narxlar bosilgan varaq uchun (1 va 2 tomonlama).
+                    </p>
+                    <div class="table-card" style="margin-bottom: 16px;">
+                        <div class="table-scroll">
+                        <table class="admin-table">
+                            <thead>
+                                <tr>
+                                    <th>Nomi / Grammi</th>
+                                    <th style="width: 120px;">Qog'oz Eni</th>
+                                    <th style="width: 120px;">Qog'oz Bo'yi</th>
+                                    <th style="width: 120px;">Pechat Eni</th>
+                                    <th style="width: 120px;">Pechat Bo'yi</th>
+                                    <th style="width: 135px;">1 tomon. narxi</th>
+                                    <th style="width: 135px;">2 tomon. narxi</th>
+                                    <th style="width: 90px; text-align: right;">Amallar</th>
+                                </tr>
+                            </thead>
+                            <tbody id="adminDigitalPaperTableBody"></tbody>
+                        </table>
+                        </div>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+                        <button class="btn" style="background: #4f46e5;" onclick="addDigitalPaperRow()">+ Yangi qog'oz qo'shish</button>
+                        <button class="btn btn-success" onclick="saveAllDigitalPapers()">💾 Barcha o'zgarishlarni saqlash</button>
+                    </div>
                 </div>
 
                 <div class="add-pen-card" style="margin-bottom: 16px;">
@@ -1950,10 +1957,10 @@
 <!-- Skriptlar: har bir fayl alohida yuklanadi — bittasida xato bo'lsa, qolganlari baribir ishlaydi -->
 <script src="umumiy/server-xotira.js?v=fc4af7b9"></script>
 <script src="umumiy/yordamchi.js?v=333a4bc1"></script>
-<script src="umumiy/core.js?v=f1e3e4dc"></script>
+<script src="umumiy/core.js?v=527eaf34"></script>
 <script src="bolimlar/ofset/ofset.js?v=0fe92476"></script>
 <script src="bolimlar/sifravoy/sifravoy.js?v=4e1b3cbd"></script>
-<script src="bolimlar/qogoz/qogoz.js?v=8ff2dcb5"></script>
+<script src="bolimlar/qogoz/qogoz.js?v=cd99b375"></script>
 <script src="bolimlar/poligrafiya/asos.js?v=adccaeef"></script>
 <script src="bolimlar/poligrafiya/bloknot.js?v=ccde9b65"></script>
 <script src="bolimlar/poligrafiya/varaqli.js?v=6712ce4b"></script>
