@@ -16,6 +16,18 @@
     }
 })();
 
+// Brauzer parol menejeri saqlangan login nomini (masalan "manager5") qidiruv maydoniga o'zi yozib qo'yishi mumkin —
+// shunda hamma mahsulot yashirinib, "Hech narsa topilmadi" chiqadi. Foydalanuvchi o'zi yozmagan matnni tozalaymiz.
+(function () {
+    const tozala = () => {
+        const q = document.getElementById('searchInput');
+        if (!q || !q.value || document.activeElement === q) return;
+        q.value = '';
+        if (typeof filterProducts === 'function') filterProducts();
+    };
+    [0, 300, 1000, 2500].forEach(ms => setTimeout(tozala, ms));
+})();
+
 // ====================== PWA: oflayn ishlash va telefonga o'rnatish ======================
 // sw.js saytning ildizida turadi (butun sayt uchun amal qiladi). Brauzer qo'llab-quvvatlamasa, file:// da yoki
 // sinov oynasida (srcdoc) ochilgan bo'lsa — jimgina o'tkazib yuboriladi, ilovaning o'zi bundan mustaqil ishlaydi.
